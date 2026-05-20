@@ -1,0 +1,12 @@
+# Claude Code local overrides
+.claude/settings.local.json
+.claude/.cache/
+
+# Serena local cache
+.serena/.cache/
+
+# Backup folder from scaffold edit-mode (safe to delete after review)
+.ennam-scaffold-backup/
+
+# Checkpoints are committed by default. Uncomment to ignore:
+# .serena/checkpoint/

@@ -31,6 +31,7 @@ export async function enumerateFiles(profile: ProfileDef): Promise<FileEntry[]> 
 
   for (const { src, rel } of shared) {
     const target = targetRelPath(rel);
+    if (src.endsWith('.append')) continue; // Plan 2 will handle append-lines
     map.set(target, {
       srcAbs: src,
       relPath: target,
@@ -40,6 +41,7 @@ export async function enumerateFiles(profile: ProfileDef): Promise<FileEntry[]> 
   }
   for (const { src, rel } of profileFiles) {
     const target = targetRelPath(rel);
+    if (src.endsWith('.append')) continue; // Plan 2 will handle append-lines
     map.set(target, {
       srcAbs: src,
       relPath: target,
