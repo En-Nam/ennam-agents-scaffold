@@ -8,14 +8,17 @@ describe('enumerateFiles', () => {
     const entries = await enumerateFiles(profile);
     const rels = entries.map(e => e.relPath).sort();
     expect(rels).toContain('AGENTS.md');
-    expect(rels).toContain('CLAUDE.md');   // .hbs stripped → relPath is CLAUDE.md
+    // CLAUDE.md.partial.hbs is skipped in Plan 1 (deferred to Plan 2 for append-marker merge)
+    expect(entries.length).toBeGreaterThan(0);
   });
 
   it('marks .hbs files as templates', async () => {
     const profile = getProfile('next');
     const entries = await enumerateFiles(profile);
-    const claudeMd = entries.find(e => e.relPath === 'CLAUDE.md');
-    expect(claudeMd?.isTemplate).toBe(true);
+    // Check that non-.partial.hbs .hbs files are marked as templates
+    const templateFiles = entries.filter(e => e.isTemplate);
+    expect(templateFiles.length).toBeGreaterThan(0);
+    expect(templateFiles.every(e => e.srcAbs.endsWith('.hbs'))).toBe(true);
   });
 
   it('overrides _shared file when profile has same path', async () => {
