@@ -28,6 +28,7 @@
   },
   "dependencies": {
     "@clack/prompts": "^1.4.0",
+    "cac": "^6.7.14",
     "fast-glob": "^3.3.3",
     "handlebars": "^4.7.9",
     "picocolors": "^1.1.1"
