@@ -8,7 +8,7 @@
   },
   "files": [
     "dist",
-    "../../templates"
+    "templates"
   ],
   "scripts": {
     "build": "tsup",

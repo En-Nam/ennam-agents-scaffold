@@ -1,13 +1,14 @@
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { existsSync } from 'node:fs';
 import type { ProfileDef } from './types.js';
 
-// Resolve repo root from this module's URL.
-// dist/index.js lives at <repo>/packages/cli/dist/index.js,
-// templates live at <repo>/templates/. Walk up 3 levels.
+// In dev (running from src or dist inside the monorepo), templates live at repo root.
+// In published package, templates live alongside dist/ inside the package.
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(HERE, '..', '..', '..');
-const TEMPLATES = path.join(REPO_ROOT, 'templates');
+const CANDIDATE_PUBLISHED = path.join(HERE, '..', 'templates');     // dist/../templates
+const CANDIDATE_MONOREPO  = path.join(HERE, '..', '..', '..', 'templates'); // packages/cli/dist/../../../templates
+const TEMPLATES = existsSync(CANDIDATE_PUBLISHED) ? CANDIDATE_PUBLISHED : CANDIDATE_MONOREPO;
 
 const REGISTRY: Record<string, ProfileDef> = {
   next: {
