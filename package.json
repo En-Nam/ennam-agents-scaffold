@@ -1,0 +1,17 @@
+{
+  "name": "ennam-agents-scaffold",
+  "version": "0.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm -w @ennam/agents-scaffold run build",
+    "dev": "npm -w @ennam/agents-scaffold run dev",
+    "test": "npm -w @ennam/agents-scaffold run test",
+    "lint": "tsc --noEmit -p packages/cli/tsconfig.json"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
