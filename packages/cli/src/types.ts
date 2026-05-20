@@ -25,6 +25,8 @@ export interface FileEntry {
 
 export type ConflictState = 'absent' | 'identical' | 'differs';
 
+export type ConflictReport = Map<string, ConflictState>;
+
 export interface PlannedOp {
   relPath: string;
   src: FileEntry;

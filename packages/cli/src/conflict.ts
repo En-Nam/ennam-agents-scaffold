@@ -1,10 +1,8 @@
 import { readFile, access } from 'node:fs/promises';
 import path from 'node:path';
-import type { ConflictState } from './types.js';
+import type { ConflictState, ConflictReport } from './types.js';
 
 export type RenderedProvider = (relPath: string) => Promise<string | null>;
-
-export type ConflictReport = Map<string, ConflictState>;
 
 /**
  * Scan cwd for each target relPath.
