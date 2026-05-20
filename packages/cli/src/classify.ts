@@ -6,12 +6,15 @@ interface Rule {
 }
 
 // Order matters: first match wins.
+// Plan 1 note: .mcp.json and .claude/settings.json are intentionally classified
+// write-or-ask (not json-merge). Plan 2 will reintroduce json-merge once the merge
+// implementation lands. Until then, conflicts on those files follow --merge-strategy.
 const RULES: Rule[] = [
   { match: r => r === 'AGENTS.md',                              kind: 'write-or-ask' },
   { match: r => r === 'CLAUDE.md',                              kind: 'append-marker' },
   { match: r => r === '.gitignore',                             kind: 'append-lines' },
-  { match: r => r === '.mcp.json',                              kind: 'json-merge' },
-  { match: r => r === '.claude/settings.json',                  kind: 'json-merge' },
+  { match: r => r === '.mcp.json',                              kind: 'write-or-ask' },
+  { match: r => r === '.claude/settings.json',                  kind: 'write-or-ask' },
   { match: r => r.startsWith('.claude/hooks/'),                 kind: 'write-or-ask' },
   { match: r => r.startsWith('.claude/commands/'),              kind: 'skip-if-exists' },
   { match: r => r.startsWith('.claude/agents/'),                kind: 'skip-if-exists' },

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { dir as tmpDir } from 'tmp-promise';
-import { cp, readFile, stat } from 'node:fs/promises';
+import { cp, readFile, stat, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { execa } from 'execa';
 import { fileURLToPath } from 'node:url';
@@ -62,6 +62,26 @@ describe('install next profile into fixture', () => {
     const fg = await import('fast-glob');
     const stray = await fg.default('**/*.hbs', { cwd, dot: true });
     expect(stray).toEqual([]);
+  });
+
+  it('preserves pre-existing .mcp.json with --merge-strategy=skip', async () => {
+    // Regression: Plan 1 must not crash when the target already has Claude Code config.
+    // (json-merge would throw "deferred to Plan 2"; demoted to write-or-ask in Plan 1.)
+    const { path: cwd } = await tmpDir({ unsafeCleanup: true });
+    await cp(FIXTURE, cwd, { recursive: true });
+    const existingMcp = '{"mcpServers":{"my-custom":{"command":"echo"}}}';
+    await writeFile(path.join(cwd, '.mcp.json'), existingMcp, 'utf8');
+    await mkdir(path.join(cwd, '.claude'), { recursive: true });
+    const existingSettings = '{"outputStyle":"custom"}';
+    await writeFile(path.join(cwd, '.claude', 'settings.json'), existingSettings, 'utf8');
+
+    const { exitCode } = await execa('node', [CLI_ENTRY, 'next', '--merge-strategy=skip', '--no-prompts'], { cwd });
+    expect(exitCode).toBe(0);
+
+    expect(await readFile(path.join(cwd, '.mcp.json'), 'utf8')).toBe(existingMcp);
+    expect(await readFile(path.join(cwd, '.claude', 'settings.json'), 'utf8')).toBe(existingSettings);
+    // Other files still installed
+    expect((await stat(path.join(cwd, 'AGENTS.md'))).isFile()).toBe(true);
   });
 
   it('dry-run produces no writes', async () => {
