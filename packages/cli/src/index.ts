@@ -8,7 +8,7 @@ import { enumerateFiles } from './enumerate.js';
 import { scanConflicts } from './conflict.js';
 import { buildPlan } from './plan.js';
 import { executeOps } from './execute.js';
-import { buildContext } from './render.js';
+import { buildContext, renderFileEntry } from './render.js';
 import { printIntro, printPlan, confirmProceed, printNextSteps } from './ux.js';
 import type { UserStrategy } from './types.js';
 
@@ -49,7 +49,13 @@ cli
 
     const entries = await enumerateFiles(profile);
     const ctx = buildContext({ profile: profileName, cwd, version: PKG.version });
-    const conflicts = await scanConflicts(cwd, entries.map(e => e.relPath));
+    const byRel = new Map(entries.map(e => [e.relPath, e]));
+    const provider = async (rel: string) => {
+      const entry = byRel.get(rel);
+      if (!entry) return null;
+      return renderFileEntry(entry, ctx);
+    };
+    const conflicts = await scanConflicts(cwd, entries.map(e => e.relPath), provider);
     const ops = buildPlan({ entries, conflicts, strategy });
     const plan = { cwd, profile, ops };
 
