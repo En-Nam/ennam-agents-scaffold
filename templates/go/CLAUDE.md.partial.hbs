@@ -1,0 +1,28 @@
+## Stack: Go 1.24 + stdlib net/http
+
+| Layer | Tech |
+|---|---|
+| Language | Go 1.24+ |
+| HTTP | stdlib `net/http` (ServeMux from 1.22+) |
+| DB | pgx (PostgreSQL) |
+| Migrations | golang-migrate |
+| Logging | stdlib `log/slog` |
+| Testing | stdlib `testing` + `testify/assert` only for assertions |
+
+### Conventions
+
+- **No web frameworks.** stdlib net/http with the new ServeMux is enough.
+- **pgx for Postgres** — never database/sql.
+- **slog** for all logging — never fmt.Println in non-test code.
+- **Errors:** wrap with `fmt.Errorf("doing X: %w", err)`. No panic in handlers.
+- **Type-check before declaring done:** `go vet ./... && go test ./...`.
+
+### Common commands
+
+```bash
+go mod tidy
+go run ./cmd/server
+go test ./...
+go vet ./...
+go build -o bin/server ./cmd/server
+```
