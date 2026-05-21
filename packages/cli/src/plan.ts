@@ -11,37 +11,67 @@ export function buildPlan(input: BuildPlanInput): PlannedOp[] {
   for (const e of input.entries) {
     const state = input.conflicts.get(e.relPath) ?? 'absent';
 
+    // append-marker is handled the same regardless of conflict state (except identical → skip)
+    if (e.kind === 'append-marker') {
+      if (state === 'identical') {
+        ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'skip', reason: 'identical — skip', needsPrompt: false });
+      } else {
+        ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'merge-marker', reason: state === 'absent' ? 'absent — write marker block' : 'differs — merge marker block', needsPrompt: false });
+      }
+      continue;
+    }
+
+    // json-merge is handled regardless of conflict state (except identical → skip).
+    // All states use merge-json op so execute.ts always writes JSON.stringify output,
+    // keeping provider and execute in sync for idempotency.
+    if (e.kind === 'json-merge') {
+      if (state === 'identical') {
+        ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'skip', reason: 'identical — skip', needsPrompt: false });
+      } else {
+        ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'merge-json', reason: state === 'absent' ? 'absent — write json' : 'differs — deep-merge (user wins)', needsPrompt: false });
+      }
+      continue;
+    }
+
+    // append-lines is handled regardless of conflict state (except identical → skip).
+    // mergeLines(existing, incoming) handles absent files (existing='') naturally.
+    if (e.kind === 'append-lines') {
+      if (state === 'identical') {
+        ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'skip', reason: 'identical — skip', needsPrompt: false });
+      } else {
+        ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'merge-lines', reason: state === 'absent' ? 'absent — write lines' : 'differs — append missing lines (dedup)', needsPrompt: false });
+      }
+      continue;
+    }
+
     if (state === 'absent') {
-      ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'write', reason: 'absent — write' });
+      ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'write', reason: 'absent — write', needsPrompt: false });
       continue;
     }
     if (state === 'identical') {
-      ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'skip', reason: 'identical — skip' });
+      ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'skip', reason: 'identical — skip', needsPrompt: false });
       continue;
     }
     // state === 'differs'
     if (e.kind === 'skip-if-exists') {
-      ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'skip', reason: 'skip-if-exists kind' });
+      ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'skip', reason: 'skip-if-exists kind', needsPrompt: false });
       continue;
     }
     if (e.kind === 'mkdir-only') {
-      ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'mkdir', reason: 'mkdir-only kind' });
+      ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'mkdir', reason: 'mkdir-only kind', needsPrompt: false });
       continue;
-    }
-    if (e.kind === 'append-marker' || e.kind === 'append-lines' || e.kind === 'json-merge') {
-      throw new Error(`File kind "${e.kind}" for ${e.relPath} is not supported in Plan 1 (deferred to Plan 2)`);
     }
     // write-or-ask
     switch (input.strategy) {
       case 'overwrite':
-        ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'write', reason: 'differs — overwrite (--merge-strategy=overwrite)' });
+        ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'write', reason: 'differs — overwrite (--merge-strategy=overwrite)', needsPrompt: false });
         break;
       case 'skip':
-        ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'skip', reason: 'differs — keep existing (--merge-strategy=skip)' });
+        ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'skip', reason: 'differs — keep existing (--merge-strategy=skip)', needsPrompt: false });
         break;
       case 'ask':
       default:
-        ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'write', reason: 'differs — will prompt at execute time' });
+        ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'write', reason: 'differs — will prompt at execute time', needsPrompt: true });
         break;
     }
   }

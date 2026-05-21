@@ -68,11 +68,90 @@ describe('buildPlan', () => {
     expect(ops[0]?.reason).toMatch(/identical/i);
   });
 
-  it('throws if a kind not supported in Plan 1 is hit with strategy ask/overwrite', () => {
-    expect(() => buildPlan({
+  it('emits merge-lines op for append-lines kind', () => {
+    const ops = buildPlan({
+      entries: [fe('.gitignore', 'append-lines')],
+      conflicts: new Map([['.gitignore', 'differs']]),
+      strategy: 'ask',
+    });
+    expect(ops[0]?.op).toBe('merge-lines');
+    expect(ops[0]?.reason).toMatch(/append|lines/i);
+  });
+
+  it('emits merge-json op for json-merge kind (differs)', () => {
+    const ops = buildPlan({
+      entries: [fe('.mcp.json', 'json-merge')],
+      conflicts: new Map([['.mcp.json', 'differs']]),
+      strategy: 'ask',
+    });
+    expect(ops[0]?.op).toBe('merge-json');
+    expect(ops[0]?.reason).toMatch(/merge|user wins/i);
+  });
+
+  it('emits merge-json op for json-merge kind (absent)', () => {
+    const ops = buildPlan({
+      entries: [fe('.mcp.json', 'json-merge')],
+      conflicts: new Map([['.mcp.json', 'absent']]),
+      strategy: 'ask',
+    });
+    expect(ops[0]?.op).toBe('merge-json');
+    expect(ops[0]?.reason).toMatch(/absent/i);
+  });
+
+  it('skips identical json-merge files', () => {
+    const ops = buildPlan({
+      entries: [fe('.mcp.json', 'json-merge')],
+      conflicts: new Map([['.mcp.json', 'identical']]),
+      strategy: 'ask',
+    });
+    expect(ops[0]?.op).toBe('skip');
+    expect(ops[0]?.reason).toMatch(/identical/i);
+  });
+
+  it('emits merge-marker op for append-marker kind regardless of conflict', () => {
+    const absent = buildPlan({
+      entries: [fe('CLAUDE.md', 'append-marker')],
+      conflicts: new Map([['CLAUDE.md', 'absent']]),
+      strategy: 'ask',
+    });
+    expect(absent[0]?.op).toBe('merge-marker');
+    expect(absent[0]?.reason).toMatch(/marker/i);
+
+    const differs = buildPlan({
       entries: [fe('CLAUDE.md', 'append-marker')],
       conflicts: new Map([['CLAUDE.md', 'differs']]),
       strategy: 'ask',
-    })).toThrow(/not supported in plan 1|append-marker/i);
+    });
+    expect(differs[0]?.op).toBe('merge-marker');
+
+    const identical = buildPlan({
+      entries: [fe('CLAUDE.md', 'append-marker')],
+      conflicts: new Map([['CLAUDE.md', 'identical']]),
+      strategy: 'ask',
+    });
+    expect(identical[0]?.op).toBe('skip');
+  });
+
+  it('sets needsPrompt: true only for differs + ask strategy + write-or-ask kind', () => {
+    const askDiffer = buildPlan({
+      entries: [fe('AGENTS.md')],
+      conflicts: new Map([['AGENTS.md', 'differs']]),
+      strategy: 'ask',
+    });
+    expect(askDiffer[0]?.needsPrompt).toBe(true);
+
+    const overwriteDiffer = buildPlan({
+      entries: [fe('AGENTS.md')],
+      conflicts: new Map([['AGENTS.md', 'differs']]),
+      strategy: 'overwrite',
+    });
+    expect(overwriteDiffer[0]?.needsPrompt).toBe(false);
+
+    const absent = buildPlan({
+      entries: [fe('AGENTS.md')],
+      conflicts: new Map([['AGENTS.md', 'absent']]),
+      strategy: 'ask',
+    });
+    expect(absent[0]?.needsPrompt).toBe(false);
   });
 });

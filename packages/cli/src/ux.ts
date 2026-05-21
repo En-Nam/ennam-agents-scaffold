@@ -1,6 +1,6 @@
 import pc from 'picocolors';
 import { intro, outro, log, confirm, isCancel, cancel } from '@clack/prompts';
-import type { OperationPlan } from './types.js';
+import type { OperationPlan, ProfileDef } from './types.js';
 import type { ExecuteResult } from './execute.js';
 
 export function printIntro(version: string): void {
@@ -10,7 +10,7 @@ export function printIntro(version: string): void {
 export function printPlan(plan: OperationPlan): void {
   const lines: string[] = [];
   for (const op of plan.ops) {
-    const marker = op.op === 'write' ? pc.green('+ write ') : op.op === 'mkdir' ? pc.blue('+ mkdir ') : pc.gray('  skip  ');
+    const marker = op.op === 'write' ? pc.green('+ write ') : op.op === 'mkdir' ? pc.blue('+ mkdir ') : op.op === 'merge-json' || op.op === 'merge-marker' || op.op === 'merge-lines' ? pc.yellow('~ merge ') : pc.gray('  skip  ');
     lines.push(`${marker} ${op.relPath}  ${pc.dim(`(${op.reason})`)}`);
   }
   log.step(`Plan (${plan.ops.length} ops):\n  ${lines.join('\n  ')}`);
@@ -25,16 +25,18 @@ export async function confirmProceed(): Promise<boolean> {
   return yes === true;
 }
 
-export function printNextSteps(profile: string, result: ExecuteResult): void {
+export function printNextSteps(profile: ProfileDef, result: ExecuteResult): void {
+  const envVars = ['JIRA_URL', 'JIRA_TOKEN'];
+  if (profile.extraMcp.includes('figma')) envVars.push('FIGMA_TOKEN');
   const steps = [
     'Review changes: git diff',
-    'Set env vars in .env.local: JIRA_URL, JIRA_TOKEN, FIGMA_TOKEN',
+    `Set env vars in .env.local: ${envVars.join(', ')}`,
     'Start Claude Code: claude',
     'Inside Claude: run /boot',
   ];
   outro(
     pc.cyan(`Done.`) +
-    `\n  Profile: ${pc.bold(profile)}` +
+    `\n  Profile: ${pc.bold(profile.name)}` +
     `\n  Written: ${result.written}  Skipped: ${result.skipped}  Mkdir: ${result.mkdirs}`
   );
   console.log();

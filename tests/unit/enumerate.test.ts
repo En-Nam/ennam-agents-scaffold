@@ -8,22 +8,24 @@ describe('enumerateFiles', () => {
     const entries = await enumerateFiles(profile);
     const rels = entries.map(e => e.relPath).sort();
     expect(rels).toContain('AGENTS.md');
-    // CLAUDE.md.partial.hbs is skipped in Plan 1 (deferred to Plan 2 for append-marker merge)
-    expect(entries.length).toBeGreaterThan(0);
+    expect(rels).toContain('CLAUDE.md');
   });
 
-  it('marks .hbs files as templates', async () => {
+  it('marks .hbs files as templates and CLAUDE.md as append-marker', async () => {
     const profile = getProfile('next');
     const entries = await enumerateFiles(profile);
     // Check that non-.partial.hbs .hbs files are marked as templates
     const templateFiles = entries.filter(e => e.isTemplate);
     expect(templateFiles.length).toBeGreaterThan(0);
     expect(templateFiles.every(e => e.srcAbs.endsWith('.hbs'))).toBe(true);
+    const claudeMd = entries.find(e => e.relPath === 'CLAUDE.md');
+    expect(claudeMd?.isTemplate).toBe(true);
+    expect(claudeMd?.kind).toBe('append-marker');
+    expect(claudeMd?.extraSrcAbs).toBeDefined();
   });
 
-  it('overrides _shared file when profile has same path', async () => {
-    // Will become meaningful once both shared and next have CLAUDE.md.partial.hbs.
-    // For now, just assert no duplicate entries.
+  it('emits one CLAUDE.md entry (no duplicates) with paired partials', async () => {
+    // Both shared and next profile have CLAUDE.md.partial.hbs → marker pair, one entry.
     const profile = getProfile('next');
     const entries = await enumerateFiles(profile);
     const seen = new Set<string>();
@@ -31,5 +33,17 @@ describe('enumerateFiles', () => {
       expect(seen.has(e.relPath)).toBe(false);
       seen.add(e.relPath);
     }
+    const claudeEntries = entries.filter(e => e.relPath === 'CLAUDE.md');
+    expect(claudeEntries.length).toBe(1);
+  });
+
+  it('.mcp.json entry has extraSrcAbs when profile partial exists', async () => {
+    const profile = getProfile('next');
+    const entries = await enumerateFiles(profile);
+    const mcpEntry = entries.find(e => e.relPath === '.mcp.json');
+    expect(mcpEntry).toBeDefined();
+    expect(mcpEntry?.kind).toBe('json-merge');
+    expect(mcpEntry?.extraSrcAbs).toBeDefined();
+    expect(mcpEntry?.extraSrcAbs).toMatch(/\.mcp\.json\.partial\.hbs$/);
   });
 });

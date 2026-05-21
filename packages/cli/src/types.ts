@@ -1,13 +1,14 @@
 export type FileKind =
   | 'write-or-ask'        // write if absent; classify-default 'ask' if exists
-  | 'append-marker'       // Plan 2 — placeholder for now
-  | 'append-lines'        // Plan 2
-  | 'json-merge'          // Plan 2
+  | 'append-marker'       // marker-pair merge for CLAUDE.md (shared + profile partials)
+  | 'append-lines'        // append missing lines with dedup (.gitignore)
+  | 'json-merge'          // deep merge, user wins on conflicts (.mcp.json, settings.json)
   | 'skip-if-exists'      // never overwrite
-  | 'mkdir-only';         // create empty dir + .gitkeep
+  | 'mkdir-only';         // create empty dir + .gitkeep (reserved; no template uses it yet)
 
-export type UserStrategy = 'ask' | 'skip' | 'overwrite';
-// Plan 2 will extend: | 'append' | 'json-merge' | 'edit'
+export type UserStrategy = 'ask' | 'skip' | 'overwrite' | 'append' | 'json-merge';
+// Plan 2 added: 'append' (force append-marker / append-lines), 'json-merge' (force JSON merge).
+// 'edit' was dropped — auto-backup covers manual-review use case.
 
 export interface ProfileDef {
   name: string;                  // 'next' | 'flutter' | …
@@ -21,6 +22,7 @@ export interface FileEntry {
   relPath: string;               // path relative to project cwd (after .hbs stripped)
   isTemplate: boolean;           // ends with .hbs
   kind: FileKind;
+  extraSrcAbs?: string;          // for marker-merge: a second partial concatenated under {{profileSection}}
 }
 
 export type ConflictState = 'absent' | 'identical' | 'differs';
@@ -31,8 +33,9 @@ export interface PlannedOp {
   relPath: string;
   src: FileEntry;
   conflict: ConflictState;
-  op: 'write' | 'skip' | 'mkdir';
-  reason: string;                // for logging
+  op: 'write' | 'skip' | 'mkdir' | 'merge-marker' | 'merge-json' | 'merge-lines';
+  reason: string;                // for logging (human-readable, not for control flow)
+  needsPrompt: boolean;          // if true, execute.ts asks user before writing
 }
 
 export interface OperationPlan {
@@ -49,4 +52,5 @@ export interface RenderContext {
   year: number;
   date: string;
   isWindows: boolean;
+  profileSection?: string;       // populated for marker-merge to feed shared partial's {{#if profileSection}} slot
 }

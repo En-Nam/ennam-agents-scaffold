@@ -8,7 +8,10 @@ import { enumerateFiles } from './enumerate.js';
 import { scanConflicts } from './conflict.js';
 import { buildPlan } from './plan.js';
 import { executeOps } from './execute.js';
-import { buildContext } from './render.js';
+import { buildContext, renderFileEntry, renderJsonContent } from './render.js';
+import { mergeMarker } from './merge/marker.js';
+import { mergeJson } from './merge/json.js';
+import { mergeLines } from './merge/lines.js';
 import { printIntro, printPlan, confirmProceed, printNextSteps } from './ux.js';
 import type { UserStrategy } from './types.js';
 
@@ -49,7 +52,58 @@ cli
 
     const entries = await enumerateFiles(profile);
     const ctx = buildContext({ profile: profileName, cwd, version: PKG.version });
-    const conflicts = await scanConflicts(cwd, entries.map(e => e.relPath));
+    const byRel = new Map(entries.map(e => [e.relPath, e]));
+    const provider = async (rel: string) => {
+      const entry = byRel.get(rel);
+      if (!entry) return null;
+      if (entry.kind === 'append-marker') {
+        // For marker-merge: "identical" means the existing file already contains the
+        // expected marker block. Simulate the merge and compare to the full existing content.
+        // Strip trailing \n from block to match execute.ts behaviour (mergeMarker idempotency).
+        const block = (await renderFileEntry(entry, ctx)).replace(/\n$/, '');
+        const abs = path.join(cwd, rel);
+        let existing = '';
+        try {
+          existing = await readFile(abs, 'utf8');
+        } catch {
+          return null;  // file absent — scanConflicts handles absent separately
+        }
+        return mergeMarker(existing, block);
+      }
+      if (entry.kind === 'json-merge') {
+        // For json-merge: "identical" means the existing file already has the same merged result.
+        // Compute mergeJson(userExisting, scaffoldCombined) to match execute.ts exactly.
+        let existingObj: Record<string, unknown> = {};
+        try {
+          const existingText = await readFile(path.join(cwd, rel), 'utf8');
+          if (existingText.trim().length > 0) {
+            existingObj = JSON.parse(existingText) as Record<string, unknown>;
+          }
+        } catch {
+          return null;  // file absent — scanConflicts handles absent separately
+        }
+        const scaffoldObj = await renderJsonContent(entry, ctx);
+        const merged = mergeJson(
+          existingObj as Parameters<typeof mergeJson>[0],
+          scaffoldObj as Parameters<typeof mergeJson>[0],
+        );
+        return JSON.stringify(merged, null, 2) + '\n';
+      }
+      if (entry.kind === 'append-lines') {
+        // For append-lines: "identical" means mergeLines(existing, incoming) === existing.
+        // Compute mergeLines to match execute.ts exactly.
+        let existing = '';
+        try {
+          existing = await readFile(path.join(cwd, rel), 'utf8');
+        } catch {
+          return null;  // file absent — scanConflicts handles absent separately
+        }
+        const incoming = await renderFileEntry(entry, ctx);
+        return mergeLines(existing, incoming);
+      }
+      return renderFileEntry(entry, ctx);
+    };
+    const conflicts = await scanConflicts(cwd, entries.map(e => e.relPath), provider);
     const ops = buildPlan({ entries, conflicts, strategy });
     const plan = { cwd, profile, ops };
 
@@ -66,7 +120,7 @@ cli
     }
 
     const result = await executeOps({ cwd, ops, ctx, interactive });
-    printNextSteps(profileName, result);
+    printNextSteps(profile, result);
   });
 
 cli.help();

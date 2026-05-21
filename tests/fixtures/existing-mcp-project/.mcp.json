@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "my-custom-server": {
+      "command": "my-bin",
+      "args": ["--flag"]
+    },
+    "serena": {
+      "command": "my-custom-serena"
+    }
+  }
+}
