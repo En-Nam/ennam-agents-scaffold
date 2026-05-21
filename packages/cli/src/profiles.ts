@@ -17,7 +17,30 @@ const REGISTRY: Record<string, ProfileDef> = {
     templateDir: path.join(TEMPLATES, 'next'),
     extraMcp: ['chrome-devtools', 'figma'],
   },
-  // flutter, python, go, qa added in Plan 2
+  flutter: {
+    name: 'flutter',
+    description: 'Flutter 3.x + Dart + Riverpod/Bloc + dio',
+    templateDir: path.join(TEMPLATES, 'flutter'),
+    extraMcp: ['figma'],
+  },
+  python: {
+    name: 'python',
+    description: 'Python 3.12 + FastAPI + uv + ruff + pytest',
+    templateDir: path.join(TEMPLATES, 'python'),
+    extraMcp: [],
+  },
+  go: {
+    name: 'go',
+    description: 'Go 1.24 + stdlib net/http + pgx + slog',
+    templateDir: path.join(TEMPLATES, 'go'),
+    extraMcp: [],
+  },
+  qa: {
+    name: 'qa',
+    description: 'QA workflow — test cases, evidence, chrome-devtools',
+    templateDir: path.join(TEMPLATES, 'qa'),
+    extraMcp: ['chrome-devtools'],
+  },
 };
 
 export function getProfile(name: string): ProfileDef {

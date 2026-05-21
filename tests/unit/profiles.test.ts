@@ -13,9 +13,14 @@ describe('profiles', () => {
     expect(() => getProfile('rust')).toThrow(/unknown profile/i);
   });
 
-  it('lists all v1 profiles', () => {
-    const all = listProfiles().map(p => p.name);
-    expect(all).toContain('next');
-    // Other profiles arrive in Plan 2; this test asserts only what Plan 1 ships.
+  it('returns all expected profiles', () => {
+    const names = listProfiles().map(p => p.name).sort();
+    expect(names).toEqual(['flutter', 'go', 'next', 'python', 'qa']);
+  });
+
+  it.each(['flutter', 'next', 'python', 'go', 'qa'] as const)('returns %s profile', (name) => {
+    const p = getProfile(name);
+    expect(p.name).toBe(name);
+    expect(p.templateDir).toContain(name);
   });
 });
