@@ -12,20 +12,20 @@ export function buildPlan(input: BuildPlanInput): PlannedOp[] {
     const state = input.conflicts.get(e.relPath) ?? 'absent';
 
     if (state === 'absent') {
-      ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'write', reason: 'absent — write' });
+      ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'write', reason: 'absent — write', needsPrompt: false });
       continue;
     }
     if (state === 'identical') {
-      ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'skip', reason: 'identical — skip' });
+      ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'skip', reason: 'identical — skip', needsPrompt: false });
       continue;
     }
     // state === 'differs'
     if (e.kind === 'skip-if-exists') {
-      ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'skip', reason: 'skip-if-exists kind' });
+      ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'skip', reason: 'skip-if-exists kind', needsPrompt: false });
       continue;
     }
     if (e.kind === 'mkdir-only') {
-      ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'mkdir', reason: 'mkdir-only kind' });
+      ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'mkdir', reason: 'mkdir-only kind', needsPrompt: false });
       continue;
     }
     if (e.kind === 'append-marker' || e.kind === 'append-lines' || e.kind === 'json-merge') {
@@ -34,14 +34,14 @@ export function buildPlan(input: BuildPlanInput): PlannedOp[] {
     // write-or-ask
     switch (input.strategy) {
       case 'overwrite':
-        ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'write', reason: 'differs — overwrite (--merge-strategy=overwrite)' });
+        ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'write', reason: 'differs — overwrite (--merge-strategy=overwrite)', needsPrompt: false });
         break;
       case 'skip':
-        ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'skip', reason: 'differs — keep existing (--merge-strategy=skip)' });
+        ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'skip', reason: 'differs — keep existing (--merge-strategy=skip)', needsPrompt: false });
         break;
       case 'ask':
       default:
-        ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'write', reason: 'differs — will prompt at execute time' });
+        ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'write', reason: 'differs — will prompt at execute time', needsPrompt: true });
         break;
     }
   }

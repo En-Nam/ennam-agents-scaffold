@@ -33,7 +33,8 @@ export interface PlannedOp {
   src: FileEntry;
   conflict: ConflictState;
   op: 'write' | 'skip' | 'mkdir';
-  reason: string;                // for logging
+  reason: string;                // for logging (human-readable, not for control flow)
+  needsPrompt: boolean;          // if true, execute.ts asks user before writing
 }
 
 export interface OperationPlan {

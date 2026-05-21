@@ -75,4 +75,27 @@ describe('buildPlan', () => {
       strategy: 'ask',
     })).toThrow(/not supported in plan 1|append-marker/i);
   });
+
+  it('sets needsPrompt: true only for differs + ask strategy + write-or-ask kind', () => {
+    const askDiffer = buildPlan({
+      entries: [fe('AGENTS.md')],
+      conflicts: new Map([['AGENTS.md', 'differs']]),
+      strategy: 'ask',
+    });
+    expect(askDiffer[0]?.needsPrompt).toBe(true);
+
+    const overwriteDiffer = buildPlan({
+      entries: [fe('AGENTS.md')],
+      conflicts: new Map([['AGENTS.md', 'differs']]),
+      strategy: 'overwrite',
+    });
+    expect(overwriteDiffer[0]?.needsPrompt).toBe(false);
+
+    const absent = buildPlan({
+      entries: [fe('AGENTS.md')],
+      conflicts: new Map([['AGENTS.md', 'absent']]),
+      strategy: 'ask',
+    });
+    expect(absent[0]?.needsPrompt).toBe(false);
+  });
 });

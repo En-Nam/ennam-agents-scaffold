@@ -54,7 +54,7 @@ export async function executeOps(input: ExecuteInput): Promise<ExecuteResult> {
       continue;
     }
     // op === 'write'
-    if (op.conflict === 'differs' && input.interactive && op.reason.includes('will prompt')) {
+    if (op.needsPrompt && input.interactive) {
       const yes = await promptOverwrite(op.relPath);
       if (!yes) {
         result.skipped++;
