@@ -6,8 +6,9 @@ export type FileKind =
   | 'skip-if-exists'      // never overwrite
   | 'mkdir-only';         // create empty dir + .gitkeep
 
-export type UserStrategy = 'ask' | 'skip' | 'overwrite';
-// Plan 2 will extend: | 'append' | 'json-merge' | 'edit'
+export type UserStrategy = 'ask' | 'skip' | 'overwrite' | 'append' | 'json-merge';
+// Plan 2 added: 'append' (force append-marker / append-lines), 'json-merge' (force JSON merge).
+// 'edit' was dropped — auto-backup covers manual-review use case.
 
 export interface ProfileDef {
   name: string;                  // 'next' | 'flutter' | …
