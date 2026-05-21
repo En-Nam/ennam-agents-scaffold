@@ -11,6 +11,16 @@ export function buildPlan(input: BuildPlanInput): PlannedOp[] {
   for (const e of input.entries) {
     const state = input.conflicts.get(e.relPath) ?? 'absent';
 
+    // append-marker is handled the same regardless of conflict state (except identical → skip)
+    if (e.kind === 'append-marker') {
+      if (state === 'identical') {
+        ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'skip', reason: 'identical — skip', needsPrompt: false });
+      } else {
+        ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'merge-marker', reason: state === 'absent' ? 'absent — write marker block' : 'differs — merge marker block', needsPrompt: false });
+      }
+      continue;
+    }
+
     if (state === 'absent') {
       ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'write', reason: 'absent — write', needsPrompt: false });
       continue;
@@ -28,8 +38,8 @@ export function buildPlan(input: BuildPlanInput): PlannedOp[] {
       ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'mkdir', reason: 'mkdir-only kind', needsPrompt: false });
       continue;
     }
-    if (e.kind === 'append-marker' || e.kind === 'append-lines' || e.kind === 'json-merge') {
-      throw new Error(`File kind "${e.kind}" for ${e.relPath} is not supported in Plan 1 (deferred to Plan 2)`);
+    if (e.kind === 'append-lines' || e.kind === 'json-merge') {
+      throw new Error(`File kind "${e.kind}" for ${e.relPath} not yet wired (next task)`);
     }
     // write-or-ask
     switch (input.strategy) {

@@ -22,6 +22,7 @@ export interface FileEntry {
   relPath: string;               // path relative to project cwd (after .hbs stripped)
   isTemplate: boolean;           // ends with .hbs
   kind: FileKind;
+  extraSrcAbs?: string;          // for marker-merge: a second partial concatenated under {{profileSection}}
 }
 
 export type ConflictState = 'absent' | 'identical' | 'differs';
@@ -32,7 +33,7 @@ export interface PlannedOp {
   relPath: string;
   src: FileEntry;
   conflict: ConflictState;
-  op: 'write' | 'skip' | 'mkdir';
+  op: 'write' | 'skip' | 'mkdir' | 'merge-marker';
   reason: string;                // for logging (human-readable, not for control flow)
   needsPrompt: boolean;          // if true, execute.ts asks user before writing
 }
@@ -51,4 +52,5 @@ export interface RenderContext {
   year: number;
   date: string;
   isWindows: boolean;
+  profileSection?: string;       // populated for marker-merge to feed shared partial's {{#if profileSection}} slot
 }

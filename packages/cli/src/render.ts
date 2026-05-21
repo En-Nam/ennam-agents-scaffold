@@ -35,8 +35,16 @@ export function renderString(template: string, ctx: RenderContext): string {
 /**
  * Render a FileEntry to the exact content the scaffold would write to disk.
  * Used by scanConflicts to detect already-installed files (identical → skip).
+ * Handles extraSrcAbs (marker-merge) by combining shared + profile partials.
  */
 export async function renderFileEntry(entry: FileEntry, ctx: RenderContext): Promise<string> {
   const raw = await readFile(entry.srcAbs, 'utf8');
-  return entry.isTemplate ? renderString(raw, ctx) : raw;
+  if (!entry.extraSrcAbs) {
+    return entry.isTemplate ? renderString(raw, ctx) : raw;
+  }
+  // Combine shared partial + profile partial via the `profileSection` slot.
+  const profileRaw = await readFile(entry.extraSrcAbs, 'utf8');
+  const profileRendered = renderString(profileRaw, ctx);
+  const extendedCtx = { ...ctx, profileSection: profileRendered };
+  return renderString(raw, extendedCtx as RenderContext);
 }

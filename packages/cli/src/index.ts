@@ -9,6 +9,7 @@ import { scanConflicts } from './conflict.js';
 import { buildPlan } from './plan.js';
 import { executeOps } from './execute.js';
 import { buildContext, renderFileEntry } from './render.js';
+import { mergeMarker } from './merge/marker.js';
 import { printIntro, printPlan, confirmProceed, printNextSteps } from './ux.js';
 import type { UserStrategy } from './types.js';
 
@@ -53,6 +54,20 @@ cli
     const provider = async (rel: string) => {
       const entry = byRel.get(rel);
       if (!entry) return null;
+      if (entry.kind === 'append-marker') {
+        // For marker-merge: "identical" means the existing file already contains the
+        // expected marker block. Simulate the merge and compare to the full existing content.
+        // Strip trailing \n from block to match execute.ts behaviour (mergeMarker idempotency).
+        const block = (await renderFileEntry(entry, ctx)).replace(/\n$/, '');
+        const abs = path.join(cwd, rel);
+        let existing = '';
+        try {
+          existing = await readFile(abs, 'utf8');
+        } catch {
+          return null;  // file absent — scanConflicts handles absent separately
+        }
+        return mergeMarker(existing, block);
+      }
       return renderFileEntry(entry, ctx);
     };
     const conflicts = await scanConflicts(cwd, entries.map(e => e.relPath), provider);

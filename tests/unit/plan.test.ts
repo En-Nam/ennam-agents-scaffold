@@ -68,12 +68,36 @@ describe('buildPlan', () => {
     expect(ops[0]?.reason).toMatch(/identical/i);
   });
 
-  it('throws if a kind not supported in Plan 1 is hit with strategy ask/overwrite', () => {
+  it('throws if append-lines kind is hit (Plan 2 not yet wired)', () => {
     expect(() => buildPlan({
+      entries: [fe('.gitignore', 'append-lines')],
+      conflicts: new Map([['.gitignore', 'differs']]),
+      strategy: 'ask',
+    })).toThrow(/not supported|append-lines/i);
+  });
+
+  it('emits merge-marker op for append-marker kind regardless of conflict', () => {
+    const absent = buildPlan({
+      entries: [fe('CLAUDE.md', 'append-marker')],
+      conflicts: new Map([['CLAUDE.md', 'absent']]),
+      strategy: 'ask',
+    });
+    expect(absent[0]?.op).toBe('merge-marker');
+    expect(absent[0]?.reason).toMatch(/marker/i);
+
+    const differs = buildPlan({
       entries: [fe('CLAUDE.md', 'append-marker')],
       conflicts: new Map([['CLAUDE.md', 'differs']]),
       strategy: 'ask',
-    })).toThrow(/not supported in plan 1|append-marker/i);
+    });
+    expect(differs[0]?.op).toBe('merge-marker');
+
+    const identical = buildPlan({
+      entries: [fe('CLAUDE.md', 'append-marker')],
+      conflicts: new Map([['CLAUDE.md', 'identical']]),
+      strategy: 'ask',
+    });
+    expect(identical[0]?.op).toBe('skip');
   });
 
   it('sets needsPrompt: true only for differs + ask strategy + write-or-ask kind', () => {
