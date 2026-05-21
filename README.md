@@ -2,26 +2,34 @@
 
 Install Claude Code tooling (Superpowers workflow + Serena memories + role agents + MCP servers) into an existing project — without touching application code.
 
-**MVP scope (v0.1):** `next` profile only. CLAUDE.md and `.mcp.json` merging deferred to v0.2.
-
 ## Quickstart
 
 ```bash
-cd my-existing-nextjs-app
-npx @ennam/agents-scaffold next
+cd my-existing-project
+npx @ennam/agents-scaffold <profile>
 ```
 
-This adds:
-- `AGENTS.md` — 12 universal agent behavioral rules
-- `.claude/` — settings, hooks, slash commands (`/boot`, `/checkpoint`, `/memory`, `/escalate`), 4 agents (project-owner, team-lead, reviewer, web-dev)
-- `.mcp.json` — Serena + Context7 + Jira MCP servers (Chrome DevTools and Figma for `next` not yet wired in MVP)
+## Profiles
+
+| Profile | Stack | Extra MCP |
+|---|---|---|
+| `next` | Next.js 16 + React 19 + TS strict + Tailwind 4 | chrome-devtools, figma |
+| `flutter` | Flutter 3.x + Dart + Riverpod/Bloc | figma |
+| `python` | Python 3.12 + FastAPI + uv | — |
+| `go` | Go 1.24 + stdlib net/http + pgx | — |
+| `qa` | QA workflow (test-cases + evidence) | chrome-devtools |
+
+## What gets added
+
+- `AGENTS.md` — 12 universal behavioral rules
+- `CLAUDE.md` — appended scaffold-managed block (with markers, idempotent on re-run)
+- `.claude/` — settings, hooks, slash commands (`/boot`, `/checkpoint`, `/memory`, `/escalate`), role agents
+- `.mcp.json` — deep-merged with any existing config (user wins on conflicts)
 - `.serena/` — memories skeleton + checkpoint folder
 - `docs/superpowers/` — empty specs and plans folders
+- `.gitignore` — append-only with dedup (no duplicates on re-run)
 
-It does NOT add:
-- Application code (you `create-next-app` yourself first)
-- `CLAUDE.md` (Plan 2 will add marker-based merge)
-- `.gitignore` modifications (Plan 2)
+Each merge backs up the original to `.ennam-scaffold-backup/<timestamp>/`. Backups rotate to the 3 most recent.
 
 ## Flags
 
@@ -29,9 +37,20 @@ It does NOT add:
 |------|--------|
 | `--dry-run` | Print plan, write nothing |
 | `--force` | Same as `--merge-strategy=overwrite` |
-| `--merge-strategy ask\|skip\|overwrite` | Default `ask` |
-| `--no-prompts` | Fail on missing info (CI) |
+| `--merge-strategy <s>` | `ask` (default) \| `skip` \| `overwrite` \| `append` \| `json-merge` |
+| `--no-prompts` | Fail on missing info (CI mode) |
 | `--verbose` | Verbose output |
+
+## Manual review after merge
+
+Every merge into an existing file backs up the original to `.ennam-scaffold-backup/<timestamp>/`. If you want to review or hand-edit the merged result:
+
+```bash
+diff .ennam-scaffold-backup/<timestamp>/CLAUDE.md ./CLAUDE.md
+# edit CLAUDE.md in your IDE
+```
+
+There is no interactive editor mode — `git diff` and your IDE give you better tooling than a one-shot `$EDITOR` invocation would.
 
 ## Unix users
 
@@ -40,8 +59,6 @@ After install, make the bash hook executable:
 ```bash
 chmod +x .claude/hooks/session-start.sh
 ```
-
-(Plan 2 will automate this in post-install.)
 
 ## Development
 
@@ -56,4 +73,3 @@ See [docs/superpowers/specs/](docs/superpowers/specs/) for design.
 ## License
 
 Internal (Ennam Engineering). Not yet open-sourced.
-
