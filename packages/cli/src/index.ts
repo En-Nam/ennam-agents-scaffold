@@ -120,7 +120,7 @@ cli
     }
 
     const result = await executeOps({ cwd, ops, ctx, interactive });
-    printNextSteps(profileName, result);
+    printNextSteps(profile, result);
   });
 
 cli.help();
