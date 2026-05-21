@@ -1,10 +1,10 @@
 export type FileKind =
   | 'write-or-ask'        // write if absent; classify-default 'ask' if exists
-  | 'append-marker'       // Plan 2 — placeholder for now
-  | 'append-lines'        // Plan 2
-  | 'json-merge'          // Plan 2
+  | 'append-marker'       // marker-pair merge for CLAUDE.md (shared + profile partials)
+  | 'append-lines'        // append missing lines with dedup (.gitignore)
+  | 'json-merge'          // deep merge, user wins on conflicts (.mcp.json, settings.json)
   | 'skip-if-exists'      // never overwrite
-  | 'mkdir-only';         // create empty dir + .gitkeep
+  | 'mkdir-only';         // create empty dir + .gitkeep (reserved; no template uses it yet)
 
 export type UserStrategy = 'ask' | 'skip' | 'overwrite' | 'append' | 'json-merge';
 // Plan 2 added: 'append' (force append-marker / append-lines), 'json-merge' (force JSON merge).
