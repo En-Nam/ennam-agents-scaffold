@@ -1,0 +1,27 @@
+## Stack: Python 3.12 + FastAPI
+
+| Layer | Tech |
+|---|---|
+| Framework | FastAPI |
+| Package manager | uv |
+| Lint/format | ruff |
+| Testing | pytest |
+| Schemas | Pydantic v2 |
+
+### Conventions
+
+- **uv only.** No `pip install` outside `uv add`. No `requirements.txt` editing by hand.
+- **Pydantic v2 syntax** (`model_config`, `Annotated`, etc.) — not v1.
+- **Type hints required** on public functions; ruff checks this.
+- **Pytest fixtures** in `conftest.py`; one feature per test file.
+- **Type-check before declaring done:** `uv run ruff check . && uv run pytest`.
+
+### Common commands
+
+```bash
+uv sync                     # install deps
+uv run uvicorn app:app      # dev server
+uv run pytest               # tests
+uv run ruff check .         # lint
+uv add <pkg>                # add a dep
+```
