@@ -6,7 +6,7 @@ import { renderString, renderJsonContent } from './render.js';
 import { mergeMarker } from './merge/marker.js';
 import { mergeJson } from './merge/json.js';
 import { mergeLines } from './merge/lines.js';
-import { backupFile, newSessionId } from './backup.js';
+import { backupFile, newSessionId, rotateBackups } from './backup.js';
 
 export interface ExecuteInput {
   cwd: string;
@@ -130,5 +130,6 @@ export async function executeOps(input: ExecuteInput): Promise<ExecuteResult> {
     await writeFile(target, content, 'utf8');
     result.written++;
   }
+  await rotateBackups(input.cwd, 3);
   return result;
 }
