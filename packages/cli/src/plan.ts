@@ -33,6 +33,17 @@ export function buildPlan(input: BuildPlanInput): PlannedOp[] {
       continue;
     }
 
+    // append-lines is handled regardless of conflict state (except identical → skip).
+    // mergeLines(existing, incoming) handles absent files (existing='') naturally.
+    if (e.kind === 'append-lines') {
+      if (state === 'identical') {
+        ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'skip', reason: 'identical — skip', needsPrompt: false });
+      } else {
+        ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'merge-lines', reason: state === 'absent' ? 'absent — write lines' : 'differs — append missing lines (dedup)', needsPrompt: false });
+      }
+      continue;
+    }
+
     if (state === 'absent') {
       ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'write', reason: 'absent — write', needsPrompt: false });
       continue;
@@ -49,9 +60,6 @@ export function buildPlan(input: BuildPlanInput): PlannedOp[] {
     if (e.kind === 'mkdir-only') {
       ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'mkdir', reason: 'mkdir-only kind', needsPrompt: false });
       continue;
-    }
-    if (e.kind === 'append-lines') {
-      throw new Error(`File kind "${e.kind}" for ${e.relPath} not yet wired (T13)`);
     }
     // write-or-ask
     switch (input.strategy) {

@@ -5,6 +5,7 @@ import type { PlannedOp, RenderContext } from './types.js';
 import { renderString, renderJsonContent } from './render.js';
 import { mergeMarker } from './merge/marker.js';
 import { mergeJson } from './merge/json.js';
+import { mergeLines } from './merge/lines.js';
 import { backupFile, newSessionId } from './backup.js';
 
 export interface ExecuteInput {
@@ -98,6 +99,21 @@ export async function executeOps(input: ExecuteInput): Promise<ExecuteResult> {
         scaffoldObj as Parameters<typeof mergeJson>[0],
       );
       await writeFile(target, JSON.stringify(merged, null, 2) + '\n', 'utf8');
+      result.written++;
+      continue;
+    }
+    if (op.op === 'merge-lines') {
+      await mkdir(path.dirname(target), { recursive: true });
+      let existing = '';
+      try {
+        existing = await readFile(target, 'utf8');
+        if (existing.length > 0) await backupFile(input.cwd, op.relPath, session);
+      } catch {
+        // file doesn't exist — fine
+      }
+      const incoming = await maybeRender(op, input.ctx);
+      const merged = mergeLines(existing, incoming);
+      await writeFile(target, merged, 'utf8');
       result.written++;
       continue;
     }

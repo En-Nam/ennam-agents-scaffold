@@ -11,6 +11,7 @@ import { executeOps } from './execute.js';
 import { buildContext, renderFileEntry, renderJsonContent } from './render.js';
 import { mergeMarker } from './merge/marker.js';
 import { mergeJson } from './merge/json.js';
+import { mergeLines } from './merge/lines.js';
 import { printIntro, printPlan, confirmProceed, printNextSteps } from './ux.js';
 import type { UserStrategy } from './types.js';
 
@@ -87,6 +88,18 @@ cli
           scaffoldObj as Parameters<typeof mergeJson>[0],
         );
         return JSON.stringify(merged, null, 2) + '\n';
+      }
+      if (entry.kind === 'append-lines') {
+        // For append-lines: "identical" means mergeLines(existing, incoming) === existing.
+        // Compute mergeLines to match execute.ts exactly.
+        let existing = '';
+        try {
+          existing = await readFile(path.join(cwd, rel), 'utf8');
+        } catch {
+          return null;  // file absent — scanConflicts handles absent separately
+        }
+        const incoming = await renderFileEntry(entry, ctx);
+        return mergeLines(existing, incoming);
       }
       return renderFileEntry(entry, ctx);
     };

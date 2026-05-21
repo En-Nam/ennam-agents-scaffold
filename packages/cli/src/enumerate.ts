@@ -45,7 +45,6 @@ export async function enumerateFiles(profile: ProfileDef): Promise<FileEntry[]> 
   };
 
   for (const { src, rel } of shared) {
-    if (src.endsWith('.append')) continue;
     if (collectMarker(src, rel, true)) continue;
     if (src.endsWith('.partial.hbs')) continue;  // non-CLAUDE partial — handled in T11
     const target = targetRelPath(rel);
@@ -57,7 +56,6 @@ export async function enumerateFiles(profile: ProfileDef): Promise<FileEntry[]> 
     });
   }
   for (const { src, rel } of profileFiles) {
-    if (src.endsWith('.append')) continue;
     if (collectMarker(src, rel, false)) continue;
     if (src.endsWith('.partial.hbs')) continue;
     const target = targetRelPath(rel);

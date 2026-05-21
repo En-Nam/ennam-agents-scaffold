@@ -68,12 +68,14 @@ describe('buildPlan', () => {
     expect(ops[0]?.reason).toMatch(/identical/i);
   });
 
-  it('throws if append-lines kind is hit (T13 not yet wired)', () => {
-    expect(() => buildPlan({
+  it('emits merge-lines op for append-lines kind', () => {
+    const ops = buildPlan({
       entries: [fe('.gitignore', 'append-lines')],
       conflicts: new Map([['.gitignore', 'differs']]),
       strategy: 'ask',
-    })).toThrow(/append-lines/i);
+    });
+    expect(ops[0]?.op).toBe('merge-lines');
+    expect(ops[0]?.reason).toMatch(/append|lines/i);
   });
 
   it('emits merge-json op for json-merge kind (differs)', () => {

@@ -27,6 +27,7 @@ describe('install next profile into fixture', () => {
     const required = [
       'AGENTS.md',
       'CLAUDE.md',
+      '.gitignore',
       '.claude/settings.json',
       '.claude/hooks/session-start.ps1',
       '.claude/hooks/session-start.sh',
