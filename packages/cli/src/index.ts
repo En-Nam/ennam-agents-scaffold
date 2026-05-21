@@ -8,8 +8,9 @@ import { enumerateFiles } from './enumerate.js';
 import { scanConflicts } from './conflict.js';
 import { buildPlan } from './plan.js';
 import { executeOps } from './execute.js';
-import { buildContext, renderFileEntry } from './render.js';
+import { buildContext, renderFileEntry, renderJsonContent } from './render.js';
 import { mergeMarker } from './merge/marker.js';
+import { mergeJson } from './merge/json.js';
 import { printIntro, printPlan, confirmProceed, printNextSteps } from './ux.js';
 import type { UserStrategy } from './types.js';
 
@@ -67,6 +68,25 @@ cli
           return null;  // file absent — scanConflicts handles absent separately
         }
         return mergeMarker(existing, block);
+      }
+      if (entry.kind === 'json-merge') {
+        // For json-merge: "identical" means the existing file already has the same merged result.
+        // Compute mergeJson(userExisting, scaffoldCombined) to match execute.ts exactly.
+        let existingObj: Record<string, unknown> = {};
+        try {
+          const existingText = await readFile(path.join(cwd, rel), 'utf8');
+          if (existingText.trim().length > 0) {
+            existingObj = JSON.parse(existingText) as Record<string, unknown>;
+          }
+        } catch {
+          return null;  // file absent — scanConflicts handles absent separately
+        }
+        const scaffoldObj = await renderJsonContent(entry, ctx);
+        const merged = mergeJson(
+          existingObj as Parameters<typeof mergeJson>[0],
+          scaffoldObj as Parameters<typeof mergeJson>[0],
+        );
+        return JSON.stringify(merged, null, 2) + '\n';
       }
       return renderFileEntry(entry, ctx);
     };

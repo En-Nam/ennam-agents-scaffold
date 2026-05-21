@@ -36,4 +36,14 @@ describe('enumerateFiles', () => {
     const claudeEntries = entries.filter(e => e.relPath === 'CLAUDE.md');
     expect(claudeEntries.length).toBe(1);
   });
+
+  it('.mcp.json entry has extraSrcAbs when profile partial exists', async () => {
+    const profile = getProfile('next');
+    const entries = await enumerateFiles(profile);
+    const mcpEntry = entries.find(e => e.relPath === '.mcp.json');
+    expect(mcpEntry).toBeDefined();
+    expect(mcpEntry?.kind).toBe('json-merge');
+    expect(mcpEntry?.extraSrcAbs).toBeDefined();
+    expect(mcpEntry?.extraSrcAbs).toMatch(/\.mcp\.json\.partial\.hbs$/);
+  });
 });

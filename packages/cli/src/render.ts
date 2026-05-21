@@ -2,6 +2,7 @@ import path from 'node:path';
 import { readFile } from 'node:fs/promises';
 import Handlebars from 'handlebars';
 import type { RenderContext, FileEntry } from './types.js';
+import { mergeJson } from './merge/json.js';
 
 export interface BuildContextOpts {
   profile: string;
@@ -47,4 +48,23 @@ export async function renderFileEntry(entry: FileEntry, ctx: RenderContext): Pro
   const profileRendered = renderString(profileRaw, ctx);
   const extendedCtx = { ...ctx, profileSection: profileRendered };
   return renderString(raw, extendedCtx as RenderContext);
+}
+
+/**
+ * Produce the scaffold-side combined JSON object for a json-merge entry.
+ * If entry has extraSrcAbs (profile partial), profile wins on conflict.
+ * mergeJson(first, second) keeps first's value on conflict, so:
+ *   mergeJson(profileObj, sharedObj) → profile wins.
+ */
+export async function renderJsonContent(entry: FileEntry, ctx: RenderContext): Promise<Record<string, unknown>> {
+  const sharedRaw = await readFile(entry.srcAbs, 'utf8');
+  const sharedObj = JSON.parse(renderString(sharedRaw, ctx)) as Record<string, unknown>;
+  if (!entry.extraSrcAbs) return sharedObj;
+  const profileRaw = await readFile(entry.extraSrcAbs, 'utf8');
+  const profileObj = JSON.parse(renderString(profileRaw, ctx)) as Record<string, unknown>;
+  // Profile wins on conflict (profile is more specific). mergeJson(first, second) keeps first's value.
+  return mergeJson(
+    profileObj as Parameters<typeof mergeJson>[0],
+    sharedObj as Parameters<typeof mergeJson>[0],
+  );
 }

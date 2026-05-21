@@ -2,8 +2,9 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { confirm, isCancel, cancel } from '@clack/prompts';
 import type { PlannedOp, RenderContext } from './types.js';
-import { renderString } from './render.js';
+import { renderString, renderJsonContent } from './render.js';
 import { mergeMarker } from './merge/marker.js';
+import { mergeJson } from './merge/json.js';
 import { backupFile, newSessionId } from './backup.js';
 
 export interface ExecuteInput {
@@ -73,6 +74,30 @@ export async function executeOps(input: ExecuteInput): Promise<ExecuteResult> {
       const block = (await maybeRender(op, input.ctx)).replace(/\n$/, '');
       const merged = mergeMarker(existing, block);
       await writeFile(target, merged, 'utf8');
+      result.written++;
+      continue;
+    }
+    if (op.op === 'merge-json') {
+      await mkdir(path.dirname(target), { recursive: true });
+      let existingObj: Record<string, unknown> = {};
+      let existed = false;
+      try {
+        const existingText = await readFile(target, 'utf8');
+        if (existingText.trim().length > 0) {
+          existingObj = JSON.parse(existingText) as Record<string, unknown>;
+          existed = true;
+        }
+      } catch {
+        // file doesn't exist — fine
+      }
+      if (existed) await backupFile(input.cwd, op.relPath, session);
+
+      const scaffoldObj = await renderJsonContent(op.src, input.ctx);
+      const merged = mergeJson(
+        existingObj as Parameters<typeof mergeJson>[0],
+        scaffoldObj as Parameters<typeof mergeJson>[0],
+      );
+      await writeFile(target, JSON.stringify(merged, null, 2) + '\n', 'utf8');
       result.written++;
       continue;
     }

@@ -65,9 +65,9 @@ describe('install next profile into fixture', () => {
     expect(stray).toEqual([]);
   });
 
-  it('preserves pre-existing .mcp.json with --merge-strategy=skip', async () => {
-    // Regression: Plan 1 must not crash when the target already has Claude Code config.
-    // (json-merge would throw "deferred to Plan 2"; demoted to write-or-ask in Plan 1.)
+  it('deep-merges pre-existing .mcp.json and settings.json (user wins, strategy ignored for json-merge)', async () => {
+    // T11: json-merge always deep-merges regardless of --merge-strategy.
+    // User values win on key conflicts; scaffold adds new keys.
     const { path: cwd } = await tmpDir({ unsafeCleanup: true });
     await cp(FIXTURE, cwd, { recursive: true });
     const existingMcp = '{"mcpServers":{"my-custom":{"command":"echo"}}}';
@@ -79,8 +79,20 @@ describe('install next profile into fixture', () => {
     const { exitCode } = await execa('node', [CLI_ENTRY, 'next', '--merge-strategy=skip', '--no-prompts'], { cwd });
     expect(exitCode).toBe(0);
 
-    expect(await readFile(path.join(cwd, '.mcp.json'), 'utf8')).toBe(existingMcp);
-    expect(await readFile(path.join(cwd, '.claude', 'settings.json'), 'utf8')).toBe(existingSettings);
+    const mergedMcp = JSON.parse(await readFile(path.join(cwd, '.mcp.json'), 'utf8'));
+    // User's custom server preserved (user wins)
+    expect(mergedMcp.mcpServers['my-custom'].command).toBe('echo');
+    // Scaffold servers added
+    expect(mergedMcp.mcpServers).toHaveProperty('serena');
+    expect(mergedMcp.mcpServers).toHaveProperty('context7');
+
+    const mergedSettings = JSON.parse(await readFile(path.join(cwd, '.claude', 'settings.json'), 'utf8'));
+    // User's outputStyle preserved (user wins)
+    expect(mergedSettings.outputStyle).toBe('custom');
+    // Scaffold adds other keys
+    expect(mergedSettings).toHaveProperty('model');
+    expect(mergedSettings).toHaveProperty('permissions');
+
     // Other files still installed
     expect((await stat(path.join(cwd, 'AGENTS.md'))).isFile()).toBe(true);
   });

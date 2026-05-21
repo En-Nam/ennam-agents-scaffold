@@ -10,7 +10,7 @@ export function printIntro(version: string): void {
 export function printPlan(plan: OperationPlan): void {
   const lines: string[] = [];
   for (const op of plan.ops) {
-    const marker = op.op === 'write' ? pc.green('+ write ') : op.op === 'mkdir' ? pc.blue('+ mkdir ') : pc.gray('  skip  ');
+    const marker = op.op === 'write' ? pc.green('+ write ') : op.op === 'mkdir' ? pc.blue('+ mkdir ') : op.op === 'merge-json' || op.op === 'merge-marker' ? pc.yellow('~ merge ') : pc.gray('  skip  ');
     lines.push(`${marker} ${op.relPath}  ${pc.dim(`(${op.reason})`)}`);
   }
   log.step(`Plan (${plan.ops.length} ops):\n  ${lines.join('\n  ')}`);

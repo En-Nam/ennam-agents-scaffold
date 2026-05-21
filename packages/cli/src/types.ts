@@ -33,7 +33,7 @@ export interface PlannedOp {
   relPath: string;
   src: FileEntry;
   conflict: ConflictState;
-  op: 'write' | 'skip' | 'mkdir' | 'merge-marker';
+  op: 'write' | 'skip' | 'mkdir' | 'merge-marker' | 'merge-json';
   reason: string;                // for logging (human-readable, not for control flow)
   needsPrompt: boolean;          // if true, execute.ts asks user before writing
 }

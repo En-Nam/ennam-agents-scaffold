@@ -68,12 +68,42 @@ describe('buildPlan', () => {
     expect(ops[0]?.reason).toMatch(/identical/i);
   });
 
-  it('throws if append-lines kind is hit (Plan 2 not yet wired)', () => {
+  it('throws if append-lines kind is hit (T13 not yet wired)', () => {
     expect(() => buildPlan({
       entries: [fe('.gitignore', 'append-lines')],
       conflicts: new Map([['.gitignore', 'differs']]),
       strategy: 'ask',
-    })).toThrow(/not supported|append-lines/i);
+    })).toThrow(/append-lines/i);
+  });
+
+  it('emits merge-json op for json-merge kind (differs)', () => {
+    const ops = buildPlan({
+      entries: [fe('.mcp.json', 'json-merge')],
+      conflicts: new Map([['.mcp.json', 'differs']]),
+      strategy: 'ask',
+    });
+    expect(ops[0]?.op).toBe('merge-json');
+    expect(ops[0]?.reason).toMatch(/merge|user wins/i);
+  });
+
+  it('emits merge-json op for json-merge kind (absent)', () => {
+    const ops = buildPlan({
+      entries: [fe('.mcp.json', 'json-merge')],
+      conflicts: new Map([['.mcp.json', 'absent']]),
+      strategy: 'ask',
+    });
+    expect(ops[0]?.op).toBe('merge-json');
+    expect(ops[0]?.reason).toMatch(/absent/i);
+  });
+
+  it('skips identical json-merge files', () => {
+    const ops = buildPlan({
+      entries: [fe('.mcp.json', 'json-merge')],
+      conflicts: new Map([['.mcp.json', 'identical']]),
+      strategy: 'ask',
+    });
+    expect(ops[0]?.op).toBe('skip');
+    expect(ops[0]?.reason).toMatch(/identical/i);
   });
 
   it('emits merge-marker op for append-marker kind regardless of conflict', () => {

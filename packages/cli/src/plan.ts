@@ -21,6 +21,18 @@ export function buildPlan(input: BuildPlanInput): PlannedOp[] {
       continue;
     }
 
+    // json-merge is handled regardless of conflict state (except identical → skip).
+    // All states use merge-json op so execute.ts always writes JSON.stringify output,
+    // keeping provider and execute in sync for idempotency.
+    if (e.kind === 'json-merge') {
+      if (state === 'identical') {
+        ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'skip', reason: 'identical — skip', needsPrompt: false });
+      } else {
+        ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'merge-json', reason: state === 'absent' ? 'absent — write json' : 'differs — deep-merge (user wins)', needsPrompt: false });
+      }
+      continue;
+    }
+
     if (state === 'absent') {
       ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'write', reason: 'absent — write', needsPrompt: false });
       continue;
@@ -38,8 +50,8 @@ export function buildPlan(input: BuildPlanInput): PlannedOp[] {
       ops.push({ relPath: e.relPath, src: e, conflict: state, op: 'mkdir', reason: 'mkdir-only kind', needsPrompt: false });
       continue;
     }
-    if (e.kind === 'append-lines' || e.kind === 'json-merge') {
-      throw new Error(`File kind "${e.kind}" for ${e.relPath} not yet wired (next task)`);
+    if (e.kind === 'append-lines') {
+      throw new Error(`File kind "${e.kind}" for ${e.relPath} not yet wired (T13)`);
     }
     // write-or-ask
     switch (input.strategy) {

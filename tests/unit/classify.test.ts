@@ -6,9 +6,8 @@ describe('classifyFile', () => {
     ['AGENTS.md',                       'write-or-ask'],
     ['CLAUDE.md',                       'append-marker'],
     ['.gitignore',                      'append-lines'],
-    // Plan 1: json-merge demoted to write-or-ask until merge implementation lands in Plan 2.
-    ['.mcp.json',                       'write-or-ask'],
-    ['.claude/settings.json',           'write-or-ask'],
+    ['.mcp.json',                       'json-merge'],
+    ['.claude/settings.json',           'json-merge'],
     ['.claude/hooks/session-start.ps1', 'write-or-ask'],
     ['.claude/hooks/session-start.sh',  'write-or-ask'],
     ['.claude/commands/boot.md',        'skip-if-exists'],

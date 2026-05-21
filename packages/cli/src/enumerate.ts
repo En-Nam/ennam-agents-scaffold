@@ -81,5 +81,15 @@ export async function enumerateFiles(profile: ProfileDef): Promise<FileEntry[]> 
     });
   }
 
+  // For json-merge: shared `_shared/.mcp.json.hbs` is the base; profile `<profile>/.mcp.json.partial.hbs`
+  // is the addition. Attach profile partial as extraSrcAbs on the shared entry.
+  const profileMcpPartial = profileFiles.find(({ rel }) => rel === '.mcp.json.partial.hbs');
+  if (profileMcpPartial) {
+    const existing = map.get('.mcp.json');
+    if (existing) {
+      existing.extraSrcAbs = profileMcpPartial.src;
+    }
+  }
+
   return [...map.values()].sort((a, b) => a.relPath.localeCompare(b.relPath));
 }
