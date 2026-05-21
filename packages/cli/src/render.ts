@@ -22,9 +22,11 @@ export function buildContext(opts: BuildContextOpts): RenderContext {
   };
 }
 
+// Register custom helpers once at module load (Handlebars helpers are global, idempotent).
+Handlebars.registerHelper('json', (value: unknown) => {
+  return JSON.stringify(value);
+});
+
 export function renderString(template: string, ctx: RenderContext): string {
-  Handlebars.registerHelper('json', (value: unknown) => {
-    return JSON.stringify(value);
-  });
   return Handlebars.compile(template, { noEscape: true })(ctx);
 }
