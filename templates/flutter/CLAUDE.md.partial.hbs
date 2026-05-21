@@ -1,0 +1,26 @@
+## Stack: Flutter 3.x + Dart
+
+| Layer | Tech |
+|---|---|
+| Framework | Flutter 3.x |
+| Language | Dart (sound null safety) |
+| State | Riverpod or Bloc (pick one — don't mix) |
+| HTTP | dio |
+| Testing | flutter_test + integration_test |
+
+### Conventions
+
+- **One state lib per project.** If using Riverpod, never import bloc; vice versa.
+- **dio interceptors** for auth + logging; do not roll a custom HTTP client.
+- **Widget keys** required on stateful test targets so integration_test can find them.
+- **Type-check before declaring done:** `flutter analyze` (zero warnings policy).
+
+### Common commands
+
+```bash
+flutter pub get
+flutter run               # debug on connected device
+flutter test
+flutter build apk         # or appbundle, ios, etc.
+flutter analyze
+```
