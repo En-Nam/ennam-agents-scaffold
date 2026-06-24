@@ -77,4 +77,4 @@ See [docs/superpowers/specs/](docs/superpowers/specs/) for design.
 
 ## License
 
-Internal (Ennam Engineering). Not yet open-sourced.
+Published publicly on npm for `npx` convenience. Internal Ennam Engineering tool; no proprietary content. No formal open-source license yet — treat as "source available, internal use".
