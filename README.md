@@ -1,23 +1,51 @@
 # @ennamjsc/agents-scaffold
 
+[![npm version](https://img.shields.io/npm/v/@ennamjsc/agents-scaffold.svg)](https://www.npmjs.com/package/@ennamjsc/agents-scaffold)
+[![node](https://img.shields.io/node/v/@ennamjsc/agents-scaffold.svg)](https://nodejs.org)
+[![license](https://img.shields.io/badge/license-source--available-blue.svg)](#license)
+
 Install Claude Code tooling (Superpowers workflow + Serena memories + role agents + MCP servers) into an existing project — without touching application code.
 
 ## Quickstart
 
+Option 1 — guided wizard (recommended). Walks you through role → project type → stack:
+
 ```bash
-cd my-existing-project
+cd my-project
+npx @ennamjsc/agents-scaffold
+```
+
+Option 2 — install a profile directly (skips the wizard):
+
+```bash
+cd my-project
 npx @ennamjsc/agents-scaffold <profile>
+```
+
+### Install flow
+
+```mermaid
+flowchart LR
+  A[npx @ennamjsc/agents-scaffold] --> B{Role?}
+  B -->|Developer| C{Project type?}
+  B -->|QA-QC| Q[qa profile]
+  C -->|Local-root| L[local-root profile]
+  C -->|Existing repo| S{Stack?}
+  S -->|Next.js| N[next profile]
+  S -->|Flutter| F[flutter profile]
+  S -->|Python| P[python profile]
+  S -->|Go| G[go profile]
 ```
 
 ## Profiles
 
 | Profile | Stack | Extra MCP |
 |---|---|---|
-| `next` | Next.js 16 + React 19 + TS strict + Tailwind 4 | chrome-devtools, figma |
+| `next` | Next.js 16 + React 19 + TS strict + Tailwind 4 | figma |
 | `flutter` | Flutter 3.x + Dart + Riverpod/Bloc | figma |
 | `python` | Python 3.12 + FastAPI + uv | — |
 | `go` | Go 1.24 + stdlib net/http + pgx | — |
-| `qa` | QA workflow (test-cases + evidence) | chrome-devtools |
+| `qa` | QA workflow (test-cases + evidence) | — |
 | `local-root` | Orchestration root — polyrepo coordinator, reads sub-platform `.serena/` memories | — |
 
 ## What gets added
@@ -35,6 +63,10 @@ Each merge backs up the original to `.ennam-scaffold-backup/<timestamp>/`. Backu
 ### No-repo behavior
 
 When the target directory does not contain a `.git` directory, the scaffold silently skips the `.gitignore` append step for ALL profiles. Every other file is still written. To enable `.gitignore` handling, run `git init` first. This requires no flags.
+
+### Claude for Chrome integration
+
+Browser-side debugging and UI verification are handled by the [Claude for Chrome](https://www.anthropic.com/news/claude-for-chrome) extension, not by an MCP server. Install the extension separately; the scaffold's `next` and `qa` profiles reference it from their CLAUDE.md partials. There is no `.mcp.json` entry to add — Claude for Chrome is a browser extension, not an MCP.
 
 ## Flags
 
