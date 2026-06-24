@@ -32,8 +32,8 @@ describe('install into project with existing .mcp.json', () => {
     // Scaffold adds context7 and jira (user didn't have them)
     expect(merged.mcpServers).toHaveProperty('context7');
     expect(merged.mcpServers).toHaveProperty('jira');
-    // Profile additions (chrome-devtools, figma) merged in
-    expect(merged.mcpServers).toHaveProperty('chrome-devtools');
+    // Profile addition (figma) merged in
+    expect(merged.mcpServers).not.toHaveProperty('chrome-devtools');
     expect(merged.mcpServers).toHaveProperty('figma');
 
     // Backup of original

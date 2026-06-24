@@ -29,6 +29,6 @@ describe('install qa profile into empty cwd', () => {
     expect((await stat(path.join(cwd, 'qa/.gitkeep'))).isFile()).toBe(true);
 
     const mcp = JSON.parse(await readFile(path.join(cwd, '.mcp.json'), 'utf8'));
-    expect(Object.keys(mcp.mcpServers)).toContain('chrome-devtools');
+    expect(mcp.mcpServers).not.toHaveProperty('chrome-devtools');
   });
 });

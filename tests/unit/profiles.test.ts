@@ -5,8 +5,7 @@ describe('profiles', () => {
   it('returns the next profile by name', () => {
     const p = getProfile('next');
     expect(p.name).toBe('next');
-    expect(p.extraMcp).toContain('chrome-devtools');
-    expect(p.extraMcp).toContain('figma');
+    expect(p.extraMcp).toEqual(['figma']);
   });
 
   it('throws on unknown profile', () => {
