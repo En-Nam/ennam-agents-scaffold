@@ -18,5 +18,7 @@ export default defineConfig({
     const dst = path.resolve('dist', '..', 'templates');
     await rm(dst, { recursive: true, force: true });
     await cp(src, dst, { recursive: true });
+    // Copy the root README into the CLI package so npmjs.com renders it.
+    await cp(path.resolve('..', '..', 'README.md'), path.resolve('README.md'));
   },
 });

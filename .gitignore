@@ -8,4 +8,5 @@ coverage/
 .env.local
 .changeset/.cache/
 packages/cli/templates/
+packages/cli/README.md
 .ennam-scaffold-backup/
