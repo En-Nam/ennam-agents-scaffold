@@ -11,30 +11,40 @@ Install Claude Code tooling (Superpowers workflow + Serena memories + role agent
 Option 1 — guided wizard (recommended). Walks you through role → project type → stack:
 
 ```bash
-cd my-project
+cd <target>
 npx @ennamjsc/agents-scaffold
 ```
+
+For application repos, point `<target>` at the repo root. For the orchestration root (`local-root` profile), point at an empty directory.
 
 Option 2 — install a profile directly (skips the wizard):
 
 ```bash
-cd my-project
+cd <target>
 npx @ennamjsc/agents-scaffold <profile>
 ```
 
 ### Install flow
 
-```mermaid
-flowchart LR
-  A[npx @ennamjsc/agents-scaffold] --> B{Role?}
-  B -->|Developer| C{Project type?}
-  B -->|QA-QC| Q[qa profile]
-  C -->|Local-root| L[local-root profile]
-  C -->|Existing repo| S{Stack?}
-  S -->|Next.js| N[next profile]
-  S -->|Flutter| F[flutter profile]
-  S -->|Python| P[python profile]
-  S -->|Go| G[go profile]
+```
+npx @ennamjsc/agents-scaffold
+   |
+   +-- role?
+        |
+        +-- Developer
+        |     |
+        |     +-- project type?
+        |           |
+        |           +-- Local-root              -> local-root profile
+        |           +-- Existing repository
+        |                 |
+        |                 +-- stack?
+        |                       +-- Next.js   -> next profile
+        |                       +-- Flutter   -> flutter profile
+        |                       +-- Python    -> python profile
+        |                       +-- Go        -> go profile
+        |
+        +-- QA-QC                              -> qa profile
 ```
 
 ## Profiles
@@ -47,6 +57,8 @@ flowchart LR
 | `go` | Go 1.24 + stdlib net/http + pgx | — |
 | `qa` | QA workflow (test-cases + evidence) | — |
 | `local-root` | Orchestration root — polyrepo coordinator, reads sub-platform `.serena/` memories | — |
+
+All profiles also register `serena`, `context7`, and `jira` via the shared MCP partial. The `Extra MCP` column lists only the profile-specific additions on top of that base.
 
 ## What gets added
 
@@ -67,6 +79,10 @@ When the target directory does not contain a `.git` directory, the scaffold sile
 ### Claude for Chrome integration
 
 Browser-side debugging and UI verification are handled by the [Claude for Chrome](https://www.anthropic.com/news/claude-for-chrome) extension, not by an MCP server. Install the extension separately; the scaffold's `next` and `qa` profiles reference it from their CLAUDE.md partials. There is no `.mcp.json` entry to add — Claude for Chrome is a browser extension, not an MCP.
+
+### Upgrading from v1.1
+
+v1.2 removed the `chrome-devtools` MCP server in favour of the Claude for Chrome extension (above). If your project already has `mcpServers.chrome-devtools` in its `.mcp.json` from a prior install, remove that entry manually — the merge is user-wins on conflicts, so re-running the scaffold will not delete it. The CLI prints a warning after install when it detects a stale entry.
 
 ## Flags
 
