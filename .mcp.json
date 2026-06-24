@@ -24,25 +24,18 @@
       "command": "npx",
       "args": [
         "-y",
-        "@ennam/jira-mcp"
+        "@ennamjsc/jira-mcp"
       ],
       "env": {
         "JIRA_URL": "${JIRA_URL}",
         "JIRA_TOKEN": "${JIRA_TOKEN}"
       }
     },
-    "chrome-devtools": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/chrome-devtools-mcp"
-      ]
-    },
     "figma": {
       "command": "npx",
       "args": [
         "-y",
-        "@ennam/figma-mcp"
+        "@ennamjsc/figma-mcp"
       ],
       "env": {
         "FIGMA_TOKEN": "${FIGMA_TOKEN}"
