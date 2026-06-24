@@ -23,6 +23,14 @@ describe('wizard resolveProfile matrix', () => {
     expect(resolveProfile('Developer', 'Existing repository', 'Go')).toBe('go');
   });
 
+  it('Developer + Existing repository + React → react', () => {
+    expect(resolveProfile('Developer', 'Existing repository', 'React')).toBe('react');
+  });
+
+  it('Developer + Existing repository + React Native → react-native', () => {
+    expect(resolveProfile('Developer', 'Existing repository', 'React Native')).toBe('react-native');
+  });
+
   it('Developer + Existing repository + .NET MVC → dotnet-mvc', () => {
     expect(resolveProfile('Developer', 'Existing repository', '.NET MVC')).toBe('dotnet-mvc');
   });
@@ -70,6 +78,8 @@ describe('wizard resolveProfile matrix', () => {
       resolveProfile('Developer', 'Existing repository', 'Flutter'),
       resolveProfile('Developer', 'Existing repository', 'Python'),
       resolveProfile('Developer', 'Existing repository', 'Go'),
+      resolveProfile('Developer', 'Existing repository', 'React'),
+      resolveProfile('Developer', 'Existing repository', 'React Native'),
       resolveProfile('Developer', 'Existing repository', '.NET MVC'),
       resolveProfile('Developer', 'Existing repository', 'Express.js'),
       resolveProfile('QA-QC', 'Local-root'),

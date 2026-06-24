@@ -1,6 +1,6 @@
 ---
 name: dotnet-async-discipline
-description: Enforce async-all-the-way in C#. Use when writing or reviewing any .NET code that performs I/O — database queries (EF Core, Dapper), HTTP calls (HttpClient), file or stream operations, or any method that awaits another async method.
+description: Use when writing or reviewing any .NET code that performs I/O — database queries (EF Core, Dapper), HTTP calls (HttpClient), file or stream operations, or any method that awaits another async method — to enforce async-all-the-way and prevent thread-pool starvation.
 ---
 
 # .NET Async Discipline
@@ -47,4 +47,8 @@ Skipping the token means a client disconnect still costs you a full DB round-tri
 
 ## Review checklist
 
-When reviewing a diff, grep for `.Result`, `.Wait()`, `.GetAwaiter`, `async void`, and any `*Async` method called without `await`. Each hit is a defect, not a style nit.
+- Grep the diff for `.Result`, `.Wait()`, `.GetAwaiter().GetResult()`, and `async void` — each hit is a defect, not a style nit.
+- Confirm every `*Async` call is `await`ed (or explicitly returned as `Task`); a bare `SomeAsync()` is a fire-and-forget bug.
+- Confirm every controller action signature includes `CancellationToken ct` and that `ct` is forwarded into every downstream EF Core / HttpClient call.
+- Confirm no `Task.WhenAll` (or parallel `await`) is called on the same `DbContext` instance, and no `DbContext` is captured in a singleton, static, or long-lived closure.
+- In library projects, confirm `.ConfigureAwait(false)` is on every `await`; in ASP.NET Core app projects, confirm it is absent.

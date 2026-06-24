@@ -5,11 +5,13 @@ import path from 'node:path';
 // Exported as a pure function for unit testing; runWizard wraps it with prompts.
 export type Role = 'Developer' | 'QA-QC' | 'BA' | 'HR' | 'DevOps';
 export type ProjectType = 'Local-root' | 'Existing repository';
-export type Stack = 'Next.js' | 'Flutter' | 'Python' | 'Go' | '.NET MVC' | 'Express.js';
+export type Stack = 'Next.js' | 'React' | 'React Native' | 'Flutter' | 'Python' | 'Go' | '.NET MVC' | 'Express.js';
 export type Cloud = 'AWS' | 'Azure' | 'Google Cloud';
 
 const STACK_TO_PROFILE: Record<Stack, string> = {
   'Next.js': 'next',
+  'React': 'react',
+  'React Native': 'react-native',
   'Flutter': 'flutter',
   'Python': 'python',
   'Go': 'go',
@@ -119,6 +121,8 @@ export async function runWizard(cwd: string = process.cwd()): Promise<string> {
       message: 'What stack?',
       options: [
         { value: 'Next.js', label: 'Next.js' },
+        { value: 'React', label: 'React (Vite SPA)' },
+        { value: 'React Native', label: 'React Native (Expo)' },
         { value: 'Flutter', label: 'Flutter' },
         { value: 'Python', label: 'Python' },
         { value: 'Go', label: 'Go' },

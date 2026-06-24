@@ -44,3 +44,12 @@ Never include or imply:
 ## Sign-off
 
 Mark the file `DRAFT` at the top until a human approves. Surface every placeholder and every judgment call in your handoff message.
+
+## Review checklist (before declaring the JD ready)
+
+- Required list contains only true day-1 needs — nothing learnable in 90 days.
+- Every Required and Preferred item maps to a named competency.
+- No gendered, ageist, or gatekeeping language slipped in (re-scan after edits).
+- No EEOC-prohibited criteria, direct or implied.
+- `[BAND PLACEHOLDER]` and `[BENEFITS PLACEHOLDER]` are present unless the user supplied real values.
+- File starts with `DRAFT` until human sign-off.

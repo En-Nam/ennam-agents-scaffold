@@ -1,0 +1,50 @@
+## Stack: React Native 0.76+ + Expo SDK 52+
+
+| Layer | Tech |
+|---|---|
+| Runtime | React Native 0.76+ — New Architecture (Fabric + TurboModules + JSI) is the default. Old Architecture is removed in 0.82+. |
+| JS engine | Hermes (Hermes V1 is the default in 0.84+) |
+| Toolchain | Expo SDK 52+ (managed workflow) |
+| Routing | Expo Router v4 (file-based, `app/` directory) |
+| Language | TypeScript strict mode |
+| Server state | TanStack Query v5 |
+| Forms / validation | TanStack Form v6 + Zod |
+| Styling | NativeWind v4 (Tailwind for RN) |
+| Animations | Reanimated 3 (worklets on the UI thread) |
+| Lists | FlashList (not FlatList) |
+| Unit tests | Jest + React Native Testing Library |
+| E2E | Maestro (YAML flows) |
+| Releases | EAS Build + EAS Submit |
+
+### Conventions
+
+- **New Architecture is mandatory.** Do NOT opt out via `newArchEnabled: false`. Do NOT mix legacy Native Modules with TurboModules in the same project.
+- **File-based routing in `app/`.** Lowercase, hyphen-separated route filenames (`user-settings.tsx`). The `app/` tree is for route files only — put business logic in `features/`, `lib/`, `hooks/`, etc.
+- **NativeWind for styling.** Do NOT mix `className` (NativeWind) and `StyleSheet.create` in the same component. Pick one per file; default to NativeWind.
+- **Animate with Reanimated 3 worklets.** Do NOT use the legacy `Animated` API. Use `useSharedValue` for animation state, `useAnimatedStyle` for derived styles, `runOnJS` to call back into JS land.
+- **TanStack Query for server state.** Do NOT call `fetch` inside `useEffect` for data loading. Define query keys via factory pattern; set sane `staleTime` / `gcTime` defaults at the `QueryClient` level.
+- **Never block the JS thread.** Heavy work goes into a Reanimated worklet, a background task, or off-device. Profile with Hermes / Chrome DevTools when a screen feels janky.
+- **Verify on both platforms.** Before declaring done, run the change on an iOS simulator AND an Android emulator. Platform-specific bugs are common.
+- **Check New-Arch compatibility before adding native deps.** Run `npx react-native-new-arch-check` after `expo install <pkg>`. Outdated libs fail at runtime, not build time.
+
+### Common commands
+
+```bash
+npx expo start                       # local dev (Metro + Expo Go / dev client)
+npx expo start --ios                 # boot iOS simulator
+npx expo start --android             # boot Android emulator
+npx expo install <pkg>               # add a dep at the SDK-compatible version
+npx react-native-new-arch-check      # confirm deps support the New Architecture
+npm run lint                         # eslint
+npm test                             # jest + RNTL unit / component tests
+npx maestro test .maestro/           # run Maestro E2E flows
+eas build --platform ios             # cloud build via EAS
+eas build --platform android         # cloud build via EAS
+eas submit --platform ios            # submit to App Store (asks for confirmation)
+```
+
+<!-- BEGIN:react-native-agent-rules -->
+# This is NOT the React Native you remember
+
+Your training data is from the pre-New-Architecture era. The legacy bridge, `NativeModules`-style modules, `ListView`, and the JS-thread `Animated` API are gone. Read the current Expo and React Native docs (via `mcp__context7__query-docs` if uncertain) before writing any native-touching code, and heed deprecation notices.
+<!-- END:react-native-agent-rules -->

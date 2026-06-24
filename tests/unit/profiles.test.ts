@@ -15,6 +15,8 @@ const ALL_PROFILES = [
   'next',
   'python',
   'qa',
+  'react',
+  'react-native',
 ] as const;
 
 describe('profiles', () => {

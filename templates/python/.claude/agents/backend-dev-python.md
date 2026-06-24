@@ -18,4 +18,4 @@ Process:
 Boundaries:
 - Don't touch `pyproject.toml` directly — use uv commands.
 - Don't disable ruff rules to "make it lint".
-- Don't mix sync and async route handlers carelessly.
+- Don't call blocking sync I/O (requests, time.sleep, sync DB drivers) inside `async def` routes — use the async equivalent or `run_in_executor`.

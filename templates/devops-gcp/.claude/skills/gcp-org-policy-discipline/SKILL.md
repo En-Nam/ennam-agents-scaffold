@@ -58,3 +58,10 @@ Rules:
 - **TTL** is a real date. The next quarterly review re-justifies or removes it.
 
 An override without all four columns is a code-review blocker.
+
+## Anti-patterns
+
+- Setting baseline constraints at the project level instead of the org/folder — drift is guaranteed.
+- Overriding a constraint inline in the resource module without a README entry.
+- Using `inherit_from_parent = false` to silently drop an inherited policy.
+- Treating `gcp.resourceLocations` as a soft preference — it is a hard data-residency control.

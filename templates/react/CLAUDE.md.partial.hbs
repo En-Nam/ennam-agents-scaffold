@@ -1,0 +1,38 @@
+## Stack: React 19 + Vite 6 SPA
+
+| Layer | Tech |
+|---|---|
+| Build tool | Vite 6 |
+| UI runtime | React 19 (Client Components only — this is a SPA, no RSC) |
+| Language | TypeScript strict mode |
+| Routing | React Router 7 (library / declarative mode) |
+| Server state | TanStack Query v5 |
+| Validation | Zod (at every route + form boundary) |
+| UI primitives | shadcn/ui + Tailwind CSS 4 (CSS-first, no `tailwind.config.js`) |
+| Compiler | React Compiler v1.0 (stable) — enabled via `@vitejs/plugin-react` |
+| Unit tests | Vitest + Testing Library |
+| E2E tests | Playwright |
+| Linter | ESLint (flat config) + `eslint-plugin-react-hooks` |
+
+### Conventions
+
+- **No Server Components in this profile.** This is a Vite SPA — everything is a Client Component. Do NOT add `'use client'` directives, do NOT introduce `next/*` imports, do NOT scaffold Server Actions on the server (use React 19 client Actions with `useActionState` + a real API call instead).
+- **Wrap data fetches in Suspense.** Use TanStack Query's `useSuspenseQuery` (or `<Suspense>` + `use()`) and pair every Suspense boundary with an Error Boundary. Keep boundaries small (per volatile region), not at the root.
+- **Mutations use React 19 Actions.** `useActionState` for pending/error state, `useFormStatus` inside the submit button, `useOptimistic` for instant UI. Server round-trip goes through a TanStack Query mutation so the cache stays consistent.
+- **React Compiler is on.** Do NOT add `useMemo` / `useCallback` / `React.memo` speculatively — the compiler memoizes automatically. Add manual memoization only after profiling shows a real win.
+- **React Router 7 in LIBRARY mode.** Use `createBrowserRouter` + `<RouterProvider>` (or `<BrowserRouter><Routes>` declarative). Do NOT switch to React Router's framework mode — that turns this into a different app shape.
+- **Validate at the boundary.** Every route loader, every form Action, and every API response goes through a Zod schema before reaching component code. Never trust `any`.
+- **shadcn/ui + Tailwind 4 only.** Compose shadcn primitives; copy new ones from the registry instead of writing from scratch. Use `@theme` directive in CSS for tokens — no `tailwind.config.js`.
+- **Type-check before declaring done:** `npm run build` (Vite + `tsc`).
+
+### Common commands
+
+```bash
+npm run dev          # Vite dev server (port 5173)
+npm run build        # tsc -b && vite build
+npm run preview      # serve the production build locally
+npm run lint         # eslint
+npm run test         # vitest (watch)
+npm run test:run     # vitest run (CI)
+npm run test:e2e     # playwright test
+```

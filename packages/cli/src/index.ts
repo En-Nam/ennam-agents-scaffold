@@ -12,7 +12,7 @@ import { buildContext, renderFileEntry, renderJsonContent } from './render.js';
 import { mergeMarker } from './merge/marker.js';
 import { mergeJson } from './merge/json.js';
 import { mergeLines } from './merge/lines.js';
-import { printIntro, printPlan, confirmProceed, printNextSteps } from './ux.js';
+import { printIntro, printPlan, confirmProceed, printNextSteps, printHandoffPrompt } from './ux.js';
 import { runWizard } from './wizard.js';
 import type { UserStrategy, OperationPlan } from './types.js';
 
@@ -173,6 +173,14 @@ cli
     // in their .mcp.json (mergeJson is user-wins, so the scaffold cannot
     // remove it). Surface a non-fatal warning so the user knows to clean up.
     await maybeWarnStaleChromeDevtools(cwd);
+
+    // Hand off to the user: print a copy-paste prompt they can paste into
+    // a fresh Claude Code session to seed project-specific context above the
+    // scaffold marker block. Skipped in CI (--no-prompts) — there is no
+    // human to paste it — and for local-root (no app to extract).
+    if (interactive) {
+      printHandoffPrompt(profile.name);
+    }
   });
 
 cli.help();

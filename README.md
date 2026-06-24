@@ -40,6 +40,8 @@ flowchart TD
     PType -->|Existing repository| Stack{stack?}
 
     Stack -->|Next.js| Next[next profile]
+    Stack -->|React Vite SPA| React[react profile]
+    Stack -->|React Native Expo| RN[react-native profile]
     Stack -->|Flutter| Flutter[flutter profile]
     Stack -->|Python| Python[python profile]
     Stack -->|Go| Go[go profile]
@@ -51,7 +53,7 @@ flowchart TD
     Cloud -->|Google Cloud| GCP[devops-gcp profile]
 
     classDef leaf fill:#d4edda,stroke:#155724,color:#155724;
-    class QA,BA,HR,LR,Next,Flutter,Python,Go,Dotnet,Express,AWS,Azure,GCP leaf;
+    class QA,BA,HR,LR,Next,React,RN,Flutter,Python,Go,Dotnet,Express,AWS,Azure,GCP leaf;
 ```
 
 > The diagram above renders on GitHub. On npmjs.com, the mermaid code block is shown verbatim — open this README on GitHub for the rendered flowchart.
@@ -63,6 +65,8 @@ flowchart TD
 | Profile | Stack | Extra MCP |
 |---|---|---|
 | `next` | Next.js 16 + React 19 + TS strict + Tailwind 4 | figma |
+| `react` | React 19 SPA — Vite 6 + React Router 7 + TanStack Query + shadcn/ui + Tailwind 4 + Vitest | figma |
+| `react-native` | React Native 0.76+ (New Architecture) + Expo SDK 52+ + Expo Router + NativeWind + Reanimated 3 + Maestro | figma |
 | `flutter` | Flutter 3.x + Dart + Riverpod/Bloc | figma |
 | `python` | Python 3.12 + FastAPI + uv + ruff + pytest | — |
 | `go` | Go 1.24 + stdlib net/http + pgx + slog | — |
@@ -122,6 +126,12 @@ v1.2 removed the `chrome-devtools` MCP server in favour of the Claude for Chrome
 ### Upgrading from v1.2
 
 v1.3 fixes a silent-exit bug under `npx`: pre-1.3 invocations would print nothing and exit 0 without scaffolding anything because the entry-point guard compared the symlinked bin path against the realpath of the module. If `npx @ennamjsc/agents-scaffold` worked silently for you on v1.2, upgrading to v1.3 will make it actually run. v1.3 also adds 7 new profiles (`dotnet-mvc`, `express`, `ba`, `hr`, `devops-aws`, `devops-azure`, `devops-gcp`) and three new wizard roles (BA, HR, DevOps with cloud branch). No existing profile names changed — existing pin-by-name calls (`npx ... next`, `npx ... qa`, etc.) keep working.
+
+### Upgrading from v1.3
+
+v1.4 adds two Developer stacks: `react` (Vite SPA — React 19 + React Router 7 + TanStack Query + Tailwind 4 + Vitest) and `react-native` (Expo SDK 52+ on the New Architecture, Expo Router, NativeWind, Reanimated 3, Maestro for E2E). All profile-specific agent and skill prompts were audited against current Anthropic subagent guidance — most were already compliant; a handful received surgical edits. No profile names changed; no behavior changed for existing installs.
+
+**New: post-install handoff prompt.** After every interactive install (except `local-root`), the CLI now prints a copy-paste prompt you paste into a fresh `claude` session at the repo. It instructs Claude to fill in your project-specific context — stack, key directories, commands, conventions, hot zones — in the area ABOVE the scaffold-managed marker block in `CLAUDE.md`. The scaffold tool itself only manages the block between the markers; the project-profile area above is yours. The prompt has hard guardrails: it forbids the agent from touching anything between the markers, requires every claim to cite a file the agent actually read, and demands a unified diff + confirmation before writing. The prompt is suppressed under `--no-prompts` (CI mode).
 
 ## Flags
 

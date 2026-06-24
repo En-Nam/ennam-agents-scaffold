@@ -2,12 +2,12 @@
 description: Summarize the latest QA run from qa/latest-results.md.
 ---
 
-Read `qa/latest-results.md` and print a summary:
+Usage: `/qa-report`
 
-- Total cases run, by priority (P0/P1/P2)
-- Pass count, fail count, skipped count
-- List of failed case ids with one-line reason
-- Time range (first → last entry timestamp)
-- Action items: which cases need escalation, which need re-run after fix
-
-Do not modify `latest-results.md`. Do not re-execute cases.
+Steps:
+1. Read `qa/latest-results.md`.
+2. Compute totals by priority (P0/P1/P2) and by outcome (pass/fail/skipped).
+3. List failed case ids with a one-line reason from the notes column.
+4. Print the time range (first → last entry timestamp).
+5. List action items: cases needing escalation, cases pending re-run after fix.
+6. Do NOT modify `latest-results.md` and do NOT re-execute cases — read-only summary.

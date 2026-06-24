@@ -35,6 +35,18 @@ const REGISTRY: Record<string, ProfileDef> = {
     templateDir: path.join(TEMPLATES, 'go'),
     extraMcp: [],
   },
+  react: {
+    name: 'react',
+    description: 'React 19 SPA — Vite 6 + React Router 7 + TanStack Query + shadcn/ui + Tailwind 4 + Vitest + Playwright',
+    templateDir: path.join(TEMPLATES, 'react'),
+    extraMcp: ['figma'],
+  },
+  'react-native': {
+    name: 'react-native',
+    description: 'React Native 0.76+ New Architecture + Expo SDK 52+ + Expo Router + NativeWind + Reanimated 3 + Jest + Maestro',
+    templateDir: path.join(TEMPLATES, 'react-native'),
+    extraMcp: ['figma'],
+  },
   'dotnet-mvc': {
     name: 'dotnet-mvc',
     description: '.NET 9 + ASP.NET Core MVC + EF Core + xUnit',
