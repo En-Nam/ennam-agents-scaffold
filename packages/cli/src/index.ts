@@ -3,7 +3,7 @@ import { readFile, access } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { select, isCancel, cancel } from '@clack/prompts';
-import { getProfile, listProfiles } from './profiles.js';
+import { getProfile } from './profiles.js';
 import { enumerateFiles } from './enumerate.js';
 import { scanConflicts } from './conflict.js';
 import { buildPlan } from './plan.js';
@@ -17,6 +17,74 @@ import type { UserStrategy, OperationPlan } from './types.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PKG = JSON.parse(await readFile(path.join(HERE, '..', 'package.json'), 'utf8')) as { version: string };
+
+// Wizard matrix: (role × projectType × stack?) → profile name.
+// Exported for unit testing — the interactive prompt flow (runWizard) wraps this pure function.
+export type Role = 'Developer' | 'QA-QC';
+export type ProjectType = 'Local-root' | 'Existing repository';
+export type Stack = 'Next.js' | 'Flutter' | 'Python' | 'Go';
+
+const STACK_TO_PROFILE: Record<Stack, string> = {
+  'Next.js': 'next',
+  'Flutter': 'flutter',
+  'Python': 'python',
+  'Go': 'go',
+};
+
+export function resolveProfile(role: Role, projectType: ProjectType, stack?: Stack): string {
+  if (role === 'QA-QC') return 'qa';
+  if (role === 'Developer') {
+    if (projectType === 'Local-root') return 'local-root';
+    if (projectType === 'Existing repository') {
+      if (!stack) {
+        throw new Error(`resolveProfile: stack is required for (Developer, Existing repository); got (${role}, ${projectType}, ${stack})`);
+      }
+      const name = STACK_TO_PROFILE[stack];
+      if (!name) {
+        throw new Error(`resolveProfile: unknown stack "${stack}" for (Developer, Existing repository)`);
+      }
+      return name;
+    }
+  }
+  throw new Error(`resolveProfile: unknown combination (${role}, ${projectType}, ${stack ?? '<none>'})`);
+}
+
+export async function runWizard(): Promise<string> {
+  const role = await select<Role>({
+    message: "What's your role?",
+    options: [
+      { value: 'Developer', label: 'Developer' },
+      { value: 'QA-QC', label: 'QA-QC' },
+    ],
+  });
+  if (isCancel(role)) { cancel('Aborted.'); process.exit(1); }
+
+  const projectType = await select<ProjectType>({
+    message: 'What kind of project?',
+    options: [
+      { value: 'Local-root', label: 'Local-root (orchestration root)' },
+      { value: 'Existing repository', label: 'Existing repository' },
+    ],
+  });
+  if (isCancel(projectType)) { cancel('Aborted.'); process.exit(1); }
+
+  let stack: Stack | undefined;
+  if (role === 'Developer' && projectType === 'Existing repository') {
+    const picked = await select<Stack>({
+      message: 'What stack?',
+      options: [
+        { value: 'Next.js', label: 'Next.js' },
+        { value: 'Flutter', label: 'Flutter' },
+        { value: 'Python', label: 'Python' },
+        { value: 'Go', label: 'Go' },
+      ],
+    });
+    if (isCancel(picked)) { cancel('Aborted.'); process.exit(1); }
+    stack = picked;
+  }
+
+  return resolveProfile(role, projectType, stack);
+}
 
 const cli = cac('ennam-agents-scaffold');
 
@@ -40,10 +108,7 @@ cli
         console.error('Error: profile is required in --no-prompts mode');
         process.exit(2);
       }
-      const choices = listProfiles().map(p => ({ value: p.name, label: `${p.name} — ${p.description}` }));
-      const picked = await select({ message: 'Choose a profile:', options: choices });
-      if (isCancel(picked)) { cancel('Aborted.'); process.exit(1); }
-      profileName = picked as string;
+      profileName = await runWizard();
     }
 
     let profile;
