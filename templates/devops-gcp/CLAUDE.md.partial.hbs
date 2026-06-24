@@ -1,0 +1,29 @@
+## Role: DevOps engineer — Google Cloud
+
+| Layer | Tech |
+|---|---|
+| IaC | Terraform >= 1.9 with `google` + `google-beta` providers 6.x |
+| State | GCS backend (object versioning on, state lock via GCS) |
+| CI | GitHub Actions -> GCP via Workload Identity Federation (no SA keys) |
+| Secrets | Secret Manager + workload identity (no `.env`, no JSON keys in repo) |
+| Org policy | Org-policy constraints checked before every plan |
+| Observability | Cloud Logging + Cloud Trace + Cloud Profiler |
+
+### Conventions
+
+- **Workload identity over service-account keys.** Federate from GitHub Actions / GKE / Cloud Run; never mint static SA JSON keys.
+- **Deny by default.** Org-policy constraints (disable SA key creation, uniform bucket-level access, restricted locations) are the baseline — overrides need a written reason.
+- **One project per env** (`-dev`, `-stg`, `-prod`). No shared blast radius across environments.
+- **Label every resource** with `team`, `env`, and `cost-center`. Billing exports rely on these.
+- **Never commit SA JSON keys, `.tfstate`, or `terraform.tfvars` with secrets.** `.gitignore` enforces it; review diffs before pushing.
+
+### Common commands
+
+```bash
+gcloud auth application-default login          # local dev auth (no keys)
+terraform -chdir=stacks/<env> init             # init backend
+terraform -chdir=stacks/<env> fmt -check       # formatting gate
+terraform -chdir=stacks/<env> validate         # static validation
+terraform -chdir=stacks/<env> plan -out plan.tfplan
+gcloud org-policies list --project=<project>   # verify constraints before plan
+```

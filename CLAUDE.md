@@ -1,69 +1,282 @@
-<!-- ennam-agents-scaffold:begin v1.0.0-rc.0 -->
+<!-- ennam-agents-scaffold:begin v1.2.2 -->
 ## Agents Workflow
+
 @AGENTS.md
 
-### Session Boot Protocol (Serena-only — 2 steps)
-Every agent MUST follow at session start:
+### Session Boot Protocol
 
-1. Read `.serena/memories/INDEX.md`. From it, read the relevant `services/<svc>.md`, then check `comms/active/` for messages addressed to your role, then `backlog/` for pending items in your domain.
-2. Read the latest checkpoint in `.serena/checkpoint/` for your role.
+**Every agent MUST follow this exact sequence at session start.**
+DO NOT read source code, explore directories, or scan the codebase
+until you have completed steps 1-3. Source code is a last resort,
+not a starting point.
 
-Do NOT scan source code, run `find`, or browse directories until steps 1-2 are complete.
+1. **Read Serena** — `memories/INDEX.md` → relevant module memories → `comms/active/` → `backlog/`
+2. **Read checkpoint** — `.serena/checkpoint/` for the most recent checkpoint from your role
+3. **Understand the task** — you now have project context. Only NOW assess what source files you need.
+4. **Read ONLY the source files relevant to your task** — targeted reads, not bulk exploration.
 
-### Superpowers Workflow (7 phases)
+```mermaid
+flowchart TD
+    Start([Session Start]) --> S1
 
-1. **Understand** — `superpowers:brainstorming` (skip for typo / config / hotfix)
-2. **Plan** — `superpowers:writing-plans` (skip for single-file obvious change)
-3. **Isolate** — `superpowers:using-git-worktrees` (skip for hotfix / docs)
-4. **Implement** — TDD / executing-plans / dispatching-parallel-agents
-5. **Verify** — `superpowers:verification-before-completion` (NEVER SKIP)
-6. **Review** — `superpowers:requesting-code-review`
-7. **Complete** — `superpowers:finishing-a-development-branch`
+    S1["1. Read Serena\nmemories/INDEX.md → modules → comms → backlog"]
+    S1 --> S2["2. Read Checkpoint\n.serena/checkpoint/ (latest for your role)"]
+    S2 --> S3["3. Understand the Task\nAssess what source files you need"]
+    S3 --> S4["4. Read ONLY Relevant Source Files\nTargeted reads, not bulk exploration"]
+
+    S1 -.- warn:::violation
+    warn["⛔ VIOLATION: Scanning src/ or running\nfind / ls -R before completing steps 1-3"]
+
+    classDef violation fill:#fee,stroke:#c00,color:#900,stroke-dasharray: 5 5
+```
+
+**Violations**: Scanning `src/`, or running `find` / `ls -R` at session start before completing steps 1-3 is a protocol violation. It wastes tokens and ignores existing knowledge.
+
+### Superpowers Workflow
+
+Every agent session follows this structured workflow.
+Phases may be skipped for trivial tasks (< 3 steps, single file, obvious fix).
+When skipping, state which phases you're skipping and why.
+
+#### Phase 1 — Understand
+**Skill**: `superpowers:brainstorming`
+**When**: Creating features, modifying behavior, adding functionality.
+**Skip if**: Bug fix with clear reproduction, typo, config change.
+**Output**: Approved design in `docs/superpowers/specs/`
+
+#### Phase 2 — Plan
+**Skill**: `superpowers:writing-plans`
+**When**: Task requires 3+ steps or touches multiple files/services.
+**Skip if**: Single-file change with obvious implementation.
+**Output**: Implementation plan with success criteria per step.
+
+#### Phase 3 — Isolate
+**Skill**: `superpowers:using-git-worktrees`
+**When**: Feature work that should not pollute the working branch.
+**Skip if**: Hotfix, docs-only change, or user requests in-place work.
+**Output**: Isolated worktree or branch ready for implementation.
+
+#### Phase 4 — Implement
+**Skills** (use as needed):
+- `superpowers:test-driven-development` — write tests first, then implementation
+- `superpowers:executing-plans` — execute the plan from Phase 2
+- `superpowers:dispatching-parallel-agents` — 2+ independent tasks
+- `superpowers:subagent-driven-development` — delegate to specialized agents
+- `superpowers:systematic-debugging` — when encountering failures during implementation
+**Output**: Working code with tests.
+
+#### Phase 5 — Verify
+**Skill**: `superpowers:verification-before-completion`
+**When**: ALWAYS. This phase is never skipped.
+**Output**: Evidence that success criteria are met (test output, build output).
+
+#### Phase 6 — Review
+**Skill**: `superpowers:requesting-code-review`
+**When**: Feature work, significant changes, anything touching shared code.
+**Skip if**: Docs-only, config-only, or user explicitly waives review.
+**Output**: Review feedback addressed.
+
+#### Phase 7 — Complete
+**Skill**: `superpowers:finishing-a-development-branch`
+**When**: Implementation verified and reviewed.
+**Output**: PR created, branch merged, or completion option presented to user.
+
+#### Workflow Diagram
+
+```mermaid
+flowchart LR
+    P1["Phase 1\nUnderstand\n<i>brainstorming</i>"]
+    P2["Phase 2\nPlan\n<i>writing-plans</i>"]
+    P3["Phase 3\nIsolate\n<i>git worktrees</i>"]
+    P4["Phase 4\nImplement\n<i>TDD / execute</i>"]
+    P5["Phase 5\nVerify\n<i>verification</i>"]:::mandatory
+    P6["Phase 6\nReview\n<i>code review</i>"]
+    P7["Phase 7\nComplete\n<i>finish branch</i>"]
+
+    P1 -->|"skip?"| P2
+    P2 -->|"skip?"| P3
+    P3 -->|"skip?"| P4
+    P4 --> P5
+    P5 -->|"NEVER SKIP"| P6
+    P6 -->|"skip?"| P7
+
+    classDef mandatory fill:#d4edda,stroke:#155724,stroke-width:3px,color:#155724
+```
+
+#### On-Demand Skills (any phase)
+- `superpowers:systematic-debugging` — when hitting unexpected failures
+- `superpowers:receiving-code-review` — when receiving feedback from others
+- `superpowers:writing-skills` — when creating/modifying workflow skills
+
+### Task Complexity Guide
+
+| Complexity | Example | Required Phases |
+|-----------|---------|-----------------|
+| **Trivial** | Fix typo, update config value | Implement → Verify |
+| **Simple** | Single-file bug fix, add field | Plan → Implement → Verify |
+| **Medium** | New endpoint, new component | Plan → Implement → Verify → Review |
+| **Complex** | New feature across services | ALL phases |
+
+### Knowledge Source Priority
+
+Agents MUST consult existing knowledge before exploring source code.
+
+#### Retrieval order (strict)
+
+```mermaid
+flowchart TD
+    Q["Need context or information?"]
+    Q --> C1{"Exists in\nSerena memories?"}
+    C1 -->|Yes| S1["1. Use Serena\ndecisions/ services/ backlog/"]
+    C1 -->|No| C2{"Need current\nimplementation?"}
+    C2 -->|Yes| S2["2. Source code\ntargeted file reads"]
+    C2 -->|No| C3{"Need history\nor blame?"}
+    C3 -->|Yes| S3["3. Git log / blame"]
+    C3 -->|No| S4["Ask the user"]
+
+    style S1 fill:#d4edda,stroke:#155724,color:#155724
+    style S4 fill:#fff3cd,stroke:#856404,color:#856404
+```
+
+1. **Serena memories** — primary source for decisions, architecture context, conventions, and inter-agent communication
+2. **Source code / git log** — when you need exact current implementation details
+
+#### When to read from Serena
+
+| Moment | Action |
+|--------|--------|
+| Session start | Read `memories/INDEX.md` — understand what's been decided, what's in progress |
+| Before coding a function | Check `services/<module>.md` — check related decisions and conventions |
+| Before making a design decision | Search `decisions/` — check for prior decisions on same topic |
+| When encountering unfamiliar code | Check memories — there may be a decision or discovery explaining it |
+
+#### When to write to Serena
+
+| Moment | Action |
+|--------|--------|
+| After making a design decision | Write to `memories/decisions/<topic>.md` |
+| After discovering something non-obvious | Write to `memories/decisions/<topic>.md` |
+| After completing a task | Update checkpoint + relevant service memory |
+| When identifying work for another agent | Write to `memories/backlog/<service>-<topic>.md` |
+
+### Serena MCP Protocol (canonical — defines *how*; overrides file-path wording below)
+
+**All `.serena/memories/` I/O goes through Serena MCP tools (`mcp__serena__*`). NEVER hand-edit memory files** with Read/Edit/Write — Serena indexes memories and resolves `` `mem:` `` links; hand-editing bypasses both.
+
+**Session start (before reading source):**
+1. `mcp__serena__activate_project` for this repo **by path** → `mcp__serena__initial_instructions` (loads the manual + lists available memories).
+2. `mcp__serena__read_memory`: `INDEX` → relevant `decisions/` / `services/` → `comms/active/` → `backlog/` → latest `checkpoint/`.
+
+**Writing:** `mcp__serena__write_memory(name, content)` — names use `/` topics (`decisions/…`, `services/…`, `backlog/…`, `comms/active/…`, `qa/…`, `checkpoint/…`); link memories as `` `mem:<name>` ``. Use `mcp__serena__edit_memory` for targeted edits and `mcp__serena__delete_memory` when an item is done.
+
+**Checkpoint (end of EVERY session):** `mcp__serena__write_memory("checkpoint/<agent-name>-<YYYY-MM-DD>", …)` → stored at `.serena/memories/checkpoint/<agent-name>-<YYYY-MM-DD>.md`.
+
+> The subsections below (Session Boot / Knowledge Source / Serena Memory Protocol / checkpoint) remain the reference for *what* to read/write and *where things go*; **this block is authoritative for *how*** — always via Serena MCP, checkpoints under `memories/checkpoint/`.
 
 ### Mandatory Session Checkpoint
 
-At the end of every session, write `.serena/checkpoint/<agent-name>-2026-05-21.md` with:
+**All AI agents MUST write a checkpoint at the end of every session — via Serena MCP** (`mcp__serena__write_memory`).
+
+**Format**: `mcp__serena__write_memory("checkpoint/<agent-name>-<YYYY-MM-DD>", …)` → stored at `.serena/memories/checkpoint/<agent-name>-<YYYY-MM-DD>.md`. Write through Serena MCP, **never** by hand-editing the file.
+
+**Required content**:
 
 ```markdown
 # Checkpoint: <agent-name> — <date>
 
 ## What was done
-- ...
+- <bullet list of completed work>
 
 ## Files changed
-- ...
+- <list of files created/modified/deleted>
 
 ## Current state
-- working / broken / partial
+- <what is working, what is broken, what is partially done>
 
 ## Next steps
-- ...
+- <what the next session should pick up>
 
 ## Blockers / Risks
-- ...
+- <anything that could block progress>
 ```
 
-Rules:
-- One file per agent per day; append if multiple sessions same day.
-- Write checkpoint even if the session failed (note the failure).
-- Keep under 50 lines.
+**Rules**:
+- Write checkpoint BEFORE ending the session — no exceptions
+- If the session was interrupted or failed, still write a checkpoint noting the failure
+- One file per agent per day; append if multiple sessions in the same day
+- Keep each checkpoint concise (under 50 lines)
+- This applies to ALL agents: any subagents, specialized agents, or the main session agent
 
-### Knowledge Source Priority
+### Serena Memory Protocol
 
-1. `.serena/memories/` — read FIRST (decisions, services, comms, backlog)
-2. Source code / git log — only AFTER memory is consulted
+Serena is the project's knowledge store for decisions, conventions, service state, and inter-agent communication.
+All agents MUST follow these rules when reading/writing to `.serena/memories/`.
 
-### Memory Write Protocol
+#### Read Protocol — Session Start
+
+```mermaid
+flowchart LR
+    R1["INDEX.md"] --> R2["services/\n&lt;module&gt;.md"]
+    R2 --> R3["comms/active/\nmessages for you"]
+    R3 --> R4["backlog/\npending items"]
+    R4 --> Ready(["Ready to work"])
+
+    style Ready fill:#d4edda,stroke:#155724,color:#155724
+```
+
+1. Read `memories/INDEX.md` first
+2. Read `services/<your-module>.md` for current state
+3. Check `comms/active/` for messages addressed to you
+4. Check `backlog/` for pending action items in your domain
+
+#### Write Protocol — What goes where
+
+```mermaid
+flowchart TD
+    W["What do you want to write?"]
+    W --> D{"Technical\ndecision?"}
+    W --> S{"Module\nstate update?"}
+    W --> B{"Work for\nanother agent?"}
+    W --> C{"Question for\nanother agent?"}
+    W --> QA{"QA results?"}
+
+    D -->|Yes| DF["decisions/&lt;topic&gt;.md"]
+    S -->|Yes| SF["services/&lt;module&gt;.md"]
+    B -->|Yes| BF["backlog/&lt;module&gt;-&lt;topic&gt;.md"]
+    C -->|Yes| CF["comms/active/&lt;you&gt;-to-&lt;them&gt;.md"]
+    QA -->|Yes| QAF["qa/latest-results.md"]
+
+    style DF fill:#e8f4fd,stroke:#0366d6
+    style SF fill:#e8f4fd,stroke:#0366d6
+    style BF fill:#fff3cd,stroke:#856404
+    style CF fill:#f0e8fd,stroke:#6f42c1
+    style QAF fill:#e8f4fd,stroke:#0366d6
+```
 
 | You want to... | Write to | Naming |
 |----------------|----------|--------|
-| Record a technical decision | `.serena/memories/decisions/<topic>.md` | Descriptive topic |
-| Update service state | `.serena/memories/services/<service>.md` | Append/replace section |
-| Flag work for another agent | `.serena/memories/backlog/<service>-<topic>.md` | Prefix target service |
-| Ask another agent a question | `.serena/memories/comms/active/<you>-to-<them>-<topic>.md` | |
-| Close a thread | Move both files to `.serena/memories/comms/resolved/` | |
+| Record a technical decision | `decisions/<topic>.md` | Descriptive topic name |
+| Update module/service state | `services/<module>.md` | Append or replace section |
+| Flag work for another agent | `backlog/<module>-<topic>.md` | Prefix with target module |
+| Ask another agent a question | `comms/active/<you>-to-<them>-<topic>.md` | |
+| Respond to a question | Append to the existing file in `comms/active/` | |
+| Close a resolved thread | Move both files to `comms/resolved/` | |
+| Report QA results | `qa/latest-results.md` (replace) | Keep only latest |
+| Store something historical | `archive/<category>/` | |
 
-Always update `.serena/memories/INDEX.md` when adding to `decisions/` or `services/`.
+#### Rules
+
+- **Never create new top-level directories** under `memories/`
+- **Never put files directly in `memories/`** — always in a subdirectory
+- **1 file per module** in `services/` — update, don't create siblings
+- **Backlog items**: delete the file when the work is done
+- **Comms**: respond within the SAME file (append), don't create
+  a separate response file. Move to `resolved/` when done.
+- **Decisions**: only for choices that affect future work. Don't store
+  implementation details — those belong in code comments.
+- **Update INDEX.md** when adding new files to `decisions/` or `services/`
+- **QA**: `latest-results.md` is overwritten each run. Archive old
+  results to `archive/qa-runs/<date>.md` before overwriting.
 
 ### Profile: next
 
@@ -86,7 +299,10 @@ Always update `.serena/memories/INDEX.md` when adding to `decisions/` or `servic
 - **Tailwind 4 syntax.** Avoid `@apply` where utility classes work; lean on theme tokens.
 - **Don't reinvent shadcn primitives.** Compose them; if you need a new one, copy from the shadcn registry rather than write from scratch.
 - **Type-check before declaring done:** `npm run build` (catches type errors that `tsc --noEmit` may miss in App Router).
-- **Use Chrome DevTools MCP** for runtime debugging when changes touch interactivity (a11y, network, console errors, LCP).
+
+### Browser debugging
+
+For runtime / browser debugging, install the [Claude for Chrome](https://www.anthropic.com/news/claude-for-chrome) extension. Open the page you're testing and ask Claude in the browser to drive it — inspection, console capture, and network tracing happen inside the browser.
 
 ### Common commands
 
@@ -97,4 +313,9 @@ npm run start        # serve the production build
 npm run lint         # eslint
 ```
 
+<!-- BEGIN:nextjs-agent-rules -->
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
+<!-- END:nextjs-agent-rules -->
 <!-- ennam-agents-scaffold:end -->

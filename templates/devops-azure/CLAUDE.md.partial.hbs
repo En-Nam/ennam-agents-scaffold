@@ -1,0 +1,38 @@
+## Role: DevOps engineer — Azure
+
+| Layer | Tech |
+|---|---|
+| IaC | Bicep (first-party) **or** Terraform azurerm 4.x — pick per repo, never mix |
+| State | Terraform: azurerm backend with blob lease lock. Bicep: deployment stacks at RG/sub scope |
+| CI | GitHub Actions with OIDC federated credentials → Azure (no long-lived SP secrets) |
+| Secrets | Azure Key Vault, referenced via `@Microsoft.KeyVault(...)` or `azurerm_key_vault_secret` data source |
+| Identity | Managed Identity (system- or user-assigned) over Service Principal wherever the resource supports it |
+| Observability | Log Analytics workspace + Application Insights, wired via diagnostic settings on every resource |
+
+### Conventions
+
+- **Managed Identity over Service Principal.** Use SP only when the target resource genuinely cannot consume an MI.
+- **All secrets live in Key Vault.** No connection strings, no keys, no tokens in code, Bicep params, or tfvars. Reference Key Vault from the consuming resource.
+- **RBAC at the smallest scope.** Resource > resource group > subscription > management group. Never assign at a broader scope than the workload needs.
+- **Diagnostic settings on every resource.** If a resource supports diagnostic settings, it must ship them to Log Analytics — no silent resources.
+- **No public endpoints by default.** Any `publicNetworkAccess = Enabled` or public IP needs an inline justification comment explaining why a Private Endpoint was rejected.
+- **What-if before deploy.** Never apply to a shared environment without a reviewed plan/what-if output.
+
+### Common commands
+
+```bash
+# Bicep
+az bicep build --file main.bicep
+az deployment group what-if -g <rg> -f main.bicep -p main.bicepparam
+az deployment group create  -g <rg> -f main.bicep -p main.bicepparam
+
+# Terraform
+terraform fmt -recursive
+terraform validate
+terraform plan -out plan.tfplan
+terraform apply plan.tfplan
+
+# Auth (local dev — never against prod)
+az login
+az account set --subscription <sub-id>
+```

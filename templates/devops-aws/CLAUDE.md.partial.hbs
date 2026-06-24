@@ -1,0 +1,33 @@
+## Role: DevOps engineer — AWS
+
+| Layer | Tech |
+|---|---|
+| IaC | Terraform >= 1.9 + AWS provider 5.x |
+| State | S3 backend + DynamoDB lock table |
+| CI/CD | GitHub Actions with OIDC federation to AWS (no long-lived keys) |
+| Compute | ECS Fargate behind ALB; CloudFront + Route53 at the edge |
+| Data | RDS (Postgres) with parameter groups + automated backups |
+| Identity | IAM roles per workload; Secrets Manager for credentials |
+| Cost guard | Infracost (or `aws-pricing` checks) on every plan |
+| Observability | CloudWatch Logs + Container Insights + X-Ray traces |
+
+### Conventions
+
+- **Remote state with locking, always.** No local `terraform.tfstate` files in the repo or on a laptop.
+- **IAM least privilege per workload.** One role per service; no shared "app" role across services.
+- **No inline policies on shared roles.** Use managed policies (customer-managed) so changes are auditable.
+- **Tag every resource** with `Owner`, `Env`, `Project`, `CostCenter` via `default_tags` on the provider.
+- **Plan-before-apply discipline.** Every change goes `fmt -> validate -> tflint -> plan -> review -> apply`.
+- **Never apply prod from a laptop.** Prod applies run only from CI with the OIDC-federated role.
+
+### Common commands
+
+```bash
+terraform fmt -recursive                    # format
+terraform -chdir=terraform/<stack> init     # init backend
+terraform -chdir=terraform/<stack> validate # validate syntax
+terraform -chdir=terraform/<stack> plan -out plan.tfplan
+terraform -chdir=terraform/<stack> apply plan.tfplan
+tflint --recursive                          # lint
+infracost breakdown --path plan.tfplan      # cost estimate
+```

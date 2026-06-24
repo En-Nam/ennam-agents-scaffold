@@ -23,12 +23,42 @@ describe('wizard resolveProfile matrix', () => {
     expect(resolveProfile('Developer', 'Existing repository', 'Go')).toBe('go');
   });
 
+  it('Developer + Existing repository + .NET MVC → dotnet-mvc', () => {
+    expect(resolveProfile('Developer', 'Existing repository', '.NET MVC')).toBe('dotnet-mvc');
+  });
+
+  it('Developer + Existing repository + Express.js → express', () => {
+    expect(resolveProfile('Developer', 'Existing repository', 'Express.js')).toBe('express');
+  });
+
   it('QA-QC + Local-root → qa', () => {
     expect(resolveProfile('QA-QC', 'Local-root')).toBe('qa');
   });
 
   it('QA-QC + Existing repository → qa', () => {
     expect(resolveProfile('QA-QC', 'Existing repository')).toBe('qa');
+  });
+
+  it('BA → ba (projectType ignored)', () => {
+    expect(resolveProfile('BA', 'Existing repository')).toBe('ba');
+    expect(resolveProfile('BA', 'Local-root')).toBe('ba');
+  });
+
+  it('HR → hr (projectType ignored)', () => {
+    expect(resolveProfile('HR', 'Existing repository')).toBe('hr');
+    expect(resolveProfile('HR', 'Local-root')).toBe('hr');
+  });
+
+  it('DevOps + AWS → devops-aws', () => {
+    expect(resolveProfile('DevOps', 'Existing repository', undefined, 'AWS')).toBe('devops-aws');
+  });
+
+  it('DevOps + Azure → devops-azure', () => {
+    expect(resolveProfile('DevOps', 'Existing repository', undefined, 'Azure')).toBe('devops-azure');
+  });
+
+  it('DevOps + Google Cloud → devops-gcp', () => {
+    expect(resolveProfile('DevOps', 'Existing repository', undefined, 'Google Cloud')).toBe('devops-gcp');
   });
 
   it('every resolved name is a registered profile', () => {
@@ -40,8 +70,15 @@ describe('wizard resolveProfile matrix', () => {
       resolveProfile('Developer', 'Existing repository', 'Flutter'),
       resolveProfile('Developer', 'Existing repository', 'Python'),
       resolveProfile('Developer', 'Existing repository', 'Go'),
+      resolveProfile('Developer', 'Existing repository', '.NET MVC'),
+      resolveProfile('Developer', 'Existing repository', 'Express.js'),
       resolveProfile('QA-QC', 'Local-root'),
       resolveProfile('QA-QC', 'Existing repository'),
+      resolveProfile('BA', 'Existing repository'),
+      resolveProfile('HR', 'Existing repository'),
+      resolveProfile('DevOps', 'Existing repository', undefined, 'AWS'),
+      resolveProfile('DevOps', 'Existing repository', undefined, 'Azure'),
+      resolveProfile('DevOps', 'Existing repository', undefined, 'Google Cloud'),
     ];
     for (const name of resolved) {
       expect(() => getProfile(name)).not.toThrow();
@@ -50,6 +87,10 @@ describe('wizard resolveProfile matrix', () => {
 
   it('Developer + Existing repository without stack → throws', () => {
     expect(() => resolveProfile('Developer', 'Existing repository')).toThrow(/stack is required/i);
+  });
+
+  it('DevOps without cloud → throws', () => {
+    expect(() => resolveProfile('DevOps', 'Existing repository')).toThrow(/cloud is required/i);
   });
 
   it('unknown role combination → throws', () => {

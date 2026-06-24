@@ -1,0 +1,31 @@
+## Stack: Node.js 20 + Express 5 + TypeScript
+
+| Layer | Tech |
+|---|---|
+| Runtime | Node.js 20 LTS |
+| Framework | Express 5 |
+| Language | TypeScript strict mode |
+| Validation | Zod (body, query, params) |
+| Logging | Pino + `pino-http` |
+| ORM | Prisma 6 or raw `pg` (agent chooses per repo) |
+| Testing | Jest + supertest |
+| Build | `tsc --noEmit`; dev with `ts-node-dev` or `tsx` |
+
+### Conventions
+
+- **Express 5 handles async errors natively.** Do NOT install or import `express-async-errors` — a thrown promise from an async handler propagates to the error middleware on its own.
+- **Validate every input with Zod** at the route boundary (body, query, params). Never trust `req.*` downstream of a route without a parsed type.
+- **Never throw raw strings.** Throw a typed `AppError` (or subclass) so the central error middleware can map status + message safely.
+- **From middleware, call `next(err)`** to forward errors; do not call `res.status().send()` for errors inside business middleware.
+- **One central error middleware** with the `(err, req, res, next)` 4-arg signature, registered last in `app.ts`.
+- **Type-check before declaring done:** `npm run build` (or `tsc --noEmit`) and `npm test` must both pass.
+
+### Common commands
+
+```bash
+npm run dev          # ts-node-dev / tsx watch
+npm run build        # tsc --noEmit (type-check) + compile
+npm start            # node dist/index.js
+npm test             # jest + supertest
+npm run lint         # eslint
+```

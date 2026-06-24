@@ -35,11 +35,53 @@ const REGISTRY: Record<string, ProfileDef> = {
     templateDir: path.join(TEMPLATES, 'go'),
     extraMcp: [],
   },
+  'dotnet-mvc': {
+    name: 'dotnet-mvc',
+    description: '.NET 9 + ASP.NET Core MVC + EF Core + xUnit',
+    templateDir: path.join(TEMPLATES, 'dotnet-mvc'),
+    extraMcp: ['postgres', 'github'],
+  },
+  express: {
+    name: 'express',
+    description: 'Node 20 + Express 5 + TypeScript strict + Jest + Zod',
+    templateDir: path.join(TEMPLATES, 'express'),
+    extraMcp: ['github'],
+  },
   qa: {
     name: 'qa',
     description: 'QA workflow — test cases, evidence',
     templateDir: path.join(TEMPLATES, 'qa'),
     extraMcp: [],
+  },
+  ba: {
+    name: 'ba',
+    description: 'Business Analyst — requirements, user stories, BPMN flows, acceptance criteria',
+    templateDir: path.join(TEMPLATES, 'ba'),
+    extraMcp: [],
+  },
+  hr: {
+    name: 'hr',
+    description: 'HR — job descriptions, interview kits, onboarding, performance reviews',
+    templateDir: path.join(TEMPLATES, 'hr'),
+    extraMcp: [],
+  },
+  'devops-aws': {
+    name: 'devops-aws',
+    description: 'DevOps — Terraform + AWS (ECS, RDS, IAM, Secrets Manager, CloudWatch)',
+    templateDir: path.join(TEMPLATES, 'devops-aws'),
+    extraMcp: ['github'],
+  },
+  'devops-azure': {
+    name: 'devops-azure',
+    description: 'DevOps — Bicep/Terraform + Azure (AKS, App Service, Key Vault, Log Analytics)',
+    templateDir: path.join(TEMPLATES, 'devops-azure'),
+    extraMcp: ['github'],
+  },
+  'devops-gcp': {
+    name: 'devops-gcp',
+    description: 'DevOps — Terraform + GCP (GKE, Cloud Run, Cloud SQL, Secret Manager, Cloud Logging)',
+    templateDir: path.join(TEMPLATES, 'devops-gcp'),
+    extraMcp: ['github'],
   },
   'local-root': {
     name: 'local-root',

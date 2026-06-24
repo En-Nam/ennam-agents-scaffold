@@ -18,6 +18,7 @@ const RULES: Rule[] = [
   { match: r => r.startsWith('.claude/hooks/'),                 kind: 'write-or-ask' },
   { match: r => r.startsWith('.claude/commands/'),              kind: 'skip-if-exists' },
   { match: r => r.startsWith('.claude/agents/'),                kind: 'skip-if-exists' },
+  { match: r => r.startsWith('.claude/skills/'),                kind: 'skip-if-exists' },
   { match: r => r.startsWith('.serena/'),                       kind: 'skip-if-exists' },
   { match: r => r.startsWith('docs/superpowers/'),              kind: 'skip-if-exists' },
 ];

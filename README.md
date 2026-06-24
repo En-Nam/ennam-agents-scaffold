@@ -26,39 +26,74 @@ npx @ennamjsc/agents-scaffold <profile>
 
 ### Install flow
 
-```
-npx @ennamjsc/agents-scaffold
-   |
-   +-- role?
-        |
-        +-- Developer
-        |     |
-        |     +-- project type?
-        |           |
-        |           +-- Local-root              -> local-root profile
-        |           +-- Existing repository
-        |                 |
-        |                 +-- stack?
-        |                       +-- Next.js   -> next profile
-        |                       +-- Flutter   -> flutter profile
-        |                       +-- Python    -> python profile
-        |                       +-- Go        -> go profile
-        |
-        +-- QA-QC                              -> qa profile
+```mermaid
+flowchart TD
+    Start([npx @ennamjsc/agents-scaffold]) --> Role{role?}
+
+    Role -->|Developer| PType{project type?}
+    Role -->|QA-QC| QA[qa profile]
+    Role -->|BA| BA[ba profile]
+    Role -->|HR| HR[hr profile]
+    Role -->|DevOps| Cloud{cloud?}
+
+    PType -->|Local-root| LR[local-root profile]
+    PType -->|Existing repository| Stack{stack?}
+
+    Stack -->|Next.js| Next[next profile]
+    Stack -->|Flutter| Flutter[flutter profile]
+    Stack -->|Python| Python[python profile]
+    Stack -->|Go| Go[go profile]
+    Stack -->|.NET MVC| Dotnet[dotnet-mvc profile]
+    Stack -->|Express.js| Express[express profile]
+
+    Cloud -->|AWS| AWS[devops-aws profile]
+    Cloud -->|Azure| Azure[devops-azure profile]
+    Cloud -->|Google Cloud| GCP[devops-gcp profile]
+
+    classDef leaf fill:#d4edda,stroke:#155724,color:#155724;
+    class QA,BA,HR,LR,Next,Flutter,Python,Go,Dotnet,Express,AWS,Azure,GCP leaf;
 ```
 
+> The diagram above renders on GitHub. On npmjs.com, the mermaid code block is shown verbatim — open this README on GitHub for the rendered flowchart.
+
 ## Profiles
+
+### Developer (stack-specific)
 
 | Profile | Stack | Extra MCP |
 |---|---|---|
 | `next` | Next.js 16 + React 19 + TS strict + Tailwind 4 | figma |
 | `flutter` | Flutter 3.x + Dart + Riverpod/Bloc | figma |
-| `python` | Python 3.12 + FastAPI + uv | — |
-| `go` | Go 1.24 + stdlib net/http + pgx | — |
-| `qa` | QA workflow (test-cases + evidence) | — |
-| `local-root` | Orchestration root — polyrepo coordinator, reads sub-platform `.serena/` memories | — |
+| `python` | Python 3.12 + FastAPI + uv + ruff + pytest | — |
+| `go` | Go 1.24 + stdlib net/http + pgx + slog | — |
+| `dotnet-mvc` | .NET 9 + ASP.NET Core MVC + EF Core 9 + xUnit | postgres, github |
+| `express` | Node 20 + Express 5 + TypeScript strict + Jest + Zod | github |
+
+### QA / BA / HR (role-specific, no stack branch)
+
+| Profile | Role | Extra MCP |
+|---|---|---|
+| `qa` | QA workflow (test-cases + evidence + `/qa-run` `/qa-report`) | — |
+| `ba` | Business Analyst — user stories + Gherkin AC + BPMN flows + `/ba-story` `/ba-flow` | — |
+| `hr` | HR — JD authoring + interview kits + `/hr-jd` `/hr-interview-kit` | — |
+
+### DevOps (cloud-specific)
+
+| Profile | Cloud / IaC | Extra MCP |
+|---|---|---|
+| `devops-aws` | Terraform + AWS (ECS, RDS, IAM, Secrets Manager, CloudWatch) | github |
+| `devops-azure` | Bicep/Terraform + Azure (AKS, App Service, Key Vault, Log Analytics) | github |
+| `devops-gcp` | Terraform + GCP (GKE, Cloud Run, Cloud SQL, Secret Manager, Cloud Logging) | github |
+
+### Orchestration
+
+| Profile | Purpose | Extra MCP |
+|---|---|---|
+| `local-root` | Polyrepo coordinator — reads sub-platform `.serena/` memories | — |
 
 All profiles also register `serena`, `context7`, and `jira` via the shared MCP partial. The `Extra MCP` column lists only the profile-specific additions on top of that base.
+
+Each role/cloud profile ships with its own `.claude/agents/<specialist>.md`, one or two `.claude/commands/<verb>.md` slash commands, and one or two `.claude/skills/<topic>/SKILL.md` skills that auto-load when the topic comes up in conversation.
 
 ## What gets added
 
@@ -83,6 +118,10 @@ Browser-side debugging and UI verification are handled by the [Claude for Chrome
 ### Upgrading from v1.1
 
 v1.2 removed the `chrome-devtools` MCP server in favour of the Claude for Chrome extension (above). If your project already has `mcpServers.chrome-devtools` in its `.mcp.json` from a prior install, remove that entry manually — the merge is user-wins on conflicts, so re-running the scaffold will not delete it. The CLI prints a warning after install when it detects a stale entry.
+
+### Upgrading from v1.2
+
+v1.3 fixes a silent-exit bug under `npx`: pre-1.3 invocations would print nothing and exit 0 without scaffolding anything because the entry-point guard compared the symlinked bin path against the realpath of the module. If `npx @ennamjsc/agents-scaffold` worked silently for you on v1.2, upgrading to v1.3 will make it actually run. v1.3 also adds 7 new profiles (`dotnet-mvc`, `express`, `ba`, `hr`, `devops-aws`, `devops-azure`, `devops-gcp`) and three new wizard roles (BA, HR, DevOps with cloud branch). No existing profile names changed — existing pin-by-name calls (`npx ... next`, `npx ... qa`, etc.) keep working.
 
 ## Flags
 

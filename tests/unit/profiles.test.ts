@@ -1,6 +1,22 @@
 import { describe, it, expect } from 'vitest';
 import { getProfile, listProfiles } from '../../packages/cli/src/profiles.js';
 
+const ALL_PROFILES = [
+  'ba',
+  'devops-aws',
+  'devops-azure',
+  'devops-gcp',
+  'dotnet-mvc',
+  'express',
+  'flutter',
+  'go',
+  'hr',
+  'local-root',
+  'next',
+  'python',
+  'qa',
+] as const;
+
 describe('profiles', () => {
   it('returns the next profile by name', () => {
     const p = getProfile('next');
@@ -14,12 +30,18 @@ describe('profiles', () => {
 
   it('returns all expected profiles', () => {
     const names = listProfiles().map(p => p.name).sort();
-    expect(names).toEqual(['flutter', 'go', 'local-root', 'next', 'python', 'qa']);
+    expect(names).toEqual([...ALL_PROFILES]);
   });
 
-  it.each(['flutter', 'next', 'python', 'go', 'qa', 'local-root'] as const)('returns %s profile', (name) => {
+  it.each(ALL_PROFILES)('returns %s profile', (name) => {
     const p = getProfile(name);
     expect(p.name).toBe(name);
     expect(p.templateDir).toContain(name);
+  });
+
+  it('every devops profile declares the github MCP', () => {
+    for (const name of ['devops-aws', 'devops-azure', 'devops-gcp']) {
+      expect(getProfile(name).extraMcp).toContain('github');
+    }
   });
 });

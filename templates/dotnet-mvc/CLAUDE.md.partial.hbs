@@ -1,0 +1,34 @@
+## Stack: .NET 9 + ASP.NET Core MVC + EF Core 9
+
+| Layer | Tech |
+|---|---|
+| Framework | ASP.NET Core MVC 9 |
+| Language | C# 13 (nullable reference types enabled) |
+| ORM | EF Core 9 (Pomelo.EntityFrameworkCore.MySql or Npgsql.EntityFrameworkCore.PostgreSQL) |
+| DI | Built-in `IServiceCollection` (no third-party container) |
+| Logging | `Microsoft.Extensions.Logging` (Serilog optional sink) |
+| Testing | xUnit + FluentAssertions + `WebApplicationFactory<TEntryPoint>` |
+| Migrations | `dotnet ef migrations` |
+| Build | `dotnet build` / `dotnet test` / `dotnet ef database update` |
+
+### Conventions
+
+- **Async all the way.** Every I/O path (DB, HTTP, file) is `async`/`await`. No `.Result`, `.Wait()`, or `.GetAwaiter().GetResult()` in application code.
+- **`[Required]` over throw.** Validate inputs with data annotations / FluentValidation on ViewModels; let the framework return 400 rather than throwing inside actions.
+- **Primary-constructor DI.** Inject dependencies through the controller / service primary constructor (`public class FooController(IFooService svc) : Controller`) — no field/property injection.
+- **No static `DbContext`.** `DbContext` is scoped; never cache it in a static field or use it across requests.
+- **Integration tests via `WebApplicationFactory`.** Spin up the real pipeline against an in-memory or test DB; xUnit + FluentAssertions for the assertions.
+- **Nullable warnings are errors.** Don't suppress with `!` or `#pragma warning disable nullable` — fix the type.
+- **Type-check before declaring done:** `dotnet build` (warnings-as-errors) and `dotnet test` must both pass.
+
+### Common commands
+
+```bash
+dotnet restore
+dotnet build                              # build + nullable + analyzer check
+dotnet run --project src/Web              # dev server
+dotnet test                               # xUnit suite
+dotnet format --verify-no-changes         # style gate
+dotnet ef migrations add <Name> -p src/Data -s src/Web
+dotnet ef database update -p src/Data -s src/Web
+```

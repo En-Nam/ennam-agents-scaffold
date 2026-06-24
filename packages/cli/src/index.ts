@@ -1,6 +1,7 @@
 import { cac } from 'cac';
 import { readFile, access } from 'node:fs/promises';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { realpathSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { getProfile } from './profiles.js';
 import { enumerateFiles } from './enumerate.js';
@@ -180,11 +181,18 @@ cli.version(PKG.version);
 // Only execute the CLI when this file is run as the program entry point.
 // Without this guard, `import { resolveProfile } from '@ennamjsc/agents-scaffold'`
 // (or test imports) would fire the wizard on import.
+//
+// Under `npx`, `process.argv[1]` is the symlink in `node_modules/.bin/` while
+// `import.meta.url` resolves to the real `dist/index.js`. Comparing the raw
+// paths therefore never matches, the guard returns false, and the CLI silently
+// exits 0 having done nothing. Realpath both sides before comparing.
 const isMain = (() => {
   try {
     const entry = process.argv[1];
     if (!entry) return false;
-    return import.meta.url === pathToFileURL(entry).href;
+    const hereReal = realpathSync(fileURLToPath(import.meta.url));
+    const entryReal = realpathSync(entry);
+    return hereReal === entryReal;
   } catch {
     return false;
   }
