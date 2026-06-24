@@ -18,10 +18,11 @@ npx @ennam/agents-scaffold <profile>
 | `python` | Python 3.12 + FastAPI + uv | — |
 | `go` | Go 1.24 + stdlib net/http + pgx | — |
 | `qa` | QA workflow (test-cases + evidence) | chrome-devtools |
+| `local-root` | Orchestration root — polyrepo coordinator, reads sub-platform `.serena/` memories | — |
 
 ## What gets added
 
-- `AGENTS.md` — 12 universal behavioral rules
+- `AGENTS.md` — 13 universal behavioral rules
 - `CLAUDE.md` — appended scaffold-managed block (with markers, idempotent on re-run)
 - `.claude/` — settings, hooks, slash commands (`/boot`, `/checkpoint`, `/memory`, `/escalate`), role agents
 - `.mcp.json` — deep-merged with any existing config (user wins on conflicts)
@@ -30,6 +31,10 @@ npx @ennam/agents-scaffold <profile>
 - `.gitignore` — append-only with dedup (no duplicates on re-run)
 
 Each merge backs up the original to `.ennam-scaffold-backup/<timestamp>/`. Backups rotate to the 3 most recent.
+
+### No-repo behavior
+
+When the target directory does not contain a `.git` directory, the scaffold silently skips the `.gitignore` append step for ALL profiles. Every other file is still written. To enable `.gitignore` handling, run `git init` first. This requires no flags.
 
 ## Flags
 
