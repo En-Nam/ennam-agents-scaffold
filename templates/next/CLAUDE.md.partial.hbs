@@ -17,7 +17,10 @@
 - **Tailwind 4 syntax.** Avoid `@apply` where utility classes work; lean on theme tokens.
 - **Don't reinvent shadcn primitives.** Compose them; if you need a new one, copy from the shadcn registry rather than write from scratch.
 - **Type-check before declaring done:** `npm run build` (catches type errors that `tsc --noEmit` may miss in App Router).
-- **Use Chrome DevTools MCP** for runtime debugging when changes touch interactivity (a11y, network, console errors, LCP).
+
+### Browser debugging
+
+For runtime / browser debugging, install the [Claude for Chrome](https://www.anthropic.com/news/claude-for-chrome) extension. Open the page you're testing and ask Claude in the browser to drive it — inspection, console capture, and network tracing happen inside the browser.
 
 ### Common commands
 

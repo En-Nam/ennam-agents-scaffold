@@ -11,7 +11,7 @@ Process:
 3. For each case:
    a. Read the case file.
    b. Set up preconditions.
-   c. Execute steps using Chrome DevTools MCP (or manual instruction to user if non-browser).
+   c. Execute steps using the Claude for Chrome browser extension (or manual instruction to user if non-browser).
    d. Capture evidence under `evidence/<case-id>/`.
    e. Record pass/fail in `qa/latest-results.md`.
 4. On failure: `/escalate` to the dev agent responsible; do NOT fix.

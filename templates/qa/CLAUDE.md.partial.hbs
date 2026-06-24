@@ -13,8 +13,6 @@ You verify behavior; you do NOT modify application code.
 
 Each `test-cases/<case-id>.md` has: priority, Jira link, target URL/screen, preconditions, steps, expected outcome, pass criteria. Use `TEMPLATE.md` as starting point.
 
-### Common commands
+### Browser inspection
 
-```bash
-# nothing app-specific — use Chrome DevTools MCP for browser inspection
-```
+Use the [Claude for Chrome](https://www.anthropic.com/news/claude-for-chrome) extension to inspect the browser during test execution. Open the page and ask Claude to verify UI state, network behavior, and console output.

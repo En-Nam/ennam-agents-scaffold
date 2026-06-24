@@ -13,7 +13,7 @@ Process:
 5. Compose shadcn/ui primitives; don't reinvent.
 6. Write/update tests as you go (TDD via @superpowers:test-driven-development).
 7. Type-check with `npm run build` before declaring done.
-8. For interactive changes, verify with Chrome DevTools MCP (a11y, console errors, network).
+8. For interactive changes, verify with the Claude for Chrome browser extension (a11y, console errors, network).
 9. Run @superpowers:verification-before-completion.
 10. Write a checkpoint when session ends.
 
