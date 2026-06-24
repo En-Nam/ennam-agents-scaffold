@@ -60,8 +60,8 @@ describe('v1.1 -> v1.2 migration: stale chrome-devtools handling', () => {
     // CLAUDE.md: scaffold-managed block REPLACED — no chrome-devtools-mcp: reference remains.
     const claudeAfter = await readFile(path.join(cwd, 'CLAUDE.md'), 'utf8');
     expect(claudeAfter).not.toMatch(/chrome-devtools-mcp:/);
-    // The new v1.2 block should be in place.
-    expect(claudeAfter).toMatch(/<!-- ennam-agents-scaffold:begin v1\.2\.0 -->/);
+    // The new v1.2.x block should be in place (any patch version).
+    expect(claudeAfter).toMatch(/<!-- ennam-agents-scaffold:begin v1\.\d+\.\d+ -->/);
     expect(claudeAfter).toMatch(/<!-- ennam-agents-scaffold:end -->/);
 
     // .mcp.json: chrome-devtools entry PERSISTS (documented user-wins behavior).
