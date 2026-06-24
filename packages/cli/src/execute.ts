@@ -118,11 +118,22 @@ export async function executeOps(input: ExecuteInput): Promise<ExecuteResult> {
       continue;
     }
     // op === 'write'
-    if (op.needsPrompt && input.interactive) {
-      const yes = await promptOverwrite(op.relPath);
-      if (!yes) {
-        result.skipped++;
-        continue;
+    if (op.needsPrompt) {
+      if (input.interactive) {
+        const yes = await promptOverwrite(op.relPath);
+        if (!yes) {
+          result.skipped++;
+          continue;
+        }
+      } else {
+        // Fail loud: ask-strategy + non-interactive would otherwise silently
+        // overwrite a user-edited file. Force the caller to pick a strategy
+        // (Rule 12 — fail loud, don't silently degrade).
+        console.error(
+          `Error: ${op.relPath} differs from scaffold and --merge-strategy=ask is not safe in non-interactive mode.\n` +
+          `       Re-run with --merge-strategy=overwrite (or --force) to replace, or --merge-strategy=skip to keep the existing file.`,
+        );
+        process.exit(2);
       }
     }
     await mkdir(path.dirname(target), { recursive: true });

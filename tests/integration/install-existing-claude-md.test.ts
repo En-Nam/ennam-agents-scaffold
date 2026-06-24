@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { dir as tmpDir } from 'tmp-promise';
-import { cp, readFile } from 'node:fs/promises';
+import { cp, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { execa } from 'execa';
 import { fileURLToPath } from 'node:url';
@@ -53,5 +53,25 @@ describe('install into project with existing CLAUDE.md', () => {
     const after2 = await readFile(path.join(cwd, 'CLAUDE.md'), 'utf8');
 
     expect(after2).toBe(after1);
+  });
+
+  it('--no-prompts without --merge-strategy fails loud rather than silently overwriting', async () => {
+    const { path: cwd } = await tmpDir({ unsafeCleanup: true });
+    await cp(FIXTURE, cwd, { recursive: true });
+    await execa('git', ['init', '-q'], { cwd });
+    // Create an existing AGENTS.md (write-or-ask kind) that differs from scaffold.
+    // Marker-merge files like CLAUDE.md merge regardless of strategy; we need a
+    // genuine 'write-or-ask' conflict to exercise the ask + non-interactive guard.
+    const existingAgents = '# Custom AGENTS\n\nMy hand-edited rules. DO NOT OVERWRITE.\n';
+    await writeFile(path.join(cwd, 'AGENTS.md'), existingAgents, 'utf8');
+
+    // Default strategy is 'ask' which is unsafe in --no-prompts mode.
+    const result = await execa('node', [CLI_ENTRY, 'next', '--no-prompts'], { cwd, reject: false });
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toMatch(/merge-strategy|differs/i);
+
+    // The existing AGENTS.md must be untouched.
+    const after = await readFile(path.join(cwd, 'AGENTS.md'), 'utf8');
+    expect(after).toBe(existingAgents);
   });
 });
