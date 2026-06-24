@@ -56,6 +56,8 @@ describe('install next profile into fixture', () => {
     // .mcp.json is valid JSON with serena, context7, jira
     const mcp = JSON.parse(await readFile(path.join(cwd, '.mcp.json'), 'utf8'));
     expect(Object.keys(mcp.mcpServers)).toEqual(expect.arrayContaining(['serena', 'context7', 'jira']));
+    // v1.2 contract: chrome-devtools-mcp is no longer registered.
+    expect(Object.keys(mcp.mcpServers)).not.toContain('chrome-devtools');
 
     // settings.json is valid JSON
     const settings = JSON.parse(await readFile(path.join(cwd, '.claude', 'settings.json'), 'utf8'));
