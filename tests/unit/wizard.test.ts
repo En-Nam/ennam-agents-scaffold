@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveProfile } from '../../packages/cli/src/index.js';
+import { resolveProfile } from '../../packages/cli/src/wizard.js';
 import { getProfile } from '../../packages/cli/src/profiles.js';
 
 describe('wizard resolveProfile matrix', () => {

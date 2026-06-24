@@ -1,8 +1,7 @@
 import { cac } from 'cac';
 import { readFile, access } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
-import { select, isCancel, cancel } from '@clack/prompts';
 import { getProfile } from './profiles.js';
 import { enumerateFiles } from './enumerate.js';
 import { scanConflicts } from './conflict.js';
@@ -13,78 +12,17 @@ import { mergeMarker } from './merge/marker.js';
 import { mergeJson } from './merge/json.js';
 import { mergeLines } from './merge/lines.js';
 import { printIntro, printPlan, confirmProceed, printNextSteps } from './ux.js';
+import { runWizard } from './wizard.js';
 import type { UserStrategy, OperationPlan } from './types.js';
+
+// Re-export wizard types/functions so external callers (and tests) can keep
+// importing from this file. The wizard module is the source of truth — no
+// side-effects on import (cli.parse() is gated below).
+export { runWizard, resolveProfile } from './wizard.js';
+export type { Role, ProjectType, Stack } from './wizard.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PKG = JSON.parse(await readFile(path.join(HERE, '..', 'package.json'), 'utf8')) as { version: string };
-
-// Wizard matrix: (role × projectType × stack?) → profile name.
-// Exported for unit testing — the interactive prompt flow (runWizard) wraps this pure function.
-export type Role = 'Developer' | 'QA-QC';
-export type ProjectType = 'Local-root' | 'Existing repository';
-export type Stack = 'Next.js' | 'Flutter' | 'Python' | 'Go';
-
-const STACK_TO_PROFILE: Record<Stack, string> = {
-  'Next.js': 'next',
-  'Flutter': 'flutter',
-  'Python': 'python',
-  'Go': 'go',
-};
-
-export function resolveProfile(role: Role, projectType: ProjectType, stack?: Stack): string {
-  if (role === 'QA-QC') return 'qa';
-  if (role === 'Developer') {
-    if (projectType === 'Local-root') return 'local-root';
-    if (projectType === 'Existing repository') {
-      if (!stack) {
-        throw new Error(`resolveProfile: stack is required for (Developer, Existing repository); got (${role}, ${projectType}, ${stack})`);
-      }
-      const name = STACK_TO_PROFILE[stack];
-      if (!name) {
-        throw new Error(`resolveProfile: unknown stack "${stack}" for (Developer, Existing repository)`);
-      }
-      return name;
-    }
-  }
-  throw new Error(`resolveProfile: unknown combination (${role}, ${projectType}, ${stack ?? '<none>'})`);
-}
-
-export async function runWizard(): Promise<string> {
-  const role = await select<Role>({
-    message: "What's your role?",
-    options: [
-      { value: 'Developer', label: 'Developer' },
-      { value: 'QA-QC', label: 'QA-QC' },
-    ],
-  });
-  if (isCancel(role)) { cancel('Aborted.'); process.exit(1); }
-
-  const projectType = await select<ProjectType>({
-    message: 'What kind of project?',
-    options: [
-      { value: 'Local-root', label: 'Local-root (orchestration root)' },
-      { value: 'Existing repository', label: 'Existing repository' },
-    ],
-  });
-  if (isCancel(projectType)) { cancel('Aborted.'); process.exit(1); }
-
-  let stack: Stack | undefined;
-  if (role === 'Developer' && projectType === 'Existing repository') {
-    const picked = await select<Stack>({
-      message: 'What stack?',
-      options: [
-        { value: 'Next.js', label: 'Next.js' },
-        { value: 'Flutter', label: 'Flutter' },
-        { value: 'Python', label: 'Python' },
-        { value: 'Go', label: 'Go' },
-      ],
-    });
-    if (isCancel(picked)) { cancel('Aborted.'); process.exit(1); }
-    stack = picked;
-  }
-
-  return resolveProfile(role, projectType, stack);
-}
 
 const cli = cac('ennam-agents-scaffold');
 
@@ -96,8 +34,6 @@ cli
   .option('--no-prompts', 'Fail on missing info instead of prompting (CI mode)')
   .option('--verbose', 'Verbose output')
   .action(async (profileArg: string | undefined, flags: Record<string, unknown>) => {
-    printIntro(PKG.version);
-
     // cac normalises kebab-case flags: --dry-run → dryRun, --merge-strategy → mergeStrategy.
     // For --no-prompts, cac sets prompts: false (omit defaults to true).
     const interactive = flags.prompts !== false;
@@ -108,6 +44,18 @@ cli
         console.error('Error: profile is required in --no-prompts mode');
         process.exit(2);
       }
+      // Fail loud BEFORE printing the clack intro frame: a piped/non-TTY
+      // invocation that forgot --no-prompts would otherwise see a half-rendered
+      // box before the error (Rule 12 — fail loud, never with a dangling UI).
+      if (!process.stdin.isTTY) {
+        console.error('Error: interactive wizard requires a TTY. Pass a profile argument or use --no-prompts <profile>.');
+        process.exit(2);
+      }
+      // Intro is printed BEFORE the wizard so the user sees the version they
+      // are about to install. For the --no-prompts profile-arg path, we print
+      // the intro after profile validation (below) to avoid leaving a dangling
+      // clack frame on bad-profile errors.
+      printIntro(PKG.version);
       profileName = await runWizard();
     }
 
@@ -119,6 +67,14 @@ cli
       console.error(`Error: ${(err as Error).message}`);
       process.exit(2);
     }
+
+    // For the direct-profile path (no wizard), defer intro until after the
+    // profile name has been validated so a bad-profile error does not leave
+    // an unclosed clack frame on stdout.
+    if (profileArg) {
+      printIntro(PKG.version);
+    }
+
     const cwd = process.cwd();
 
     // Auto-detect: if there is no .git in cwd, the scaffold silently skips
@@ -185,7 +141,15 @@ cli
       }
       return renderFileEntry(entry, ctx);
     };
-    const conflicts = await scanConflicts(cwd, entries.map(e => e.relPath), provider);
+    let conflicts;
+    try {
+      conflicts = await scanConflicts(cwd, entries.map(e => e.relPath), provider);
+    } catch (err) {
+      // Clean stderr (no stack trace) for known scan-time failures like
+      // duplicate scaffold markers (Rule 12 — fail loud, but cleanly).
+      console.error(`Error: ${(err as Error).message}`);
+      process.exit(2);
+    }
     const ops = buildPlan({ entries, conflicts, strategy, hasGit });
     const plan: OperationPlan = { cwd, profile, ops, hasGit };
 
@@ -203,8 +167,45 @@ cli
 
     const result = await executeOps({ cwd, ops, ctx, interactive });
     printNextSteps(profile, result, hasGit);
+
+    // Migration hint: v1.1 users may still have a stale chrome-devtools entry
+    // in their .mcp.json (mergeJson is user-wins, so the scaffold cannot
+    // remove it). Surface a non-fatal warning so the user knows to clean up.
+    await maybeWarnStaleChromeDevtools(cwd);
   });
 
 cli.help();
 cli.version(PKG.version);
-cli.parse();
+
+// Only execute the CLI when this file is run as the program entry point.
+// Without this guard, `import { resolveProfile } from '@ennamjsc/agents-scaffold'`
+// (or test imports) would fire the wizard on import.
+const isMain = (() => {
+  try {
+    const entry = process.argv[1];
+    if (!entry) return false;
+    return import.meta.url === pathToFileURL(entry).href;
+  } catch {
+    return false;
+  }
+})();
+if (isMain) {
+  cli.parse();
+}
+
+async function maybeWarnStaleChromeDevtools(cwd: string): Promise<void> {
+  try {
+    const mcpPath = path.join(cwd, '.mcp.json');
+    const txt = await readFile(mcpPath, 'utf8');
+    const obj = JSON.parse(txt) as { mcpServers?: Record<string, unknown> };
+    if (obj.mcpServers && Object.prototype.hasOwnProperty.call(obj.mcpServers, 'chrome-devtools')) {
+      console.log();
+      console.log('  Warning: .mcp.json still contains a `chrome-devtools` entry.');
+      console.log('  v1.2 no longer ships chrome-devtools-mcp. Consider removing');
+      console.log('  `mcpServers.chrome-devtools` manually. See README → Claude for');
+      console.log('  Chrome integration.');
+    }
+  } catch {
+    // No .mcp.json or unreadable — nothing to warn about.
+  }
+}
