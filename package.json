@@ -6,9 +6,9 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm -w @ennam/agents-scaffold run build",
-    "dev": "npm -w @ennam/agents-scaffold run dev",
-    "test": "npm -w @ennam/agents-scaffold run test",
+    "build": "npm -w @ennamjsc/agents-scaffold run build",
+    "dev": "npm -w @ennamjsc/agents-scaffold run dev",
+    "test": "npm -w @ennamjsc/agents-scaffold run test",
     "lint": "tsc --noEmit -p packages/cli/tsconfig.json"
   },
   "engines": {

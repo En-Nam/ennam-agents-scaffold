@@ -1,4 +1,4 @@
-# @ennam/agents-scaffold
+# @ennamjsc/agents-scaffold
 
 Install Claude Code tooling (Superpowers workflow + Serena memories + role agents + MCP servers) into an existing project — without touching application code.
 
@@ -6,7 +6,7 @@ Install Claude Code tooling (Superpowers workflow + Serena memories + role agent
 
 ```bash
 cd my-existing-project
-npx @ennam/agents-scaffold <profile>
+npx @ennamjsc/agents-scaffold <profile>
 ```
 
 ## Profiles
@@ -69,8 +69,8 @@ chmod +x .claude/hooks/session-start.sh
 
 ```bash
 npm install
-npm -w @ennam/agents-scaffold run build
-npm -w @ennam/agents-scaffold run test
+npm -w @ennamjsc/agents-scaffold run build
+npm -w @ennamjsc/agents-scaffold run test
 ```
 
 See [docs/superpowers/specs/](docs/superpowers/specs/) for design.

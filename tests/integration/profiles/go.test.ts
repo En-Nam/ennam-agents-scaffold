@@ -11,7 +11,7 @@ const CLI_ENTRY = path.join(REPO_ROOT, 'packages', 'cli', 'dist', 'index.js');
 
 describe('install go profile into empty cwd', () => {
   beforeAll(async () => {
-    await execa('npm', ['-w', '@ennam/agents-scaffold', 'run', 'build'], { cwd: REPO_ROOT, shell: true });
+    await execa('npm', ['-w', '@ennamjsc/agents-scaffold', 'run', 'build'], { cwd: REPO_ROOT, shell: true });
   });
 
   it('installs go-specific files; no extra MCP', async () => {

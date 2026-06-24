@@ -12,7 +12,7 @@ const CLI_ENTRY = path.join(REPO_ROOT, 'packages', 'cli', 'dist', 'index.js');
 
 describe('install into project with existing CLAUDE.md', () => {
   beforeAll(async () => {
-    await execa('npm', ['-w', '@ennam/agents-scaffold', 'run', 'build'], { cwd: REPO_ROOT, shell: true });
+    await execa('npm', ['-w', '@ennamjsc/agents-scaffold', 'run', 'build'], { cwd: REPO_ROOT, shell: true });
   });
 
   it('appends marker block, preserves user content, backs up original', async () => {

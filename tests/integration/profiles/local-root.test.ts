@@ -11,7 +11,7 @@ const CLI_ENTRY = path.join(REPO_ROOT, 'packages', 'cli', 'dist', 'index.js');
 
 describe('install local-root profile into empty cwd', () => {
   beforeAll(async () => {
-    await execa('npm', ['-w', '@ennam/agents-scaffold', 'run', 'build'], { cwd: REPO_ROOT, shell: true });
+    await execa('npm', ['-w', '@ennamjsc/agents-scaffold', 'run', 'build'], { cwd: REPO_ROOT, shell: true });
   });
 
   it('installs local-root profile files', async () => {
@@ -40,7 +40,7 @@ describe('install local-root profile into empty cwd', () => {
     expect((await stat(path.join(cwd, '.mcp.json'))).isFile()).toBe(true);
   });
 
-  it('is idempotent — second run is a no-op for CLAUDE.md', async () => {
+  it('is idempotent â€” second run is a no-op for CLAUDE.md', async () => {
     const { path: cwd } = await tmpDir({ unsafeCleanup: true });
     await execa('git', ['init', '-q'], { cwd });
 

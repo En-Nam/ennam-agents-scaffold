@@ -11,7 +11,7 @@ const CLI_ENTRY = path.join(REPO_ROOT, 'packages', 'cli', 'dist', 'index.js');
 
 describe('no-repo auto-detect: scaffold into a dir without .git', () => {
   beforeAll(async () => {
-    await execa('npm', ['-w', '@ennam/agents-scaffold', 'run', 'build'], { cwd: REPO_ROOT, shell: true });
+    await execa('npm', ['-w', '@ennamjsc/agents-scaffold', 'run', 'build'], { cwd: REPO_ROOT, shell: true });
   });
 
   it('skips .gitignore when target dir has no .git', async () => {
@@ -25,11 +25,11 @@ describe('no-repo auto-detect: scaffold into a dir without .git', () => {
     );
     expect(exitCode).toBe(0);
 
-    // Scaffold did run — other files exist
+    // Scaffold did run â€” other files exist
     expect((await stat(path.join(cwd, 'CLAUDE.md'))).isFile()).toBe(true);
     expect((await stat(path.join(cwd, '.mcp.json'))).isFile()).toBe(true);
 
-    // .gitignore was skipped — file does not exist
+    // .gitignore was skipped â€” file does not exist
     await expect(stat(path.join(cwd, '.gitignore'))).rejects.toThrow();
 
     // The skip reason is surfaced in the plan output

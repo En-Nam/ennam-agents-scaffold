@@ -12,7 +12,7 @@ const CLI_ENTRY = path.join(REPO_ROOT, 'packages', 'cli', 'dist', 'index.js');
 
 describe('idempotency: running scaffold twice', () => {
   beforeAll(async () => {
-    await execa('npm', ['-w', '@ennam/agents-scaffold', 'run', 'build'], { cwd: REPO_ROOT, shell: true });
+    await execa('npm', ['-w', '@ennamjsc/agents-scaffold', 'run', 'build'], { cwd: REPO_ROOT, shell: true });
   });
 
   it('second run with same args reports zero writes', async () => {
@@ -20,12 +20,12 @@ describe('idempotency: running scaffold twice', () => {
     await cp(FIXTURE, cwd, { recursive: true });
     await execa('git', ['init', '-q'], { cwd });
 
-    // First run — install everything
+    // First run â€” install everything
     const first = await execa('node', [CLI_ENTRY, 'next', '--merge-strategy=overwrite', '--no-prompts'], { cwd });
     expect(first.exitCode).toBe(0);
     expect(first.stdout).toMatch(/Written:\s*[1-9]/);  // at least 1 write happened
 
-    // Second run — should be a no-op
+    // Second run â€” should be a no-op
     const second = await execa('node', [CLI_ENTRY, 'next', '--merge-strategy=overwrite', '--no-prompts'], { cwd });
     expect(second.exitCode).toBe(0);
     expect(second.stdout).toMatch(/Written:\s*0/);
