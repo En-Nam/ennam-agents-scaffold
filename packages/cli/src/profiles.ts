@@ -15,7 +15,7 @@ const REGISTRY: Record<string, ProfileDef> = {
     name: 'next',
     description: 'Next.js 16 App Router + React 19 + TS strict',
     templateDir: path.join(TEMPLATES, 'next'),
-    extraMcp: ['chrome-devtools', 'figma'],
+    extraMcp: ['figma'],
   },
   flutter: {
     name: 'flutter',
@@ -37,9 +37,9 @@ const REGISTRY: Record<string, ProfileDef> = {
   },
   qa: {
     name: 'qa',
-    description: 'QA workflow — test cases, evidence, chrome-devtools',
+    description: 'QA workflow — test cases, evidence',
     templateDir: path.join(TEMPLATES, 'qa'),
-    extraMcp: ['chrome-devtools'],
+    extraMcp: [],
   },
   'local-root': {
     name: 'local-root',
