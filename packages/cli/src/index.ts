@@ -1,5 +1,5 @@
 import { cac } from 'cac';
-import { readFile } from 'node:fs/promises';
+import { readFile, access } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { select, isCancel, cancel } from '@clack/prompts';
@@ -13,7 +13,7 @@ import { mergeMarker } from './merge/marker.js';
 import { mergeJson } from './merge/json.js';
 import { mergeLines } from './merge/lines.js';
 import { printIntro, printPlan, confirmProceed, printNextSteps } from './ux.js';
-import type { UserStrategy } from './types.js';
+import type { UserStrategy, OperationPlan } from './types.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PKG = JSON.parse(await readFile(path.join(HERE, '..', 'package.json'), 'utf8')) as { version: string };
@@ -48,6 +48,16 @@ cli
 
     const profile = getProfile(profileName);
     const cwd = process.cwd();
+
+    // Auto-detect: if there is no .git in cwd, the scaffold silently skips
+    // git-only artifacts (today: .gitignore). No flag — works for every profile.
+    let hasGit = true;
+    try {
+      await access(path.join(cwd, '.git'));
+    } catch {
+      hasGit = false;
+    }
+
     const strategy: UserStrategy = (flags.force ? 'overwrite' : (flags.mergeStrategy as UserStrategy)) ?? 'ask';
 
     const entries = await enumerateFiles(profile);
@@ -104,8 +114,8 @@ cli
       return renderFileEntry(entry, ctx);
     };
     const conflicts = await scanConflicts(cwd, entries.map(e => e.relPath), provider);
-    const ops = buildPlan({ entries, conflicts, strategy });
-    const plan = { cwd, profile, ops };
+    const ops = buildPlan({ entries, conflicts, strategy, hasGit });
+    const plan: OperationPlan = { cwd, profile, ops, hasGit };
 
     printPlan(plan);
 

@@ -4,12 +4,27 @@ export interface BuildPlanInput {
   entries: FileEntry[];
   conflicts: ConflictReport;
   strategy: UserStrategy;
+  hasGit: boolean;
 }
 
 export function buildPlan(input: BuildPlanInput): PlannedOp[] {
   const ops: PlannedOp[] = [];
   for (const e of input.entries) {
     const state = input.conflicts.get(e.relPath) ?? 'absent';
+
+    // No-repo guard: if the target dir has no .git, never touch .gitignore.
+    // The user almost certainly doesn't want a .gitignore in a non-git directory.
+    if (e.relPath === '.gitignore' && !input.hasGit) {
+      ops.push({
+        relPath: e.relPath,
+        src: e,
+        conflict: state,
+        op: 'skip',
+        reason: 'No .git detected — skipping .gitignore',
+        needsPrompt: false,
+      });
+      continue;
+    }
 
     // append-marker is handled the same regardless of conflict state (except identical → skip)
     if (e.kind === 'append-marker') {

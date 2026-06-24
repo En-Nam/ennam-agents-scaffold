@@ -41,6 +41,12 @@ const REGISTRY: Record<string, ProfileDef> = {
     templateDir: path.join(TEMPLATES, 'qa'),
     extraMcp: ['chrome-devtools'],
   },
+  'local-root': {
+    name: 'local-root',
+    description: 'Orchestration root — polyrepo coordinator, reads sub-platform .serena/ memories',
+    templateDir: path.join(TEMPLATES, 'local-root'),
+    extraMcp: [],
+  },
 };
 
 export function getProfile(name: string): ProfileDef {

@@ -42,6 +42,8 @@ export interface OperationPlan {
   cwd: string;
   profile: ProfileDef;
   ops: PlannedOp[];
+  // true if .git directory detected in cwd at plan-build time
+  hasGit: boolean;
 }
 
 export interface RenderContext {
