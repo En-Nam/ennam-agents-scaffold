@@ -177,7 +177,7 @@ flowchart TD
 
 **All AI agents MUST write a checkpoint at the end of every session — via Serena MCP** (`mcp__serena__write_memory`).
 
-**Format**: `mcp__serena__write_memory("checkpoint/<agent-name>-{{date}}", …)` → stored at `.serena/memories/checkpoint/<agent-name>-{{date}}.md`. Write through Serena MCP, **never** by hand-editing the file.
+**Format**: `mcp__serena__write_memory("checkpoint/<agent-name>-<YYYY-MM-DD>", …)` → stored at `.serena/memories/checkpoint/<agent-name>-<YYYY-MM-DD>.md`. Write through Serena MCP, **never** by hand-editing the file.
 
 **Required content**:
 
