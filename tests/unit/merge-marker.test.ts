@@ -48,4 +48,10 @@ describe('mergeMarker', () => {
     const malformed = `# P\n${BEGIN}\nUNCLOSED\n`;
     expect(() => mergeMarker(malformed, BLOCK)).toThrow(/marker.*malformed|end.*not found/i);
   });
+
+  it('throws on duplicate begin markers (refuses to silently leave stale blocks)', () => {
+    const oldBegin = '<!-- ennam-agents-scaffold:begin v0.9.0 -->';
+    const existing = `# P\n${oldBegin}\nFIRST\n${END}\n\n## Notes\n\n${BEGIN}\nSECOND\n${END}\n`;
+    expect(() => mergeMarker(existing, BLOCK)).toThrow(/multiple.*begin markers|consolidate/i);
+  });
 });
