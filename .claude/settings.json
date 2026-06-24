@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "additionalAllowList": [
+      "Bash(npm:*)",
+      "Bash(npx:*)",
+      "Bash(node:*)",
+      "Bash(git:*)"
+    ]
+  },
+  "model": "claude-opus-4-7",
+  "outputStyle": "default",
+  "enabledPlugins": {
+    "github@claude-plugins-official": true
+  }
+}
