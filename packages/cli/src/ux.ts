@@ -25,15 +25,18 @@ export async function confirmProceed(): Promise<boolean> {
   return yes === true;
 }
 
-export function printNextSteps(profile: ProfileDef, result: ExecuteResult): void {
+export function printNextSteps(profile: ProfileDef, result: ExecuteResult, hasGit: boolean): void {
   const envVars = ['JIRA_URL', 'JIRA_TOKEN'];
   if (profile.extraMcp.includes('figma')) envVars.push('FIGMA_TOKEN');
-  const steps = [
-    'Review changes: git diff',
-    `Set env vars in .env.local: ${envVars.join(', ')}`,
-    'Start Claude Code: claude',
-    'Inside Claude: run /boot',
-  ];
+  const steps: string[] = [];
+  if (hasGit) {
+    steps.push('Review changes: git diff');
+  } else {
+    steps.push('Inspect changes in your editor (no .git detected — run `git init` first if you want diff/version tracking)');
+  }
+  steps.push(`Set env vars in .env.local: ${envVars.join(', ')}`);
+  steps.push('Start Claude Code: claude');
+  steps.push('Inside Claude: run /boot');
   outro(
     pc.cyan(`Done.`) +
     `\n  Profile: ${pc.bold(profile.name)}` +

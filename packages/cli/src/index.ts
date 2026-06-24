@@ -46,7 +46,14 @@ cli
       profileName = picked as string;
     }
 
-    const profile = getProfile(profileName);
+    let profile;
+    try {
+      profile = getProfile(profileName);
+    } catch (err) {
+      // Clean stderr message, no stack trace (Rule 12 — fail loud, but cleanly).
+      console.error(`Error: ${(err as Error).message}`);
+      process.exit(2);
+    }
     const cwd = process.cwd();
 
     // Auto-detect: if there is no .git in cwd, the scaffold silently skips
@@ -130,7 +137,7 @@ cli
     }
 
     const result = await executeOps({ cwd, ops, ctx, interactive });
-    printNextSteps(profile, result);
+    printNextSteps(profile, result, hasGit);
   });
 
 cli.help();

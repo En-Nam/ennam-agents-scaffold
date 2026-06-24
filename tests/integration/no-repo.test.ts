@@ -34,5 +34,9 @@ describe('no-repo auto-detect: scaffold into a dir without .git', () => {
 
     // The skip reason is surfaced in the plan output
     expect(stdout).toContain('No .git detected');
+
+    // Next-steps must NOT tell the user to run `git diff` in a non-git dir.
+    expect(stdout).not.toMatch(/Review changes: git diff/);
+    expect(stdout).toMatch(/no \.git detected|git init/i);
   });
 });
