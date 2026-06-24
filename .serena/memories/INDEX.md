@@ -4,7 +4,7 @@
 (none yet — add `services/<svc>.md` and link here as services emerge)
 
 ## Decisions
-(none yet — record durable choices in `decisions/<topic>.md` and link here)
+- [Security dev trade-offs](decisions/security-dev-trade-offs.md) — why the broad allowlist + unpinned npx + serena git-HEAD are kept on purpose, what was fixed in v1.2.2 instead
 
 ## Active Comms
 (empty)
