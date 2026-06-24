@@ -64,3 +64,12 @@ Don't fork silently.
 "Completed" is wrong if anything was skipped silently.
 "Tests pass" is wrong if any were skipped.
 Default to surfacing uncertainty, not hiding it.
+
+## Rule 13 — Trust code over LLM regurgitation
+When code hands an LLM a list of facts (filenames, IDs, exact strings)
+and expects them back in output, do NOT trust the LLM's reproduction.
+Claude normalizes, prefixes, abbreviates, and reorders. Either override
+the LLM's output with code-derived ground-truth before persisting, or
+have the LLM reference items by index (doc1/doc2) that the code maps
+back. Tests must mock the LLM returning altered strings — a mock that
+echoes inputs faithfully cannot catch this class.
