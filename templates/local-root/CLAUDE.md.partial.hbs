@@ -1,0 +1,50 @@
+## Stack: Orchestration Root (Polyrepo Meta-Root)
+
+| Layer | Tech |
+|---|---|
+| Architecture | Polyrepo orchestrator — no build, no runtime; coordinates sub-platforms |
+| Memory coordination | Serena MCP (reads `.serena/` from each sub-platform) |
+| Sub-platform communication | Published interfaces (HTTP APIs, databases, MCPs) — never shared code |
+| Infrastructure coordination | Docker Compose / Kubernetes / custom (user-defined) |
+
+### The Orchestrator's Job
+
+This root orchestrates multiple independent platforms (sub-repositories or sub-folders). Each platform is autonomous — it has its own `CLAUDE.md`, `AGENTS.md`, `.serena/` memories, build, and deploy.
+
+The orchestrator's role is to:
+1. Read from `.serena/` stores across platforms via Serena MCP (by path-activating each platform)
+2. Collect signals — decisions (`decisions/`), service state (`services/`), comms (`comms/active/`), backlog items (`backlog/`), and checkpoints
+3. Present a cross-platform view — status, risk, dependencies, and work signals
+4. Direct work — write ecosystem-wide decisions to `global/ecosystem/*` (owned by this orchestrator)
+
+**Sub-platform `.serena/` locations the orchestrator reads:**
+
+<!-- TODO: Fill in your platforms. Example: -->
+| Platform folder | `.serena/` path | Purpose |
+|---|---|---|
+| `platform-a/` | `platform-a/.serena/` | (your first platform) |
+| `platform-b/` | `platform-b/.serena/` | (your second platform) |
+| `shared-infra/` | `shared-infra/.serena/` (if applicable) | (shared services) |
+
+(Remove or update this table to match your actual platform structure.)
+
+**Ecosystem (the orchestrator OWNS this):** the orchestrator **writes** Serena **`global/ecosystem/*`** — the shared contract + per-platform plans, the only Serena channel readable by every platform. Read each platform's own store by **path-activating** it; never reach into another platform's source. Keep THIS repo's project store to orchestrator-private items (INDEX + checkpoints).
+
+### Conventions
+
+- **No build at this root.** Each sub-platform builds and runs independently. This folder is pure coordination.
+- **No shared code.** Platforms interact only via published interfaces (HTTP APIs, databases, MCPs), never by importing code.
+- **Decisions in Serena.** Record cross-platform decisions in `.serena/memories/global/ecosystem/` so all platforms can read them.
+- **Respect platform autonomy.** Don't fork or duplicate a platform's logic — consume its published surface (API / MCP / DB).
+
+### Common commands
+
+```bash
+# (Fill in your orchestration commands. Examples:)
+# docker compose up                 # start shared infra
+# cd platform-a && npm run dev      # run platform A
+# cd platform-b && go run ./cmd/... # run platform B
+# kubectl apply -f k8s/             # apply Kubernetes manifests
+```
+
+(Edit this section to document how to start your platforms and shared infrastructure.)
