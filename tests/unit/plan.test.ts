@@ -12,6 +12,7 @@ describe('buildPlan', () => {
       entries: [fe('AGENTS.md')],
       conflicts: new Map([['AGENTS.md', 'absent']]),
       strategy: 'ask',
+      hasGit: true,
     });
     expect(ops[0]?.op).toBe('write');
     expect(ops[0]?.reason).toMatch(/absent/i);
@@ -22,6 +23,7 @@ describe('buildPlan', () => {
       entries: [fe('.claude/agents/web-dev.md', 'skip-if-exists')],
       conflicts: new Map([['.claude/agents/web-dev.md', 'differs']]),
       strategy: 'overwrite',
+      hasGit: true,
     });
     expect(ops[0]?.op).toBe('skip');
     expect(ops[0]?.reason).toMatch(/skip-if-exists/i);
@@ -32,6 +34,7 @@ describe('buildPlan', () => {
       entries: [fe('AGENTS.md')],
       conflicts: new Map([['AGENTS.md', 'differs']]),
       strategy: 'overwrite',
+      hasGit: true,
     });
     expect(ops[0]?.op).toBe('write');
   });
@@ -41,6 +44,7 @@ describe('buildPlan', () => {
       entries: [fe('AGENTS.md')],
       conflicts: new Map([['AGENTS.md', 'differs']]),
       strategy: 'skip',
+      hasGit: true,
     });
     expect(ops[0]?.op).toBe('skip');
   });
@@ -50,6 +54,7 @@ describe('buildPlan', () => {
       entries: [fe('AGENTS.md')],
       conflicts: new Map([['AGENTS.md', 'differs']]),
       strategy: 'ask',
+      hasGit: true,
     });
     // For Plan 1, ask resolves to 'write' at plan time after a future per-file prompt;
     // here we mark it for prompt by leaving op='write' but reason mentions prompt.
@@ -63,6 +68,7 @@ describe('buildPlan', () => {
       entries: [fe('AGENTS.md')],
       conflicts: new Map([['AGENTS.md', 'identical']]),
       strategy: 'ask',
+      hasGit: true,
     });
     expect(ops[0]?.op).toBe('skip');
     expect(ops[0]?.reason).toMatch(/identical/i);
@@ -73,6 +79,7 @@ describe('buildPlan', () => {
       entries: [fe('.gitignore', 'append-lines')],
       conflicts: new Map([['.gitignore', 'differs']]),
       strategy: 'ask',
+      hasGit: true,
     });
     expect(ops[0]?.op).toBe('merge-lines');
     expect(ops[0]?.reason).toMatch(/append|lines/i);
@@ -83,6 +90,7 @@ describe('buildPlan', () => {
       entries: [fe('.mcp.json', 'json-merge')],
       conflicts: new Map([['.mcp.json', 'differs']]),
       strategy: 'ask',
+      hasGit: true,
     });
     expect(ops[0]?.op).toBe('merge-json');
     expect(ops[0]?.reason).toMatch(/merge|user wins/i);
@@ -93,6 +101,7 @@ describe('buildPlan', () => {
       entries: [fe('.mcp.json', 'json-merge')],
       conflicts: new Map([['.mcp.json', 'absent']]),
       strategy: 'ask',
+      hasGit: true,
     });
     expect(ops[0]?.op).toBe('merge-json');
     expect(ops[0]?.reason).toMatch(/absent/i);
@@ -103,6 +112,7 @@ describe('buildPlan', () => {
       entries: [fe('.mcp.json', 'json-merge')],
       conflicts: new Map([['.mcp.json', 'identical']]),
       strategy: 'ask',
+      hasGit: true,
     });
     expect(ops[0]?.op).toBe('skip');
     expect(ops[0]?.reason).toMatch(/identical/i);
@@ -113,6 +123,7 @@ describe('buildPlan', () => {
       entries: [fe('CLAUDE.md', 'append-marker')],
       conflicts: new Map([['CLAUDE.md', 'absent']]),
       strategy: 'ask',
+      hasGit: true,
     });
     expect(absent[0]?.op).toBe('merge-marker');
     expect(absent[0]?.reason).toMatch(/marker/i);
@@ -121,6 +132,7 @@ describe('buildPlan', () => {
       entries: [fe('CLAUDE.md', 'append-marker')],
       conflicts: new Map([['CLAUDE.md', 'differs']]),
       strategy: 'ask',
+      hasGit: true,
     });
     expect(differs[0]?.op).toBe('merge-marker');
 
@@ -128,6 +140,7 @@ describe('buildPlan', () => {
       entries: [fe('CLAUDE.md', 'append-marker')],
       conflicts: new Map([['CLAUDE.md', 'identical']]),
       strategy: 'ask',
+      hasGit: true,
     });
     expect(identical[0]?.op).toBe('skip');
   });
@@ -137,6 +150,7 @@ describe('buildPlan', () => {
       entries: [fe('AGENTS.md')],
       conflicts: new Map([['AGENTS.md', 'differs']]),
       strategy: 'ask',
+      hasGit: true,
     });
     expect(askDiffer[0]?.needsPrompt).toBe(true);
 
@@ -144,6 +158,7 @@ describe('buildPlan', () => {
       entries: [fe('AGENTS.md')],
       conflicts: new Map([['AGENTS.md', 'differs']]),
       strategy: 'overwrite',
+      hasGit: true,
     });
     expect(overwriteDiffer[0]?.needsPrompt).toBe(false);
 
@@ -151,7 +166,21 @@ describe('buildPlan', () => {
       entries: [fe('AGENTS.md')],
       conflicts: new Map([['AGENTS.md', 'absent']]),
       strategy: 'ask',
+      hasGit: true,
     });
     expect(absent[0]?.needsPrompt).toBe(false);
+  });
+
+  it('skips .gitignore when hasGit=false', () => {
+    const entry: FileEntry = { srcAbs: '/fake/.gitignore', relPath: '.gitignore', isTemplate: false, kind: 'append-lines' };
+    const ops = buildPlan({ entries: [entry], conflicts: new Map([['.gitignore', 'differs']]), strategy: 'ask', hasGit: false });
+    expect(ops[0]?.op).toBe('skip');
+    expect(ops[0]?.reason).toMatch(/No \.git detected/i);
+  });
+
+  it('processes .gitignore normally when hasGit=true', () => {
+    const entry: FileEntry = { srcAbs: '/fake/.gitignore', relPath: '.gitignore', isTemplate: false, kind: 'append-lines' };
+    const ops = buildPlan({ entries: [entry], conflicts: new Map([['.gitignore', 'differs']]), strategy: 'ask', hasGit: true });
+    expect(ops[0]?.op).toBe('merge-lines');
   });
 });

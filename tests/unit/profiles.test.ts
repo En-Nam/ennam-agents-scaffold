@@ -15,10 +15,10 @@ describe('profiles', () => {
 
   it('returns all expected profiles', () => {
     const names = listProfiles().map(p => p.name).sort();
-    expect(names).toEqual(['flutter', 'go', 'next', 'python', 'qa']);
+    expect(names).toEqual(['flutter', 'go', 'local-root', 'next', 'python', 'qa']);
   });
 
-  it.each(['flutter', 'next', 'python', 'go', 'qa'] as const)('returns %s profile', (name) => {
+  it.each(['flutter', 'next', 'python', 'go', 'qa', 'local-root'] as const)('returns %s profile', (name) => {
     const p = getProfile(name);
     expect(p.name).toBe(name);
     expect(p.templateDir).toContain(name);

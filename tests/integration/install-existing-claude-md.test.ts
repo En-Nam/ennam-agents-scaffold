@@ -18,6 +18,7 @@ describe('install into project with existing CLAUDE.md', () => {
   it('appends marker block, preserves user content, backs up original', async () => {
     const { path: cwd } = await tmpDir({ unsafeCleanup: true });
     await cp(FIXTURE, cwd, { recursive: true });
+    await execa('git', ['init', '-q'], { cwd });
     const before = await readFile(path.join(cwd, 'CLAUDE.md'), 'utf8');
 
     const { exitCode } = await execa('node', [CLI_ENTRY, 'next', '--merge-strategy=overwrite', '--no-prompts'], { cwd });
@@ -43,6 +44,7 @@ describe('install into project with existing CLAUDE.md', () => {
   it('re-running yields same content (idempotent)', async () => {
     const { path: cwd } = await tmpDir({ unsafeCleanup: true });
     await cp(FIXTURE, cwd, { recursive: true });
+    await execa('git', ['init', '-q'], { cwd });
 
     await execa('node', [CLI_ENTRY, 'next', '--merge-strategy=overwrite', '--no-prompts'], { cwd });
     const after1 = await readFile(path.join(cwd, 'CLAUDE.md'), 'utf8');

@@ -19,6 +19,7 @@ describe('install next profile into fixture', () => {
   it('installs all expected files into cwd', async () => {
     const { path: cwd } = await tmpDir({ unsafeCleanup: true });
     await cp(FIXTURE, cwd, { recursive: true });
+    await execa('git', ['init', '-q'], { cwd });
 
     const { exitCode } = await execa('node', [CLI_ENTRY, 'next', '--merge-strategy=overwrite', '--no-prompts'], { cwd });
     expect(exitCode).toBe(0);
@@ -71,6 +72,7 @@ describe('install next profile into fixture', () => {
     // User values win on key conflicts; scaffold adds new keys.
     const { path: cwd } = await tmpDir({ unsafeCleanup: true });
     await cp(FIXTURE, cwd, { recursive: true });
+    await execa('git', ['init', '-q'], { cwd });
     const existingMcp = '{"mcpServers":{"my-custom":{"command":"echo"}}}';
     await writeFile(path.join(cwd, '.mcp.json'), existingMcp, 'utf8');
     await mkdir(path.join(cwd, '.claude'), { recursive: true });
@@ -101,6 +103,7 @@ describe('install next profile into fixture', () => {
   it('dry-run produces no writes', async () => {
     const { path: cwd } = await tmpDir({ unsafeCleanup: true });
     await cp(FIXTURE, cwd, { recursive: true });
+    await execa('git', ['init', '-q'], { cwd });
     const before = (await import('fast-glob')).default;
     const filesBefore = await before('**/*', { cwd, dot: true });
 

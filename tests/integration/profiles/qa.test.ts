@@ -16,6 +16,7 @@ describe('install qa profile into empty cwd', () => {
 
   it('installs qa-specific files including test-cases scaffold', async () => {
     const { path: cwd } = await tmpDir({ unsafeCleanup: true });
+    await execa('git', ['init', '-q'], { cwd });
     const { exitCode } = await execa('node', [CLI_ENTRY, 'qa', '--merge-strategy=overwrite', '--no-prompts'], { cwd });
     expect(exitCode).toBe(0);
 

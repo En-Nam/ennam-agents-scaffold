@@ -18,6 +18,7 @@ describe('install into project with existing .mcp.json', () => {
   it('deep-merges user mcp config with scaffold (user wins on overlaps)', async () => {
     const { path: cwd } = await tmpDir({ unsafeCleanup: true });
     await cp(FIXTURE, cwd, { recursive: true });
+    await execa('git', ['init', '-q'], { cwd });
 
     const { exitCode } = await execa('node', [CLI_ENTRY, 'next', '--merge-strategy=overwrite', '--no-prompts'], { cwd });
     expect(exitCode).toBe(0);
@@ -45,6 +46,7 @@ describe('install into project with existing .mcp.json', () => {
   it('idempotent: second run produces same .mcp.json', async () => {
     const { path: cwd } = await tmpDir({ unsafeCleanup: true });
     await cp(FIXTURE, cwd, { recursive: true });
+    await execa('git', ['init', '-q'], { cwd });
 
     await execa('node', [CLI_ENTRY, 'next', '--merge-strategy=overwrite', '--no-prompts'], { cwd });
     const after1 = await readFile(path.join(cwd, '.mcp.json'), 'utf8');

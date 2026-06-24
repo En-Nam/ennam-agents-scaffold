@@ -18,6 +18,7 @@ describe('idempotency: running scaffold twice', () => {
   it('second run with same args reports zero writes', async () => {
     const { path: cwd } = await tmpDir({ unsafeCleanup: true });
     await cp(FIXTURE, cwd, { recursive: true });
+    await execa('git', ['init', '-q'], { cwd });
 
     // First run — install everything
     const first = await execa('node', [CLI_ENTRY, 'next', '--merge-strategy=overwrite', '--no-prompts'], { cwd });
@@ -33,6 +34,7 @@ describe('idempotency: running scaffold twice', () => {
   it('dry-run after install reports zero ops', async () => {
     const { path: cwd } = await tmpDir({ unsafeCleanup: true });
     await cp(FIXTURE, cwd, { recursive: true });
+    await execa('git', ['init', '-q'], { cwd });
 
     await execa('node', [CLI_ENTRY, 'next', '--merge-strategy=overwrite', '--no-prompts'], { cwd });
 
