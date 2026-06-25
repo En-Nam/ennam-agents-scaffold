@@ -38,6 +38,7 @@ export function printNextSteps(profile: ProfileDef, result: ExecuteResult, hasGi
   }
   steps.push(`Set env vars in .env.local: ${envVars.join(', ')}`);
   steps.push('Start Claude Code: claude');
+  steps.push('Inside Claude: accept the Superpowers plugin trust prompt (provides the superpowers:* workflow skills referenced by CLAUDE.md). Headless/CI sessions do not auto-install — run `/plugin install superpowers@claude-plugins-official` once. Requires Claude Code >= 2.1.');
   steps.push('Inside Claude: run /boot');
   outro(
     pc.cyan(`Done.`) +
