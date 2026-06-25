@@ -5,6 +5,7 @@ const ALL_PROFILES = [
   'ba',
   'devops-aws',
   'devops-azure',
+  'devops-docker',
   'devops-gcp',
   'dotnet-mvc',
   'express',
@@ -42,7 +43,7 @@ describe('profiles', () => {
   });
 
   it('every devops profile declares the github MCP', () => {
-    for (const name of ['devops-aws', 'devops-azure', 'devops-gcp']) {
+    for (const name of ['devops-aws', 'devops-azure', 'devops-gcp', 'devops-docker']) {
       expect(getProfile(name).extraMcp).toContain('github');
     }
   });

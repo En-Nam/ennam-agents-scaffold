@@ -51,9 +51,10 @@ flowchart TD
     Cloud -->|AWS| AWS[devops-aws profile]
     Cloud -->|Azure| Azure[devops-azure profile]
     Cloud -->|Google Cloud| GCP[devops-gcp profile]
+    Cloud -->|Docker self-hosted| DockerProfile[devops-docker profile]
 
     classDef leaf fill:#d4edda,stroke:#155724,color:#155724;
-    class QA,BA,HR,LR,Next,React,RN,Flutter,Python,Go,Dotnet,Express,AWS,Azure,GCP leaf;
+    class QA,BA,HR,LR,Next,React,RN,Flutter,Python,Go,Dotnet,Express,AWS,Azure,GCP,DockerProfile leaf;
 ```
 
 > The diagram above renders on GitHub. On npmjs.com, the mermaid code block is shown verbatim — open this README on GitHub for the rendered flowchart.
@@ -81,13 +82,14 @@ flowchart TD
 | `ba` | Business Analyst — user stories + Gherkin AC + BPMN flows + `/ba-story` `/ba-flow` | — |
 | `hr` | HR — JD authoring + interview kits + `/hr-jd` `/hr-interview-kit` | — |
 
-### DevOps (cloud-specific)
+### DevOps (cloud / infra-target-specific)
 
-| Profile | Cloud / IaC | Extra MCP |
+| Profile | Stack | Extra MCP |
 |---|---|---|
 | `devops-aws` | Terraform + AWS (ECS, RDS, IAM, Secrets Manager, CloudWatch) | github |
 | `devops-azure` | Bicep/Terraform + Azure (AKS, App Service, Key Vault, Log Analytics) | github |
 | `devops-gcp` | Terraform + GCP (GKE, Cloud Run, Cloud SQL, Secret Manager, Cloud Logging) | github |
+| `devops-docker` | Self-hosted Docker fleet — Komodo (GitOps Resource Sync + RBAC + audit) + Tecnativa socket-proxy + Tailscale sidecar + Dozzle + cAdvisor/Prometheus/Grafana + Uptime Kuma + Diun + Renovate | github |
 
 ### Orchestration
 
@@ -130,6 +132,10 @@ v1.3 fixes a silent-exit bug under `npx`: pre-1.3 invocations would print nothin
 ### Upgrading from v1.3
 
 v1.4 adds two Developer stacks: `react` (Vite SPA — React 19 + React Router 7 + TanStack Query + Tailwind 4 + Vitest) and `react-native` (Expo SDK 52+ on the New Architecture, Expo Router, NativeWind, Reanimated 3, Maestro for E2E). All profile-specific agent and skill prompts were audited against current Anthropic subagent guidance — most were already compliant; a handful received surgical edits. No profile names changed; no behavior changed for existing installs.
+
+### Upgrading from v1.4
+
+v1.5 adds the `devops-docker` profile — a DevOps role for self-hosted Docker fleets. The recommended stack is **Komodo** (GitOps Resource Sync + RBAC + audit, all free under GPL-3.0) as the management UI, with **Tecnativa docker-socket-proxy** fronting every Docker socket (no raw socket bind anywhere), **Tailscale sidecar pattern** for remote access (one sidecar per exposed service; no public ports), **Dozzle** for log search, **cAdvisor + Prometheus + Grafana** for metrics history, **Uptime Kuma** for alerts, **Diun** for notify-only image updates, and **Renovate** for PR-based image bumps (no Watchtower — archived in 2024). The agent prompt forbids `:latest` tags, raw `/var/run/docker.sock` binds, `privileged: true`, Watchtower/ctop, and Tailscale Funnel for admin UIs. Pick this profile from the wizard under **DevOps → Docker (self-hosted)**.
 
 **New: post-install handoff prompt.** After every interactive install (except `local-root`), the CLI now prints a copy-paste prompt you paste into a fresh `claude` session at the repo. It instructs Claude to fill in your project-specific context — stack, key directories, commands, conventions, hot zones — in the area ABOVE the scaffold-managed marker block in `CLAUDE.md`. The scaffold tool itself only manages the block between the markers; the project-profile area above is yours. The prompt has hard guardrails: it forbids the agent from touching anything between the markers, requires every claim to cite a file the agent actually read, and demands a unified diff + confirmation before writing. The prompt is suppressed under `--no-prompts` (CI mode).
 

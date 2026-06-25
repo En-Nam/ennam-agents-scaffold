@@ -95,6 +95,12 @@ const REGISTRY: Record<string, ProfileDef> = {
     templateDir: path.join(TEMPLATES, 'devops-gcp'),
     extraMcp: ['github'],
   },
+  'devops-docker': {
+    name: 'devops-docker',
+    description: 'DevOps — Self-hosted Docker infra (Komodo GitOps + Tecnativa socket-proxy + Tailscale sidecar + Dozzle + Renovate)',
+    templateDir: path.join(TEMPLATES, 'devops-docker'),
+    extraMcp: ['github'],
+  },
   'local-root': {
     name: 'local-root',
     description: 'Orchestration root — polyrepo coordinator, reads sub-platform .serena/ memories',

@@ -32,7 +32,7 @@ describe('printHandoffPrompt', () => {
     expect(out).toContain('<!-- ennam-agents-scaffold:end -->');
   });
 
-  it.each(['react', 'react-native', 'dotnet-mvc', 'express', 'ba', 'hr', 'devops-aws', 'devops-azure', 'devops-gcp', 'next', 'flutter', 'python', 'go', 'qa'])('prints the prompt for profile %s', (profile) => {
+  it.each(['react', 'react-native', 'dotnet-mvc', 'express', 'ba', 'hr', 'devops-aws', 'devops-azure', 'devops-gcp', 'devops-docker', 'next', 'flutter', 'python', 'go', 'qa'])('prints the prompt for profile %s', (profile) => {
     printHandoffPrompt(profile);
     const out = stripAnsi(logs.join('\n'));
     expect(out).toContain('seeding project context');

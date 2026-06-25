@@ -6,7 +6,7 @@ import path from 'node:path';
 export type Role = 'Developer' | 'QA-QC' | 'BA' | 'HR' | 'DevOps';
 export type ProjectType = 'Local-root' | 'Existing repository';
 export type Stack = 'Next.js' | 'React' | 'React Native' | 'Flutter' | 'Python' | 'Go' | '.NET MVC' | 'Express.js';
-export type Cloud = 'AWS' | 'Azure' | 'Google Cloud';
+export type Cloud = 'AWS' | 'Azure' | 'Google Cloud' | 'Docker';
 
 const STACK_TO_PROFILE: Record<Stack, string> = {
   'Next.js': 'next',
@@ -23,6 +23,7 @@ const CLOUD_TO_PROFILE: Record<Cloud, string> = {
   'AWS': 'devops-aws',
   'Azure': 'devops-azure',
   'Google Cloud': 'devops-gcp',
+  'Docker': 'devops-docker',
 };
 
 export function resolveProfile(
@@ -86,11 +87,12 @@ export async function runWizard(cwd: string = process.cwd()): Promise<string> {
   // DevOps branches on cloud, not projectType.
   if (role === 'DevOps') {
     const cloud = await select<Cloud>({
-      message: 'Which cloud?',
+      message: 'Which cloud / infra target?',
       options: [
         { value: 'AWS', label: 'AWS' },
         { value: 'Azure', label: 'Azure' },
         { value: 'Google Cloud', label: 'Google Cloud (GCP)' },
+        { value: 'Docker', label: 'Docker (self-hosted; Komodo + Tailscale)' },
       ],
       initialValue: 'AWS',
     });

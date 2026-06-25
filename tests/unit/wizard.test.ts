@@ -69,6 +69,10 @@ describe('wizard resolveProfile matrix', () => {
     expect(resolveProfile('DevOps', 'Existing repository', undefined, 'Google Cloud')).toBe('devops-gcp');
   });
 
+  it('DevOps + Docker → devops-docker', () => {
+    expect(resolveProfile('DevOps', 'Existing repository', undefined, 'Docker')).toBe('devops-docker');
+  });
+
   it('every resolved name is a registered profile', () => {
     // Lock the wizard's output to the live profile registry: if anyone renames
     // a profile in profiles.ts the wizard must surface that mismatch.
@@ -89,6 +93,7 @@ describe('wizard resolveProfile matrix', () => {
       resolveProfile('DevOps', 'Existing repository', undefined, 'AWS'),
       resolveProfile('DevOps', 'Existing repository', undefined, 'Azure'),
       resolveProfile('DevOps', 'Existing repository', undefined, 'Google Cloud'),
+      resolveProfile('DevOps', 'Existing repository', undefined, 'Docker'),
     ];
     for (const name of resolved) {
       expect(() => getProfile(name)).not.toThrow();
