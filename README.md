@@ -133,6 +133,15 @@ v1.3 fixes a silent-exit bug under `npx`: pre-1.3 invocations would print nothin
 
 v1.4 adds two Developer stacks: `react` (Vite SPA — React 19 + React Router 7 + TanStack Query + Tailwind 4 + Vitest) and `react-native` (Expo SDK 52+ on the New Architecture, Expo Router, NativeWind, Reanimated 3, Maestro for E2E). All profile-specific agent and skill prompts were audited against current Anthropic subagent guidance — most were already compliant; a handful received surgical edits. No profile names changed; no behavior changed for existing installs.
 
+### Upgrading from v1.5.0 → v1.5.1
+
+v1.5.1 fixes two broken shapes the scaffold has been shipping in `.claude/settings.json` since v1.0:
+
+1. `permissions.additionalAllowList` (legacy key Claude Code silently ignores) → corrected to `permissions.allow`. Net effect for upgraders: your auto-allow rules for `Bash(npm:*)` / `Bash(git:*)` etc. were never in effect — they will be once you re-run or migrate manually.
+2. `hooks.SessionStart` entries used the legacy bare `{command}` shape. Current Claude Code rejects this with **"Expected array, but received undefined"** and refuses to load any settings from the file. Corrected to the required nested `{hooks: [{type: "command", command: "…"}]}` wrapper.
+
+Because `.claude/settings.json` is merged user-wins on arrays, **re-running the scaffold cannot auto-rewrite an existing broken file** — the CLI now prints a loud warning at the end of every install when it detects either legacy shape so you know to fix it by hand.
+
 ### Upgrading from v1.4
 
 v1.5 adds the `devops-docker` profile — a DevOps role for self-hosted Docker fleets. The recommended stack is **Komodo** (GitOps Resource Sync + RBAC + audit, all free under GPL-3.0) as the management UI, with **Tecnativa docker-socket-proxy** fronting every Docker socket (no raw socket bind anywhere), **Tailscale sidecar pattern** for remote access (one sidecar per exposed service; no public ports), **Dozzle** for log search, **cAdvisor + Prometheus + Grafana** for metrics history, **Uptime Kuma** for alerts, **Diun** for notify-only image updates, and **Renovate** for PR-based image bumps (no Watchtower — archived in 2024). The agent prompt forbids `:latest` tags, raw `/var/run/docker.sock` binds, `privileged: true`, Watchtower/ctop, and Tailscale Funnel for admin UIs. Pick this profile from the wizard under **DevOps → Docker (self-hosted)**.

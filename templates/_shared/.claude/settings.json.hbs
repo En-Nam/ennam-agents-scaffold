@@ -3,11 +3,15 @@
   "model": "claude-opus-4-7",
   "hooks": {
     "SessionStart": [
-      { "command": ".claude/hooks/session-start.{{#if isWindows}}ps1{{else}}sh{{/if}}" }
+      {
+        "hooks": [
+          { "type": "command", "command": ".claude/hooks/session-start.{{#if isWindows}}ps1{{else}}sh{{/if}}" }
+        ]
+      }
     ]
   },
   "permissions": {
-    "additionalAllowList": [
+    "allow": [
       "Bash(npm:*)",
       "Bash(npx:*)",
       "Bash(node:*)",

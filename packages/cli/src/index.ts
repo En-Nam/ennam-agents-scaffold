@@ -174,6 +174,13 @@ cli
     // remove it). Surface a non-fatal warning so the user knows to clean up.
     await maybeWarnStaleChromeDevtools(cwd);
 
+    // Migration hint: v1.0-1.5.0 users have legacy `.claude/settings.json`
+    // shapes that Claude Code no longer parses (additionalAllowList vs allow;
+    // hooks.SessionStart entries missing the nested `hooks: [{type,command}]`
+    // wrapper). mergeJson is user-wins on arrays so the scaffold cannot
+    // auto-rewrite — warn loudly so the user fixes it by hand.
+    await maybeWarnLegacySettings(cwd);
+
     // Hand off to the user: print a copy-paste prompt they can paste into
     // a fresh Claude Code session to seed project-specific context above the
     // scaffold marker block. Skipped in CI (--no-prompts) — there is no
@@ -223,5 +230,66 @@ async function maybeWarnStaleChromeDevtools(cwd: string): Promise<void> {
     }
   } catch {
     // No .mcp.json or unreadable — nothing to warn about.
+  }
+}
+
+/**
+ * Detect two legacy `.claude/settings.json` shapes shipped by scaffold v1.0–1.5.0
+ * that current Claude Code no longer accepts, and warn the user. Auto-rewrite is
+ * not possible because `mergeJson` is user-wins on arrays.
+ *
+ * - `permissions.additionalAllowList` is silently ignored by Claude Code; the
+ *   correct key is `permissions.allow`. The user's allow-rules were dead-keys.
+ * - `hooks.SessionStart[*]` must wrap commands in a nested `hooks: [{type,command}]`
+ *   array; the bare `{command}` shape produces an "Expected array, but received
+ *   undefined" parse error popup in Claude Code (≥ late-2025).
+ */
+async function maybeWarnLegacySettings(cwd: string): Promise<void> {
+  try {
+    const settingsPath = path.join(cwd, '.claude', 'settings.json');
+    const txt = await readFile(settingsPath, 'utf8');
+    const obj = JSON.parse(txt) as Record<string, unknown>;
+
+    const warnings: string[] = [];
+
+    const perms = obj.permissions as Record<string, unknown> | undefined;
+    if (perms && typeof perms === 'object' && 'additionalAllowList' in perms) {
+      // Warn even if `allow` is also present — after a v1.5.1 re-run, mergeJson
+      // ADDS `allow` from the new template but KEEPS the user's legacy key
+      // (user-wins on arrays). The legacy key is dead weight; tell the user
+      // to delete it for cleanliness.
+      warnings.push(
+        'permissions.additionalAllowList is a legacy key Claude Code silently ignores. ' +
+        'Move its entries into `permissions.allow` (or delete it if `allow` already mirrors them).',
+      );
+    }
+
+    const hooks = obj.hooks as Record<string, unknown> | undefined;
+    const sessionStart = hooks?.SessionStart;
+    if (Array.isArray(sessionStart)) {
+      const hasBareCommand = sessionStart.some((entry) =>
+        entry && typeof entry === 'object' && !Array.isArray(entry) &&
+        'command' in (entry as Record<string, unknown>) &&
+        !('hooks' in (entry as Record<string, unknown>)),
+      );
+      if (hasBareCommand) {
+        warnings.push(
+          'hooks.SessionStart uses the legacy bare `{command}` shape. ' +
+          'Wrap each entry as `{hooks: [{type: "command", command: "..."}]}` ' +
+          '— current Claude Code rejects the old shape with "Expected array, but received undefined".',
+        );
+      }
+    }
+
+    if (warnings.length > 0) {
+      console.log();
+      console.log('  Warning: .claude/settings.json contains legacy shapes Claude Code no longer accepts:');
+      for (const w of warnings) {
+        console.log(`    - ${w}`);
+      }
+      console.log('  See: https://docs.claude.com/en/docs/claude-code/settings');
+    }
+  } catch {
+    // No .claude/settings.json or unreadable — nothing to warn about.
   }
 }
