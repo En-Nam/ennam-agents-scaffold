@@ -43,12 +43,12 @@ Per `mem:project_ennam_scaffold_mission`, this repo is a **npx CLI scaffolding w
 Salvaged from losers:
 - From A: `CHANGELOG.md` + decision memory call out `[UNVERIFIED]` Tripo bits that stubs prove shape, not semantics
 - From B: maintainer pre-publish gate (combined with C's script)
-- From C (core): `--dry-run` default for Tripo skill; msw HTTP stubs in `tests/integration/`; `scripts/verify-game-unity-bake.ts` maintainer script
+- From C (core): `--dry-run` default for Tripo skill; msw HTTP stubs in `tests/integration/`; `scripts/verify-game-unity-bake.mjs` maintainer script
 
 5 binding implementer objections (from Judge):
 1. `--dry-run` default MUST be enforced inside skill body, not just documented
 2. msw stubs live under `tests/integration/`, never in runtime deps of published template
-3. `scripts/verify-game-unity-bake.ts` excluded from npx artifact (verify `files` field in `packages/cli/package.json` = `["dist", "templates"]` — confirmed; scripts/ at repo root is NOT published)
+3. `scripts/verify-game-unity-bake.mjs` excluded from npx artifact (verify `files` field in `packages/cli/package.json` = `["dist", "templates"]` — confirmed; scripts/ at repo root is NOT published)
 4. Wizard prompt copy must mention Tripo skill defaults to dry-run, so end users discover `--live` flag without reading SKILL.md
 5. `templates/_shared/` protocol files don't need a bump for new agent contracts (no `_shared/AGENTS.md` change, no Session Boot Protocol change)
 
@@ -171,7 +171,7 @@ The skill SKILL.md MUST:
 
 ### Known [UNVERIFIED]
 - Tripo3D balance endpoint URL: previously proposed `/v2/openapi/user/balance` is unverified per pre-publish research; skill reads live OpenAPI schema OR shells out to `tripo3d` Python SDK `get_balance()` to avoid hard-coding
-- Maintainer pre-publish: run `scripts/verify-game-unity-bake.ts` to spot-check CoplayDev `uvx` invocation + Tripo balance handshake before tagging release
+- Maintainer pre-publish: run `scripts/verify-game-unity-bake.mjs` to spot-check CoplayDev `uvx` invocation + Tripo balance handshake before tagging release
 - `perf-budget-check` skill requires Unity Editor + ProfilerRecorder API; ships as advisory (not blocking) in v1.8.0 — gated by `EnnamPerf.cs` editor harness compile
 
 ### Wizard
@@ -191,7 +191,7 @@ The skill SKILL.md MUST:
 
 1. `npm run build` → 0 errors
 2. `npm test` → all green (39+ existing + 3 new = 42+ files)
-3. (Maintainer-only) `node scripts/verify-game-unity-bake.ts` → CoplayDev `uvx` parse OK; Tripo balance handshake OK (requires `TRIPO_API_KEY` env)
+3. (Maintainer-only) `node scripts/verify-game-unity-bake.mjs` → CoplayDev `uvx` parse OK; Tripo balance handshake OK (requires `TRIPO_API_KEY` env)
 4. Dogfood install: `node packages/cli/dist/index.js --profile game-unity --no-prompts` in a tmp dir → 19 files emit; CLAUDE.md has both marker blocks; .mcp.json validates as JSON
 
 User signs off → bump `package.json` version to `1.8.0` → `npm publish` (user-controlled, not this session).

@@ -7,7 +7,7 @@ description: Use when generating a new 3D asset for Unity 2.5D mobile via Tripo3
 
 `--dry-run` mode returns canned fixture responses from `fixtures/tripo-image-to-model-success.json` and does NOT call the live API. This protects against:
 - Accidental burn of paid Tripo credits during exploration
-- The previously-proposed `/v2/openapi/user/balance` endpoint URL being **unverified** at v1.8.0 publish time (per pre-publish research — see `scripts/verify-game-unity-bake.ts`)
+- The previously-proposed `/v2/openapi/user/balance` endpoint URL being **unverified** at v1.8.0 publish time (per pre-publish research — see `scripts/verify-game-unity-bake.mjs`)
 
 Every invocation logs `MODE: dry-run` or `MODE: LIVE (paying Tripo Pro tier)` as the first line. If neither prints, the skill was invoked incorrectly — STOP and re-read this file.
 
@@ -171,7 +171,7 @@ MODE: dry-run
 Before tagging v1.8.0, the scaffold maintainer MUST run:
 
 ```bash
-node scripts/verify-game-unity-bake.ts
+node scripts/verify-game-unity-bake.mjs
 ```
 
 The script (excluded from the published artifact — see `packages/cli/package.json` `files` field) hits the live Tripo API with a `TRIPO_API_KEY` env to capture:

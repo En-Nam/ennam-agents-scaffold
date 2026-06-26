@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 // Lock the shape of templates/game-unity/.mcp.json.partial.hbs against the
 // CoplayDev v9.7.3 README invocation. If CoplayDev changes the uvx command or
 // the env requirement, this snapshot fails — surfacing it for the maintainer
-// to re-run scripts/verify-game-unity-bake.ts before publish.
+// to re-run scripts/verify-game-unity-bake.mjs before publish.
 //
 // Per Judge objection #3 + spec §9: this is a static shape check; the live
 // handshake against a real Unity Editor is the maintainer's pre-publish gate.

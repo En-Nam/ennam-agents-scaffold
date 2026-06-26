@@ -34,7 +34,7 @@
 
 ### Known [UNVERIFIED] — maintainer pre-publish gate
 
-The following items were flagged unverified by pre-publish research (see `docs/superpowers/specs/2026-06-26-game-unity-profile-design.md` §9). The maintainer MUST run `scripts/verify-game-unity-bake.ts` before `npm publish` to spot-check them against the live world:
+The following items were flagged unverified by pre-publish research (see `docs/superpowers/specs/2026-06-26-game-unity-profile-design.md` §9). The maintainer MUST run `scripts/verify-game-unity-bake.mjs` before `npm publish` to spot-check them against the live world:
 
 - Tripo3D balance endpoint URL — the previously-proposed `/v2/openapi/user/balance` was flagged invented; the skill instructs shelling out to the Python SDK `get_balance()` or fetching live OpenAPI schema
 - CoplayDev `coplay-mcp-server` PyPI package presence + exact `uvx --from coplay-mcp-server mcp-for-unity --transport stdio` invocation

@@ -9,7 +9,7 @@ metadata:
 
 ## Decision
 
-Ship the full `game-unity` profile (3 agents + 3 commands + 4 skills + GDD/art-bible/perf-budget templates + Editor-templates + LFS rules + CLI integration + 3 new tests) in one v1.8.0 release. Wrap the unverified surface (Tripo3D balance endpoint URL, CoplayDev `uvx` invocation, ProfilerRecorder editor harness) in: (a) **`--dry-run` default for `asset-pipeline-tripo3d` skill** enforced inside the skill body (not just documented), (b) **content-assertion tests** in `tests/unit/game-unity-skill-discipline.test.ts` that grep the literal enforcement language so a future edit dropping the dry-run gate fails CI, (c) **maintainer pre-publish script** `scripts/verify-game-unity-bake.ts` (excluded from npm artifact via `packages/cli/package.json` `files = ["dist", "templates"]`).
+Ship the full `game-unity` profile (3 agents + 3 commands + 4 skills + GDD/art-bible/perf-budget templates + Editor-templates + LFS rules + CLI integration + 3 new tests) in one v1.8.0 release. Wrap the unverified surface (Tripo3D balance endpoint URL, CoplayDev `uvx` invocation, ProfilerRecorder editor harness) in: (a) **`--dry-run` default for `asset-pipeline-tripo3d` skill** enforced inside the skill body (not just documented), (b) **content-assertion tests** in `tests/unit/game-unity-skill-discipline.test.ts` that grep the literal enforcement language so a future edit dropping the dry-run gate fails CI, (c) **maintainer pre-publish script** `scripts/verify-game-unity-bake.mjs` (excluded from npm artifact via `packages/cli/package.json` `files = ["dist", "templates"]`).
 
 ## Why this option
 
@@ -19,7 +19,7 @@ Ship the full `game-unity` profile (3 agents + 3 commands + 4 skills + GDD/art-b
 - **B — Big-bang as designed** (ship everything; mark Tripo unverified in inline `[UNVERIFIED]` text only): matches user intent but `[UNVERIFIED]` text in a SKILL.md does not prevent a user's first run from making live Tripo API calls — soft safety only. Loses on reversibility + test surface.
 - **C — Big-bang + Safety Harness (WINNER)**: ships full scope per user intent AND closes the Tripo-billing-risk hole at the code level (skill enforces dry-run by default) AND at the CI level (content-assertion tests). Cost: ~6-8 extra agent-hours, ~3 extra unit tests. Acceptable trade per Rule 9 (Tests verify intent) + Rule 12 (Fail Loud).
 
-Salvages from losers: A's `[UNVERIFIED]` documentation discipline (kept in CHANGELOG.md + this decision memory + SKILL.md headers); B's maintainer pre-publish gate (combined into `scripts/verify-game-unity-bake.ts`).
+Salvages from losers: A's `[UNVERIFIED]` documentation discipline (kept in CHANGELOG.md + this decision memory + SKILL.md headers); B's maintainer pre-publish gate (combined into `scripts/verify-game-unity-bake.mjs`).
 
 ## Critical context (binding on implementer)
 
@@ -27,7 +27,7 @@ Salvages from losers: A's `[UNVERIFIED]` documentation discipline (kept in CHANG
 
 1. ✅ `--dry-run` default enforced in `asset-pipeline-tripo3d/SKILL.md` body (opens with bold declaration; every procedure step branches on `live_mode`; every invocation prints `MODE: dry-run` or `MODE: LIVE`)
 2. ✅ Test fixtures in `tests/unit/` + `tests/integration/profiles/game-unity.test.ts`; no msw or runtime HTTP stub in published template (the skill ships as markdown, not executable JS — content-assertion is the right altitude)
-3. ✅ `scripts/verify-game-unity-bake.ts` lives at REPO ROOT, NOT inside `packages/cli/` — confirmed excluded by `packages/cli/package.json` `files = ["dist", "templates"]`. Script's Check 5 self-verifies this invariant.
+3. ✅ `scripts/verify-game-unity-bake.mjs` lives at REPO ROOT, NOT inside `packages/cli/` — confirmed excluded by `packages/cli/package.json` `files = ["dist", "templates"]`. Script's Check 5 self-verifies this invariant.
 4. ✅ Wizard `printNextSteps` mentions Tripo dry-run default explicitly (step #7 of game-unity steps)
 5. ✅ `templates/_shared/AGENTS.md` + Session Boot Protocol UNCHANGED (only `.gitignore.append` + new `.gitattributes.append` in `_shared/`)
 
@@ -47,7 +47,7 @@ Per `mem:project_ennam_scaffold_mission`, this repo = npx CLI wizard. The game-u
 
 ## CRITICAL UNVERIFIED items (maintainer pre-publish gate blocks publish)
 
-1. **Tripo3D balance endpoint URL** — previously-proposed `/v2/openapi/user/balance` was flagged invented. Skill instructs shelling out to Python SDK `get_balance()` or reading live OpenAPI schema. Verify via `scripts/verify-game-unity-bake.ts` Check 4 (requires TRIPO_API_KEY env).
+1. **Tripo3D balance endpoint URL** — previously-proposed `/v2/openapi/user/balance` was flagged invented. Skill instructs shelling out to Python SDK `get_balance()` or reading live OpenAPI schema. Verify via `scripts/verify-game-unity-bake.mjs` Check 4 (requires TRIPO_API_KEY env).
 2. **CoplayDev `coplay-mcp-server` PyPI package + exact `uvx` invocation** — Verify via Check 2 (PyPI 404 = release-blocker).
 3. **`perf-budget-check` ProfilerRecorder API behavior in batchmode** — `EnnamPerf.cs` template uses `Thread.Sleep` placeholder; production users should replace with EditorCoroutines. Documented in template comment + Editor-templates/README.md.
 
@@ -60,7 +60,7 @@ If `verify-game-unity-bake.ts` reports failure, **do not publish** — update `t
 - 1 modified under `templates/_shared/` (`.gitignore.append` appends `.ennam/`)
 - 3 modified under `packages/cli/src/` (`profiles.ts`, `wizard.ts`, `ux.ts`)
 - 5 modified under `tests/` (2 modified, 3 new — `game-unity-mcp-shape.test.ts`, `game-unity-skill-discipline.test.ts`, `profiles/game-unity.test.ts`)
-- 1 new at repo root (`scripts/verify-game-unity-bake.ts` — maintainer-only)
+- 1 new at repo root (`scripts/verify-game-unity-bake.mjs` — maintainer-only)
 - 1 new at repo root (`CHANGELOG.md` — first changelog file, captures v1.8.0)
 - 1 new under `docs/superpowers/specs/` (`2026-06-26-game-unity-profile-design.md`)
 
@@ -73,7 +73,7 @@ If `verify-game-unity-bake.ts` reports failure, **do not publish** — update `t
 
 ## What revisits this decision
 
-- First user report of a Tripo skill `--live` invocation failing because the procedure references a Tripo API surface change → re-run `scripts/verify-game-unity-bake.ts`, update the skill
+- First user report of a Tripo skill `--live` invocation failing because the procedure references a Tripo API surface change → re-run `scripts/verify-game-unity-bake.mjs`, update the skill
 - CoplayDev publishes v10.x with breaking changes → `tests/unit/game-unity-mcp-shape.test.ts` snapshot fails → update partial + bump pin
 - Unity official `com.unity.ai.assistant` exits `-pre` → activate the `--unity-mcp-flavor official` TODO block
 - Stable, tokenless Sprite AI MCP emerges → revisit `mem:backlog/sprite-mcp-revisit-v1.8.x`
