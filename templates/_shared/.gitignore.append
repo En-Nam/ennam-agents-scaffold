@@ -10,3 +10,6 @@
 
 # Checkpoints are committed by default. Uncomment to ignore:
 # .serena/checkpoint/
+
+# Ennam runtime caches (game-unity profile: asset-pipeline job persistence, perf-budget results)
+.ennam/

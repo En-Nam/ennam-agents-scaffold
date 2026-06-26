@@ -1,0 +1,98 @@
+## Role: Unity 2.5D mobile game-dev (URP)
+
+You operate inside an existing Unity project. The scaffold has emitted `.claude/agents/`, `.claude/skills/`, GDD.md, art-bible.md, perf-budget.md, and Editor-templates around your Unity codebase. You do NOT bootstrap Unity — assume `Assets/`, `Packages/`, `ProjectSettings/` already exist.
+
+### Stack
+
+| Layer | Tech |
+|---|---|
+| Engine | Unity 6.5 (primary); supported: 6000.0, 2022.3 LTS, 2021.3 LTS (via `--legacy` mode) |
+| Render | URP 17+ (mobile renderer asset) |
+| Camera | Cinemachine 3.x virtual camera, lock-Z via Follow Offset + damping |
+| Editor MCP | `CoplayDev/unity-mcp` v9.7.3 (UPM `com.coplaydev.unity-mcp` + `uvx coplay-mcp-server`) |
+| 3D asset gen | Tripo3D REST (Pro tier $13.93/mo annual minimum — Free = CC BY 4.0 NON-COMMERCIAL); Meshy `--provider meshy` opt-in |
+| Build | Unity CLI batchmode + EditorBuildSettings + ADB |
+| VCS | Git + Git LFS (rules in `.gitattributes`) |
+| Language | C# strict — .NET 4.x Equivalent profile |
+
+### Conventions (10 rules — enforced via `unity-2.5d-conventions` skill)
+
+1. **Camera lock-Z** — Cinemachine virtual cam + Body Follow Offset Z fixed + damping. **No** `transform.position.z = const` patches in code (opt-in lint allows cutscene/shake exceptions via `[CameraZAllowed]` attribute).
+2. **Sorting** — SortingGroup + Sorting Layer + Order in Layer. 2D Renderer Transparency Sort Mode = **Custom Axis (0, 1, 0)** for Y-depth in 2.5D. Sorting Layer + Order in Layer take priority over Custom Axis (they coexist, not conflict).
+3. **URP mobile asset** — HDR OFF · MSAA ≤ 2x (2x is a good balance on tile-based mobile GPUs, NOT "prefer disabled") · PostFX disabled on Universal Renderer · Depth Priming Disabled · Soft Shadows OFF · Main Light Shadows hard-only / 1 cascade / 1024 atlas (or Disabled) · Additional Lights Per-Vertex or Disabled.
+4. **Sprite import (Android budget)** — ASTC 6x6 gameplay / ASTC 8x8 backgrounds (ETC2 RGBA8 fallback override) · Max Size 1024 gameplay / 2048 full-screen only · Mipmaps OFF for UI/HUD/icons (ON only for variable-scale sprites) · Read/Write Enabled OFF.
+5. **Sprite Atlas** — 1 atlas per scene/feature · Max Texture Size 2048 mobile (never 4096) · Padding ≥ 4 · Tight Packing ON · ship a Variant Atlas at scale 0.5 for low-RAM devices · refuse atlases whose uncompressed footprint exceeds ~16 MB (`N*N*4` bytes; configurable in `docs/perf-budget.md`).
+6. **Batching** — Every SpriteRenderer rendered in the same frame must share material + atlas + shader so SRP Batcher / dynamic batching collapses draw calls. Lint fails prefabs with unique materials or unpacked sprites.
+7. **Pivot / PPU** — Declare a project-wide Pixels-Per-Unit constant + a named pivot (Bottom for ground-aligned 2.5D actors). No Custom pivots with fractional coords — Y-sort math must stay deterministic.
+8. **Perf budget (advisory)** — Mid-tier Android 60 fps: ≤ 100 draw calls/frame · ≤ 100k visible triangles. SetPass ≤ 50 and 200–300 MB resident texture memory are community-aggregated rules of thumb (low-medium confidence) — configurable advisory defaults in `docs/perf-budget.md`, not hard fails.
+9. **Profiler-driven budget checks** require a playmode editor harness (`-runTests -batchmode -testPlatform PlayMode`) — they CANNOT run as a static lint. The `perf-budget-check` skill ships `EnnamPerf.cs` harness; treat as advisory if Unity Editor unavailable.
+10. **Cinemachine version detection** — Read resolved version from `Packages/packages-lock.json` (NOT `manifest.json` — manifest is requested, lock is resolved). Default target: CM 3.x. The `--legacy` mode swaps field-name maps for Unity 2022 LTS / URP 14 / Cinemachine 2.x.
+
+### Sprite AI (not baked — pointer only)
+
+For AI sprite generation, evaluate one of the following based on your token/cost preference and add to `.mcp.json` yourself — none is baked in v1.8.0:
+
+- **`pixelforge-mcp`** — MIT, `npx pixelforge-mcp@latest`, requires a Google Gemini API key, has `forge_animation` sprite-sheet tool. Closer to scaffold's tokenless/OSS convention.
+- **`spritecook-mcp`** — `npx spritecook-mcp setup`, free tier (40 credits / 30 days, paid SaaS thereafter), purpose-built for game sprites with transparent-PNG + sprite-sheet export. More polished but proprietary backend, single-maintainer.
+
+This default will be revisited in v1.8.x once a stable, tokenless Sprite AI MCP exists.
+
+### Common commands
+
+```bash
+# Prereq check (post-install hook prints if missing)
+command -v uvx >/dev/null || echo "[ennam] Install uv: https://docs.astral.sh/uv/getting-started/installation/"
+command -v adb  >/dev/null || echo "[ennam] Install Android Platform Tools"
+
+# Unity batchmode (build + test, headless)
+"$UNITY" -batchmode -nographics -quit -projectPath . -executeMethod Build.AndroidDev
+"$UNITY" -batchmode -runTests -testPlatform PlayMode -testResults TestResults.xml
+
+# ADB deploy + logcat
+adb install -r build/game.apk
+adb logcat -s Unity:V
+
+# LFS sanity
+git lfs ls-files | head -20
+git lfs status
+
+# Asset pipeline (Tripo3D — dry-run by default, --live opts in to real API)
+# See .claude/skills/asset-pipeline-tripo3d/SKILL.md
+```
+
+<!-- BEGIN:game-unity-workflow -->
+### Workflow (8 phases — game-specific extension of the 7-phase shared workflow)
+
+| # | Phase | Skill / Command | Skip if | Output |
+|---|---|---|---|---|
+| 1 | Understand | `superpowers:brainstorming` | bug with clear repro | GDD-aligned spec in `docs/superpowers/specs/` |
+| 2 | Plan | `superpowers:writing-plans` | single-file C# fix | Implementation plan + success criteria |
+| 3 | Isolate | `superpowers:using-git-worktrees` | hotfix | Worktree (Unity `Library/` shared via junction/symlink — Unity does not handle two checkouts of `Library/` cleanly) |
+| 4 | Implement (closed-loop) | `superpowers:test-driven-development` + `superpowers:executing-plans` | trivial | **Loop: edit script → Unity MCP `compile_scripts` → `read_console` → fix → repeat until clean.** No commit while console has error-level messages. |
+| 5 | Verify (auto) | `superpowers:verification-before-completion` | NEVER | Compile clean + console no error + PlayMode tests pass + `unity-2.5d-conventions` lint green + `perf-budget-check` advisory |
+| 6 | **Content Gates (HUMAN)** | `/unity-content-gate` command | NEVER for feature work | 1 PR comment with 4 checkboxes: **Design** (GDD.md compliance) · **Art** (art-bible.md compliance) · **Feel** (manual playtest) · **Perf** (budget §3 #8 met). Each gate signed by a human reviewer before Phase 7. |
+| 7 | Review | `superpowers:requesting-code-review` | docs-only | Reviewer agent feedback addressed |
+| 8 | Complete | `superpowers:finishing-a-development-branch` | — | PR merged or completion option presented |
+
+**Phase 6 gate template** (paste into PR body):
+
+```markdown
+## Content Gates (Phase 6)
+- [ ] **Design** — change aligns with GDD.md sections cited
+- [ ] **Art** — assets conform to art-bible.md (style, palette, forbidden list)
+- [ ] **Feel** — manual playtest passed (link to recording or notes)
+- [ ] **Perf** — `perf-budget-check` run; metrics within budget (`docs/perf-budget.md`)
+```
+<!-- END:game-unity-workflow -->
+
+<!-- BEGIN:game-unity-agent-rules -->
+### Hard constraints (do not bypass)
+
+- **Lock-Z** — never modify Camera `transform.position.z` in runtime code. Cinemachine Follow Offset + damping is the single source of truth (`[CameraZAllowed]` attribute opts in cutscene/shake controllers).
+- **No free-3D gameplay logic** — gameplay code is 2D-only (Vector2, no Quaternion math beyond the camera rig).
+- **Closed-loop discipline** — implement → compile via Unity MCP → read console → fix. **Do not commit while the console has error-level messages.**
+- **Disable Domain Reload** — Project Settings → Editor → Enter Play Mode Settings → uncheck "Reload Domain". Keeps the Unity MCP bridge connection alive across Play Mode toggles. The `unity-mcp-setup` skill's `EnnamPreflight.cs` template asserts this on every Editor open.
+- **Cannot bypass Phase 6 Content Gates** — the 4 human sign-off checkboxes must be ticked in the PR body before Phase 7 begins. An agent claiming "tests pass therefore done" without gates ticked is a Rule 12 violation (Fail Loud).
+- **LFS check** — any binary asset > 100KB committed outside Git LFS → fail loud. The pre-commit hook (`templates/_shared/.claude/hooks`) detects this; the agent self-checks before staging.
+- **No `transform.position.z =` in MonoBehaviours tagged Camera** — `unity-2.5d-conventions` skill greps for this on every Phase 5 verify.
+<!-- END:game-unity-agent-rules -->

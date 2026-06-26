@@ -30,6 +30,7 @@ export function printNextSteps(profile: ProfileDef, result: ExecuteResult, hasGi
   if (profile.extraMcp.includes('figma')) envVars.push('FIGMA_TOKEN');
   if (profile.extraMcp.includes('github')) envVars.push('GITHUB_TOKEN');
   if (profile.extraMcp.includes('postgres')) envVars.push('PG_CONN_STR');
+  if (profile.name === 'game-unity') envVars.push('TRIPO_API_KEY');
   const steps: string[] = [];
   if (hasGit) {
     steps.push('Review changes: git diff');
@@ -37,6 +38,20 @@ export function printNextSteps(profile: ProfileDef, result: ExecuteResult, hasGi
     steps.push('Inspect changes in your editor (no .git detected — run `git init` first if you want diff/version tracking)');
   }
   steps.push(`Set env vars in .env.local: ${envVars.join(', ')}`);
+
+  // Profile-specific prereq + post-install reminders (game-unity has the heaviest setup —
+  // two extra runtimes (Python+uv for Unity MCP, ADB for build/deploy) plus a Tripo3D
+  // commercial-tier license gate. Surface loudly per Rule 12 — silent default = bad UX.
+  if (profile.name === 'game-unity') {
+    steps.push('Verify host prereqs: `uvx --version` (Python >= 3.11) and `adb --version` — install uv from https://docs.astral.sh/uv/getting-started/installation/ if missing');
+    steps.push('Install CoplayDev Unity MCP in Unity Editor: Window > Package Manager > + > Add package from git URL > https://github.com/CoplayDev/unity-mcp.git?path=/MCPForUnity#v9.7.3');
+    steps.push('Disable Domain Reload: Edit > Project Settings > Editor > Enter Play Mode Settings > UNCHECK Reload Domain (required for Unity MCP bridge stability)');
+    steps.push('Copy Editor templates into your Unity project: `cp Editor-templates/EnnamPreflight.cs Editor-templates/EnnamPerf.cs Assets/Editor/`');
+    steps.push('Initialize Git LFS: `git lfs install && git add .gitattributes && git commit -m "Add Git LFS rules"`');
+    steps.push('Fill in GDD.md + art-bible.md + docs/perf-budget.md (agents will STOP at placeholders per Rule 12)');
+    steps.push('Tripo3D asset-pipeline skill DEFAULTS to --dry-run (no API calls). To make real Tripo API calls: pass --live and confirm Pro tier ($13.93/mo annual minimum — Free tier is CC BY 4.0 NON-COMMERCIAL).');
+  }
+
   steps.push('Start Claude Code: claude');
   steps.push('Inside Claude: accept the Superpowers plugin trust prompt (provides the superpowers:* workflow skills referenced by CLAUDE.md). Headless/CI sessions do not auto-install — run `/plugin install superpowers@claude-plugins-official` once. Requires Claude Code >= 2.1.');
   steps.push('Inside Claude: run /boot');

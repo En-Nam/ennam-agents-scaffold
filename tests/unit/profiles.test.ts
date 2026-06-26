@@ -10,6 +10,7 @@ const ALL_PROFILES = [
   'dotnet-mvc',
   'express',
   'flutter',
+  'game-unity',
   'go',
   'hr',
   'local-root',
@@ -46,5 +47,9 @@ describe('profiles', () => {
     for (const name of ['devops-aws', 'devops-azure', 'devops-gcp', 'devops-docker']) {
       expect(getProfile(name).extraMcp).toContain('github');
     }
+  });
+
+  it('game-unity does NOT declare extraMcp from the shared catalog (Unity MCP comes via own partial)', () => {
+    expect(getProfile('game-unity').extraMcp).toEqual([]);
   });
 });

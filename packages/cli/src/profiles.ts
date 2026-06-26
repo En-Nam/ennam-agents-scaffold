@@ -107,6 +107,14 @@ const REGISTRY: Record<string, ProfileDef> = {
     templateDir: path.join(TEMPLATES, 'local-root'),
     extraMcp: [],
   },
+  'game-unity': {
+    name: 'game-unity',
+    description: 'Game-Dev — Unity 6.x + URP mobile (2.5D); CoplayDev Unity MCP + Tripo3D asset gen (dry-run default) + LFS',
+    templateDir: path.join(TEMPLATES, 'game-unity'),
+    // Unity MCP is wired via this profile's own .mcp.json.partial.hbs (CoplayDev/unity-mcp).
+    // extraMcp is reserved for _shared MCP catalog entries — Unity is profile-specific.
+    extraMcp: [],
+  },
 };
 
 export function getProfile(name: string): ProfileDef {

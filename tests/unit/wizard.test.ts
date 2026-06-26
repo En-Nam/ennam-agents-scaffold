@@ -73,6 +73,16 @@ describe('wizard resolveProfile matrix', () => {
     expect(resolveProfile('DevOps', 'Existing repository', undefined, 'Docker')).toBe('devops-docker');
   });
 
+  it('Game-Dev + Unity 2.5D Mobile → game-unity', () => {
+    expect(
+      resolveProfile('Game-Dev', 'Existing repository', undefined, undefined, 'Unity 2.5D Mobile')
+    ).toBe('game-unity');
+  });
+
+  it('Game-Dev without gameStack → throws', () => {
+    expect(() => resolveProfile('Game-Dev', 'Existing repository')).toThrow(/gameStack is required/i);
+  });
+
   it('every resolved name is a registered profile', () => {
     // Lock the wizard's output to the live profile registry: if anyone renames
     // a profile in profiles.ts the wizard must surface that mismatch.
@@ -94,6 +104,7 @@ describe('wizard resolveProfile matrix', () => {
       resolveProfile('DevOps', 'Existing repository', undefined, 'Azure'),
       resolveProfile('DevOps', 'Existing repository', undefined, 'Google Cloud'),
       resolveProfile('DevOps', 'Existing repository', undefined, 'Docker'),
+      resolveProfile('Game-Dev', 'Existing repository', undefined, undefined, 'Unity 2.5D Mobile'),
     ];
     for (const name of resolved) {
       expect(() => getProfile(name)).not.toThrow();

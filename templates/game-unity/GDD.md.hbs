@@ -1,0 +1,63 @@
+# GDD — {{projectName}}
+
+> Game Design Document. Source of truth for **gameplay** decisions. Reviewed at Phase 6 Content Gate **Design**.
+
+## 1. Pillars
+
+> 3-5 core promises the game must keep. Every feature must serve at least one. If it serves none, cut the feature.
+
+- _Pillar 1: e.g., "Every input feels immediate"_
+- _Pillar 2:_
+- _Pillar 3:_
+
+## 2. Mechanics
+
+> Verbs the player performs. Each verb gets a sub-section with input → output + edge cases.
+
+### 2.1 [Verb name]
+
+- **Input**:
+- **Output**:
+- **Cooldown / cost**:
+- **Edge cases**:
+- **Linked pillar(s)**:
+
+## 3. Levels / Content
+
+> What does the player traverse? List levels/zones/encounters with a one-line theme + win/lose condition.
+
+| Level | Theme | Win | Lose |
+|---|---|---|---|
+| 01 | _e.g., "Tutorial alley"_ | Reach the door | HP 0 |
+| 02 | | | |
+
+## 4. UX flow
+
+> Screens + transitions. Boot → menu → settings → game → pause → result.
+
+```mermaid
+flowchart LR
+    Boot --> Menu
+    Menu --> Settings
+    Menu --> Game
+    Game --> Pause
+    Game --> Result
+    Result --> Menu
+```
+
+## 5. Win / Lose conditions (system-level)
+
+- **Win**:
+- **Lose**:
+- **Draw / tie** (if applicable):
+
+## 6. Out of scope (v1.0)
+
+> What you are NOT building. Equal in importance to what you ARE building — defends scope against scope-creep at gate time.
+
+- _e.g., Multiplayer_
+- _e.g., Tutorial dialogue VO_
+
+---
+
+> **Filling this in is required before Phase 1 (Understand) on any feature.** An agent reading "_e.g., …_" placeholders should STOP and ask for content (Rule 12 fail loud).

@@ -1,0 +1,60 @@
+# Art Bible — {{projectName}}
+
+> Visual style guide. Source of truth for **art** decisions. Reviewed at Phase 6 Content Gate **Art**.
+
+## 1. Style
+
+> One sentence + 3-5 reference images. The reference images live in `Assets/Art/_References/` (NOT shipped to runtime).
+
+- **Sentence**: _e.g., "Hand-painted 2.5D platformer with bold silhouettes and 4-color shading per material"_
+- **References**:
+  - `Assets/Art/_References/ref-01.png`
+  - `Assets/Art/_References/ref-02.png`
+
+## 2. Palette
+
+> Hex codes + named roles. Use these in Shader Graph constants and ScriptableObjects — do NOT hard-code in C#.
+
+| Role | Hex | Hex (alt) | Use |
+|---|---|---|---|
+| Primary | `#E63946` | | Player, key interactables |
+| Secondary | `#457B9D` | | Background depth layer 1 |
+| Background | `#1D3557` | | Background depth layer 2 (Y < 0) |
+| UI accent | `#F1FAEE` | | HUD, menu |
+| Negative space | `#000000` | | Vignette, fade |
+
+## 3. Pivot / scale conventions
+
+- **Pixels-Per-Unit (PPU)**: `100` (must match `unity-2.5d-conventions` rule #7)
+- **Sprite pivot**: Bottom for ground-aligned actors; Center for projectiles/icons
+- **Reference unit**: 1 game-unit = 1 meter in world; 1 meter = 100 px at PPU 100
+
+## 4. Forbidden list
+
+> Things the art pipeline must refuse, even if the user asks. Saves explanation cycles. The `asset-pipeline` agent checks this list BEFORE every generation request.
+
+- Hyper-realistic textures (clashes with hand-painted style)
+- Per-pixel normal maps (mobile perf)
+- More than 4 colors per material (palette discipline)
+- Outlines drawn in sprite (use shader-based outline if needed)
+- _add your own:_
+
+## 5. Asset categories + budget
+
+| Category | Polycount budget | Texture budget | Notes |
+|---|---|---|---|
+| Hero (player) | 8000 tris | 1024 ASTC 6x6 + 1024 normal | LOD0 only — no LOD swap on hero |
+| NPC | 4000 tris (LOD0) / 1500 (LOD1) | 512 ASTC 6x6 | |
+| Environment prop | 1500 tris | 512 ASTC 8x8 | shared atlas per zone |
+| VFX | sprite sheet 1024x1024 | ETC2 RGBA8 | no PostFX-dependent effects |
+| UI | vector or sprite | 256-1024 ASTC 6x6 | mipmaps OFF |
+
+## 6. Out of scope (v1.0)
+
+- Per-frame animation > 24 fps (use motion blur shader cheat)
+- Procedural texture generation in-engine
+- _add your own:_
+
+---
+
+> **Filling this in is required before invoking `asset-pipeline` agent.** The agent will STOP at section 4 (Forbidden) if it sees the placeholder bullet (Rule 12).

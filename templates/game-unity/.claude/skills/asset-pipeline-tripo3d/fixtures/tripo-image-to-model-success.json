@@ -1,0 +1,27 @@
+{
+  "code": 0,
+  "data": {
+    "task_id": "00000000-0000-0000-0000-fixture00001",
+    "status": "Success",
+    "type": "image_to_model",
+    "input": {
+      "image": "https://example.invalid/fixture-input.png",
+      "model_version": "v3.1",
+      "face_limit": 8000,
+      "texture": true,
+      "pbr": true,
+      "auto_scale": true,
+      "quad": false
+    },
+    "output": {
+      "model": "https://example.invalid/fixture-model.glb",
+      "pbr_model": "https://example.invalid/fixture-pbr.glb",
+      "base_model": "https://example.invalid/fixture-base.glb",
+      "rendered_image": "https://example.invalid/fixture-render.png"
+    },
+    "progress": 100,
+    "create_time": 1750000000,
+    "running_left_time": 0
+  },
+  "_fixture_note": "Canned response used by asset-pipeline-tripo3d skill in --dry-run mode. URLs are example.invalid and will NEVER resolve. To use real Tripo API: pass --live to the skill and confirm Pro tier active."
+}

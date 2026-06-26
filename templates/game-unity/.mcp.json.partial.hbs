@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "unity": {
+      "command": "uvx",
+      "args": [
+        "--python", ">=3.11",
+        "--from", "coplay-mcp-server",
+        "mcp-for-unity",
+        "--transport", "stdio"
+      ],
+      "env": {
+        "MCP_TOOL_TIMEOUT": "720000"
+      }
+    }
+  }
+}

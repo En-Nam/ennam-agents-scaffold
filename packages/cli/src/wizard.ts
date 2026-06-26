@@ -1,12 +1,13 @@
 import { select, isCancel, cancel, log } from '@clack/prompts';
 import path from 'node:path';
 
-// Wizard matrix: (role × projectType × stack | cloud) → profile name.
+// Wizard matrix: (role × projectType × stack | cloud | gameStack) → profile name.
 // Exported as a pure function for unit testing; runWizard wraps it with prompts.
-export type Role = 'Developer' | 'QA-QC' | 'BA' | 'HR' | 'DevOps';
+export type Role = 'Developer' | 'QA-QC' | 'BA' | 'HR' | 'DevOps' | 'Game-Dev';
 export type ProjectType = 'Local-root' | 'Existing repository';
 export type Stack = 'Next.js' | 'React' | 'React Native' | 'Flutter' | 'Python' | 'Go' | '.NET MVC' | 'Express.js';
 export type Cloud = 'AWS' | 'Azure' | 'Google Cloud' | 'Docker';
+export type GameStack = 'Unity 2.5D Mobile';
 
 const STACK_TO_PROFILE: Record<Stack, string> = {
   'Next.js': 'next',
@@ -26,11 +27,16 @@ const CLOUD_TO_PROFILE: Record<Cloud, string> = {
   'Docker': 'devops-docker',
 };
 
+const GAME_STACK_TO_PROFILE: Record<GameStack, string> = {
+  'Unity 2.5D Mobile': 'game-unity',
+};
+
 export function resolveProfile(
   role: Role,
   projectType: ProjectType,
   stack?: Stack,
   cloud?: Cloud,
+  gameStack?: GameStack,
 ): string {
   if (role === 'QA-QC') return 'qa';
   if (role === 'BA') return 'ba';
@@ -42,6 +48,16 @@ export function resolveProfile(
     const name = CLOUD_TO_PROFILE[cloud];
     if (!name) {
       throw new Error(`resolveProfile: unknown cloud "${cloud}" for DevOps role`);
+    }
+    return name;
+  }
+  if (role === 'Game-Dev') {
+    if (!gameStack) {
+      throw new Error(`resolveProfile: gameStack is required for Game-Dev role; got (${role}, ${projectType}, gameStack=<none>)`);
+    }
+    const name = GAME_STACK_TO_PROFILE[gameStack];
+    if (!name) {
+      throw new Error(`resolveProfile: unknown gameStack "${gameStack}" for Game-Dev role`);
     }
     return name;
   }
@@ -58,7 +74,7 @@ export function resolveProfile(
       return name;
     }
   }
-  throw new Error(`resolveProfile: unknown combination (${role}, ${projectType}, stack=${stack ?? '<none>'}, cloud=${cloud ?? '<none>'})`);
+  throw new Error(`resolveProfile: unknown combination (${role}, ${projectType}, stack=${stack ?? '<none>'}, cloud=${cloud ?? '<none>'}, gameStack=${gameStack ?? '<none>'})`);
 }
 
 export async function runWizard(cwd: string = process.cwd()): Promise<string> {
@@ -79,10 +95,24 @@ export async function runWizard(cwd: string = process.cwd()): Promise<string> {
       { value: 'BA', label: 'Business Analyst' },
       { value: 'HR', label: 'HR' },
       { value: 'DevOps', label: 'DevOps' },
+      { value: 'Game-Dev', label: 'Game-Dev (Unity)' },
     ],
     initialValue: 'Developer',
   });
   if (isCancel(role)) { cancel('Aborted.'); process.exit(1); }
+
+  // Game-Dev branches on gameStack, not projectType or cloud.
+  if (role === 'Game-Dev') {
+    const gameStack = await select<GameStack>({
+      message: 'Which game engine + stack?',
+      options: [
+        { value: 'Unity 2.5D Mobile', label: 'Unity 2.5D mobile (URP — CoplayDev MCP + Tripo3D dry-run default)' },
+      ],
+      initialValue: 'Unity 2.5D Mobile',
+    });
+    if (isCancel(gameStack)) { cancel('Aborted.'); process.exit(1); }
+    return resolveProfile(role, 'Existing repository', undefined, undefined, gameStack);
+  }
 
   // DevOps branches on cloud, not projectType.
   if (role === 'DevOps') {
