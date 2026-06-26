@@ -94,8 +94,8 @@ describe('install next profile into fixture', () => {
     const mergedSettings = JSON.parse(await readFile(path.join(cwd, '.claude', 'settings.json'), 'utf8'));
     // User's outputStyle preserved (user wins)
     expect(mergedSettings.outputStyle).toBe('custom');
-    // Scaffold adds other keys
-    expect(mergedSettings).toHaveProperty('model');
+    // Scaffold adds other keys (model is intentionally NOT one of them — see issue #3)
+    expect(mergedSettings).toHaveProperty('enabledPlugins');
     expect(mergedSettings).toHaveProperty('permissions');
 
     // Other files still installed

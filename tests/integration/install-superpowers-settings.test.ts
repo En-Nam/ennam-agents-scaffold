@@ -63,6 +63,22 @@ describe('Superpowers plugin wiring in .claude/settings.json', () => {
     expect(merged.enabledPlugins['superpowers@claude-plugins-official']).toBe(true);  // scaffold entry added
   }, 60_000);
 
+  it('fresh install does NOT introduce a hardcoded `model` field (regression: issue #3)', async () => {
+    // Issue #3: hard-coding `"model": "claude-opus-4-7"` in the template polluted
+    // every project's `.claude/settings.json` — users on the global default got
+    // pinned to opus-4-7, and `mergeJson` (user-wins on scalars) only protected
+    // users who had ALREADY set their own value. Let Claude Code's own
+    // resolution chain (global > project) decide; the scaffold must not opt in.
+    const { path: cwd } = await tmpDir({ unsafeCleanup: true });
+    await execa('git', ['init', '-q'], { cwd });
+
+    const { exitCode } = await execa('node', [CLI_ENTRY, 'next', '--merge-strategy=overwrite', '--no-prompts'], { cwd });
+    expect(exitCode).toBe(0);
+
+    const settings = JSON.parse(await readFile(path.join(cwd, '.claude', 'settings.json'), 'utf8'));
+    expect(settings.model).toBeUndefined();
+  }, 60_000);
+
   it('respects an explicit user opt-out (enabledPlugins[superpowers] = false survives)', async () => {
     const { path: cwd } = await tmpDir({ unsafeCleanup: true });
     await execa('git', ['init', '-q'], { cwd });
