@@ -45,11 +45,11 @@ Per `mem:project_ennam_scaffold_mission`, this repo = npx CLI wizard. The game-u
 | Workflow | 8-phase (extends shared 7-phase with new Phase 6 Content Gates) | User Q3 chose "tách hẳn 8-phase". Phase 6 = 1 PR comment with 4 checkboxes (Design / Art / Feel / Perf — all human sign-off). Encoded in `CLAUDE.md.partial.hbs` marker block + `/unity-content-gate` command. |
 | Camera + Sorting + URP + Atlas + Batching + Pivot/PPU + Perf budget + Cinemachine version | 10 rules in `unity-2.5d-conventions/SKILL.md` | Aggregated from Unity 6 docs + Android URP docs + GDC talks; verifier downgraded confidence on SetPass≤50 and 200-300 MB texture budget (community-aggregated, not Unity-published) — kept as configurable advisory defaults in `docs/perf-budget.md`. |
 
-## CRITICAL UNVERIFIED items (maintainer pre-publish gate blocks publish)
+## Pre-publish verification — RESOLVED at v1.8.0 publish
 
-1. **Tripo3D balance endpoint URL** — previously-proposed `/v2/openapi/user/balance` was flagged invented. Skill instructs shelling out to Python SDK `get_balance()` or reading live OpenAPI schema. Verify via `scripts/verify-game-unity-bake.mjs` Check 4 (requires TRIPO_API_KEY env).
-2. **CoplayDev `coplay-mcp-server` PyPI package + exact `uvx` invocation** — Verify via Check 2 (PyPI 404 = release-blocker).
-3. **`perf-budget-check` ProfilerRecorder API behavior in batchmode** — `EnnamPerf.cs` template uses `Thread.Sleep` placeholder; production users should replace with EditorCoroutines. Documented in template comment + Editor-templates/README.md.
+1. ✅ **Tripo3D balance endpoint** — VERIFIED. Real SDK class is `TripoClient` (NOT `Tripo3D` — research wrong); all methods async. Live REST endpoint from SDK traceback: `GET https://api.tripo3d.ai/v2/openapi/user/balance` (via `TripoClient.BASE_URL` + `/user/balance`). SKILL.md procedure rewritten to use the SDK helpers (`image_to_model`, `wait_for_task`, `download_task_models`, `rig_model`) which abstract the raw REST and insulate against future endpoint moves.
+2. ✅ **CoplayDev `coplay-mcp-server` PyPI package** — VERIFIED present at v1.5.5 (latest). `.mcp.json.partial.hbs` snippet resolves on user install. The Unity-side UPM package (`com.coplaydev.unity-mcp` v9.7.3) remains separately versioned.
+3. ⚠️ **`perf-budget-check` ProfilerRecorder API** — UNCHANGED status. `EnnamPerf.cs` template uses `Thread.Sleep` placeholder; production users should replace with `EditorCoroutines`. Documented in template comment + Editor-templates/README.md. Ships as advisory in v1.8.0 (cannot run in CI without a Unity license on the runner).
 
 If `verify-game-unity-bake.ts` reports failure, **do not publish** — update `templates/game-unity/.mcp.json.partial.hbs` or `asset-pipeline-tripo3d/SKILL.md` to match verified shape, re-run.
 

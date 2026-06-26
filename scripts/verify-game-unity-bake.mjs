@@ -122,14 +122,24 @@ try {
 const TRIPO_KEY = process.env.TRIPO_API_KEY;
 if (TRIPO_KEY) {
   try {
+    // Real SDK shape (verified against tripo3d==0.4.1, June 2026):
+    //   - Class is `TripoClient` (NOT `Tripo3D` — earlier research was wrong)
+    //   - ALL methods are async; must wrap in asyncio.run
+    //   - `close()` is async too — finally-await it
+    //   - Balance is a dataclass with fields {balance, frozen}
     // execFileSync with argv array — no shell, Python -c gets the script as a single argv
-    // element. Safer than building a shell command string (avoids quoting + injection issues
-    // on both POSIX and Windows).
+    // element. Safer than building a shell command string.
     const py =
-      'import os, json\n' +
-      'from tripo3d import Tripo3D\n' +
-      'c = Tripo3D(api_key=os.environ["TRIPO_API_KEY"])\n' +
-      'print(json.dumps({"balance": c.get_balance()}))';
+      'import os, json, asyncio, dataclasses\n' +
+      'from tripo3d import TripoClient, __version__ as v\n' +
+      'async def main():\n' +
+      '    c = TripoClient(api_key=os.environ["TRIPO_API_KEY"])\n' +
+      '    try:\n' +
+      '        bal = await c.get_balance()\n' +
+      '        print(json.dumps({"sdk_version": v, "balance": dataclasses.asdict(bal)}))\n' +
+      '    finally:\n' +
+      '        await c.close()\n' +
+      'asyncio.run(main())\n';
     const out = execFileSync(
       'uvx',
       ['--from', 'tripo3d', 'python', '-c', py],
@@ -138,10 +148,10 @@ if (TRIPO_KEY) {
         env: { ...process.env, TRIPO_API_KEY: TRIPO_KEY },
       },
     ).trim();
-    ok(`Tripo3D Python SDK get_balance() returned: ${out}`);
+    ok(`Tripo3D Python SDK TripoClient.get_balance() returned: ${out}`);
   } catch (e) {
     fail(
-      'Tripo3D Python SDK get_balance() failed — the asset-pipeline-tripo3d skill\'s ' +
+      'Tripo3D Python SDK TripoClient.get_balance() failed — the asset-pipeline-tripo3d skill\'s ' +
       `auth gate will not work. Error: ${e instanceof Error ? e.message : String(e)}`,
     );
   }

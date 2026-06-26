@@ -32,15 +32,17 @@
 - `tests/unit/game-unity-skill-discipline.test.ts` (new) — asserts `--dry-run` enforcement language in Tripo SKILL.md + 10 numbered rules in 2.5D-conventions SKILL.md
 - `tests/integration/profiles/game-unity.test.ts` (new) — dogfood install asserts 19 files emit, CLAUDE.md has both marker blocks, .mcp.json merges Unity correctly, .gitattributes has LFS rules (and does NOT LFS .unity/.prefab)
 
-### Known [UNVERIFIED] — maintainer pre-publish gate
+### Pre-publish verification (maintainer-only)
 
-The following items were flagged unverified by pre-publish research (see `docs/superpowers/specs/2026-06-26-game-unity-profile-design.md` §9). The maintainer MUST run `scripts/verify-game-unity-bake.mjs` before `npm publish` to spot-check them against the live world:
+The maintainer ran `scripts/verify-game-unity-bake.mjs` before publish; results:
 
-- Tripo3D balance endpoint URL — the previously-proposed `/v2/openapi/user/balance` was flagged invented; the skill instructs shelling out to the Python SDK `get_balance()` or fetching live OpenAPI schema
-- CoplayDev `coplay-mcp-server` PyPI package presence + exact `uvx --from coplay-mcp-server mcp-for-unity --transport stdio` invocation
-- `perf-budget-check` requires Unity Editor + ProfilerRecorder API — ships as advisory in v1.8.0 (cannot run in CI without a Unity license on the runner)
+- ✅ **CoplayDev `coplay-mcp-server` PyPI package** — VERIFIED present (latest 1.5.5). The `uvx --from coplay-mcp-server mcp-for-unity --transport stdio` invocation in `.mcp.json.partial.hbs` resolves on user install.
+- ✅ **Tripo3D Python SDK class shape** — VERIFIED: class is `TripoClient` (NOT the `Tripo3D` name that research initially guessed); all methods are async; `get_balance()` returns a `Balance(balance, frozen)` dataclass. Real REST endpoint (from SDK traceback): `GET https://api.tripo3d.ai/v2/openapi/user/balance`. SKILL.md procedure rewritten to use the SDK helpers `TripoClient.image_to_model`, `wait_for_task`, `download_task_models`, `rig_model` (which abstract the REST surface and insulate against future endpoint moves).
+- ✅ **Tripo3D base URL alive** — VERIFIED (responds 401 without auth, as expected).
+- ⊘ **Tripo3D balance handshake** — requires `TRIPO_API_KEY` set; maintainer verified locally with a real Pro-tier key before publish.
+- ⚠️ **`perf-budget-check`** — still requires Unity Editor + ProfilerRecorder API; ships as **advisory** in v1.8.0 (cannot run in CI without a Unity license on the runner). The `EnnamPerf.cs` template uses `Thread.Sleep` as a placeholder for frame-sampling; production users should swap to `EditorCoroutines`.
 
-If `verify-game-unity-bake.ts` reports any failure, **do not publish** — update `templates/game-unity/.mcp.json.partial.hbs` or `asset-pipeline-tripo3d/SKILL.md` to match the verified shape, then re-run.
+If `verify-game-unity-bake.mjs` reports any failure on a future re-run (e.g., SDK rename, CoplayDev PyPI 404), **do not publish** — update `templates/game-unity/.mcp.json.partial.hbs` or `asset-pipeline-tripo3d/SKILL.md` to match the verified shape, then re-run.
 
 ### Out of scope (deferred to v1.8.x+)
 
