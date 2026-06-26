@@ -35,6 +35,7 @@ flowchart TD
     Role -->|BA| BA[ba profile]
     Role -->|HR| HR[hr profile]
     Role -->|DevOps| Cloud{cloud?}
+    Role -->|Game-Dev| GameStack{game stack?}
 
     PType -->|Local-root| LR[local-root profile]
     PType -->|Existing repository| Stack{stack?}
@@ -53,8 +54,10 @@ flowchart TD
     Cloud -->|Google Cloud| GCP[devops-gcp profile]
     Cloud -->|Docker self-hosted| DockerProfile[devops-docker profile]
 
+    GameStack -->|Unity 2.5D Mobile| GameUnity[game-unity profile]
+
     classDef leaf fill:#d4edda,stroke:#155724,color:#155724;
-    class QA,BA,HR,LR,Next,React,RN,Flutter,Python,Go,Dotnet,Express,AWS,Azure,GCP,DockerProfile leaf;
+    class QA,BA,HR,LR,Next,React,RN,Flutter,Python,Go,Dotnet,Express,AWS,Azure,GCP,DockerProfile,GameUnity leaf;
 ```
 
 > The diagram above renders on GitHub. On npmjs.com, the mermaid code block is shown verbatim — open this README on GitHub for the rendered flowchart.
@@ -91,15 +94,21 @@ flowchart TD
 | `devops-gcp` | Terraform + GCP (GKE, Cloud Run, Cloud SQL, Secret Manager, Cloud Logging) | github |
 | `devops-docker` | Self-hosted Docker fleet — Komodo (GitOps Resource Sync + RBAC + audit) + Tecnativa socket-proxy + Tailscale sidecar + Dozzle + cAdvisor/Prometheus/Grafana + Uptime Kuma + Diun + Renovate | github |
 
+### Game-Dev (engine-specific)
+
+| Profile | Stack | Extra MCP |
+|---|---|---|
+| `game-unity` | Unity 6.5 (URP mobile, 2.5D) + Cinemachine 3.x + CoplayDev Unity MCP v9.7.3 + Tripo3D 3D asset gen (`--dry-run` default, `--provider meshy` opt-in fallback) + Git LFS | unity (CoplayDev) |
+
 ### Orchestration
 
 | Profile | Purpose | Extra MCP |
 |---|---|---|
 | `local-root` | Polyrepo coordinator — reads sub-platform `.serena/` memories | — |
 
-All profiles also register `serena`, `context7`, and `jira` via the shared MCP partial. The `Extra MCP` column lists only the profile-specific additions on top of that base.
+All profiles also register `serena`, `context7`, and `jira` via the shared MCP partial. The `Extra MCP` column lists only the profile-specific additions on top of that base. (`game-unity`'s Unity MCP comes via its own `.mcp.json.partial.hbs`, not the shared catalog.)
 
-Each role/cloud profile ships with its own `.claude/agents/<specialist>.md`, one or two `.claude/commands/<verb>.md` slash commands, and one or two `.claude/skills/<topic>/SKILL.md` skills that auto-load when the topic comes up in conversation.
+Each role/cloud profile ships with its own `.claude/agents/<specialist>.md`, one or two `.claude/commands/<verb>.md` slash commands, and one or two `.claude/skills/<topic>/SKILL.md` skills that auto-load when the topic comes up in conversation. `game-unity` is the first profile to ship 3 agents + 3 commands + 4 skills (rationale: game-dev domain rạch ròi between gameplay code / asset pipeline / build-and-test; each agent has explicit "When NOT" boundaries).
 
 ## What gets added
 
@@ -141,6 +150,20 @@ v1.5.1 fixes two broken shapes the scaffold has been shipping in `.claude/settin
 2. `hooks.SessionStart` entries used the legacy bare `{command}` shape. Current Claude Code rejects this with **"Expected array, but received undefined"** and refuses to load any settings from the file. Corrected to the required nested `{hooks: [{type: "command", command: "…"}]}` wrapper.
 
 Because `.claude/settings.json` is merged user-wins on arrays, **re-running the scaffold cannot auto-rewrite an existing broken file** — the CLI now prints a loud warning at the end of every install when it detects either legacy shape so you know to fix it by hand.
+
+### Upgrading from v1.7
+
+v1.8 adds the **`game-unity`** profile — a Game-Dev role for Unity 2.5D mobile (URP). Pick from the wizard under **Game-Dev → Unity 2.5D Mobile**.
+
+- **Engine**: Unity 6.5 primary (also supported: 6000.0, 2022.3 LTS, 2021.3 LTS via `--legacy`); URP 17+ mobile renderer asset; Cinemachine 3.x.
+- **Unity Editor MCP**: [CoplayDev/unity-mcp](https://github.com/CoplayDev/unity-mcp) v9.7.3 (formerly justinpbarnett/unity-mcp; acquired by Coplay 2025-08). Baked into `.mcp.json.partial.hbs` as `uvx coplay-mcp-server` (Python ≥3.11 + uv required on host).
+- **3D asset generation**: [Tripo3D](https://www.tripo3d.ai/) Python SDK (`TripoClient` async API) as default. The `asset-pipeline-tripo3d` skill **defaults to `--dry-run`** — real API calls require explicit `--live` flag + interactive confirmation that **Pro tier ($13.93/mo annual minimum)** is active. Free tier outputs are CC BY 4.0 **NON-COMMERCIAL** — unusable for commercial games. Meshy `--provider meshy` is an opt-in fallback for rigged characters (Meshy's 500+ animation library is the unmatched lead there). NEVER auto-fallback — Rule 12.
+- **Sprite AI MCP**: omitted in v1.8.0 — no stable, tokenless option meets bake-in bar. CLAUDE.md points to `pixelforge-mcp` (MIT, Gemini key) + `spritecook-mcp` (paid SaaS). Revisit tracked in [`mem:backlog/sprite-mcp-revisit-v1.8.x`](.serena/memories/backlog/sprite-mcp-revisit-v1.8.x.md).
+- **Workflow**: extends the shared 7-phase workflow with **Phase 6 Content Gates** — 4 human sign-off checkboxes in the PR body (Design / Art / Feel / Perf) before Phase 7 begins.
+- **Templates emitted**: `GDD.md.hbs`, `art-bible.md.hbs`, `docs/perf-budget.md`, plus 2 Editor C# templates (`EnnamPreflight.cs` asserts Domain Reload disabled + URP mobile compliance; `EnnamPerf.cs` runs ProfilerRecorder harness for `perf-budget-check` skill). Copy the .cs files into your Unity `Assets/Editor/` after install — README in `Editor-templates/` explains why.
+- **Git LFS**: new `_shared/.gitattributes.append` ships Unity binary rules (`.fbx .glb .png .psd .wav` etc.). `.unity .prefab .asset .meta` are deliberately NOT LFS — Unity Smart Merge needs text diffs.
+- **Wizard**: new top-level role **Game-Dev**; `resolveProfile` gains optional 5th `gameStack` parameter (backward-compatible — all existing call sites unchanged).
+- **Pre-publish maintainer gate**: `scripts/verify-game-unity-bake.mjs` runs 5 checks against the live world (`uvx` presence, PyPI `coplay-mcp-server`, Tripo base URL alive, Python SDK `TripoClient.get_balance()` handshake with `TRIPO_API_KEY`, npm `files[]` excludes `scripts/`). Run BEFORE `npm publish` of the scaffold itself; not part of the user-facing flow.
 
 ### Upgrading from v1.4
 
