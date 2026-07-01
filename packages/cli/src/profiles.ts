@@ -121,6 +121,15 @@ const REGISTRY: Record<string, ProfileDef> = {
     // extraMcp is reserved for _shared MCP catalog entries — Unity is profile-specific.
     extraMcp: [],
   },
+  'agent-org': {
+    name: 'agent-org',
+    description: 'Multi-agent dispatch — orchestrator + implementer + reviewer + SubagentStop hook. Cost-heavy; opt-in.',
+    templateDir: path.join(TEMPLATES, 'agent-org'),
+    extraMcp: [],
+    // v1.9.0 — first profile to use minClaudeCodeVersion. 2.1.178 is the
+    // post-TeamCreate/Delete-removal + post-team_name-deprecation cutline.
+    minClaudeCodeVersion: '2.1.178',
+  },
 };
 
 export function getProfile(name: string): ProfileDef {

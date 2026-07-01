@@ -39,6 +39,26 @@ export function printNextSteps(profile: ProfileDef, result: ExecuteResult, hasGi
   }
   steps.push(`Set env vars in .env.local: ${envVars.join(', ')}`);
 
+  // v1.9.0 — agent-org profile needs a manual SubagentStop hook wire-in.
+  // The shared settings.json.hbs merger doesn't support profile-specific hook
+  // fragments yet (backlog: `.claude/settings.json.partial.hbs` merge, v1.10.x).
+  // Surface the exact JSON so users don't have to guess. Rule 12 — fail loud.
+  if (profile.name === 'agent-org') {
+    steps.push(
+      'Register the SubagentStop hook in .claude/settings.json — paste this into your `hooks` object:\n' +
+      '        "SubagentStop": [\n' +
+      '          {\n' +
+      '            "hooks": [\n' +
+      '              { "type": "command", "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/subagent-log.ps1" }\n' +
+      '            ]\n' +
+      '          }\n' +
+      '        ]'
+    );
+    steps.push('On non-Windows: swap the command to `bash .claude/hooks/subagent-log.sh` (the .sh script is shipped alongside).');
+    steps.push('COST DISCLOSURE: agent-org runs Opus orchestrator + Sonnet workers concurrently — 5-10x tokens vs solo. Only dispatch when task decomposition genuinely helps.');
+    steps.push('Requires Claude Code >= 2.1.178 (post-TeamCreate/Delete removal + team_name deprecation). The wizard preflight will WARN if you are behind.');
+  }
+
   // Profile-specific prereq + post-install reminders (game-unity has the heaviest setup —
   // two extra runtimes (Python+uv for Unity MCP, ADB for build/deploy) plus a Tripo3D
   // commercial-tier license gate. Surface loudly per Rule 12 — silent default = bad UX.

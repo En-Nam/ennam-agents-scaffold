@@ -3,7 +3,7 @@ import path from 'node:path';
 
 // Wizard matrix: (role × projectType × stack | cloud | gameStack) → profile name.
 // Exported as a pure function for unit testing; runWizard wraps it with prompts.
-export type Role = 'Developer' | 'QA-QC' | 'BA' | 'HR' | 'DevOps' | 'Game-Dev';
+export type Role = 'Developer' | 'QA-QC' | 'BA' | 'HR' | 'DevOps' | 'Game-Dev' | 'Agent-Org';
 export type ProjectType = 'Local-root' | 'Existing repository';
 export type Stack = 'Next.js' | 'React' | 'React Native' | 'Flutter' | 'Python' | 'Go' | '.NET MVC' | 'Express.js';
 export type Cloud = 'AWS' | 'Azure' | 'Google Cloud' | 'Docker';
@@ -42,6 +42,7 @@ export function resolveProfile(
 ): string {
   if (role === 'QA-QC') return qaKind === 'Automation' ? 'qa-automation' : 'qa';
   if (role === 'BA') return 'ba';
+  if (role === 'Agent-Org') return 'agent-org';
   if (role === 'HR') return 'hr';
   if (role === 'DevOps') {
     if (!cloud) {
@@ -98,6 +99,7 @@ export async function runWizard(cwd: string = process.cwd()): Promise<string> {
       { value: 'HR', label: 'HR' },
       { value: 'DevOps', label: 'DevOps' },
       { value: 'Game-Dev', label: 'Game-Dev (Unity)' },
+      { value: 'Agent-Org', label: 'Agent-Org (multi-agent dispatch — advanced, cost-heavy)' },
     ],
     initialValue: 'Developer',
   });
@@ -136,6 +138,11 @@ export async function runWizard(cwd: string = process.cwd()): Promise<string> {
 
   // BA and HR do not branch on projectType or stack — single-profile roles.
   if (role === 'BA' || role === 'HR') {
+    return resolveProfile(role, 'Existing repository');
+  }
+
+  // Agent-Org is a stack-agnostic augmentation — no branching.
+  if (role === 'Agent-Org') {
     return resolveProfile(role, 'Existing repository');
   }
 

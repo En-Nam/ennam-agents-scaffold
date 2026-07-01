@@ -91,6 +91,11 @@ describe('wizard resolveProfile matrix', () => {
     expect(() => resolveProfile('Game-Dev', 'Existing repository')).toThrow(/gameStack is required/i);
   });
 
+  it('Agent-Org → agent-org (stack-agnostic; projectType ignored)', () => {
+    expect(resolveProfile('Agent-Org', 'Existing repository')).toBe('agent-org');
+    expect(resolveProfile('Agent-Org', 'Local-root')).toBe('agent-org');
+  });
+
   it('every resolved name is a registered profile', () => {
     // Lock the wizard's output to the live profile registry: if anyone renames
     // a profile in profiles.ts the wizard must surface that mismatch.
@@ -114,6 +119,7 @@ describe('wizard resolveProfile matrix', () => {
       resolveProfile('DevOps', 'Existing repository', undefined, 'Google Cloud'),
       resolveProfile('DevOps', 'Existing repository', undefined, 'Docker'),
       resolveProfile('Game-Dev', 'Existing repository', undefined, undefined, 'Unity 2.5D Mobile'),
+      resolveProfile('Agent-Org', 'Existing repository'),
     ];
     for (const name of resolved) {
       expect(() => getProfile(name)).not.toThrow();

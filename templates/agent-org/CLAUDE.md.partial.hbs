@@ -1,0 +1,42 @@
+## Role: multi-agent engineering organization
+
+This project uses the **3-role dispatch pattern** (orchestrator → implementer → reviewer) with a SubagentStop hook that logs to Serena. Adopt it for any task larger than a single-file edit.
+
+### The 3 roles
+
+- **`orchestrator`** (Opus tier recommended) — reads the request, breaks it into self-contained subtasks with acceptance criteria, dispatches to `implementer` and `reviewer`. Does NOT edit code or run tests directly.
+- **`implementer`** (Sonnet tier) — executes ONE subtask at a time. Must run `build + test` green before reporting done. Fails loud on under-specified spec (Rule 12).
+- **`reviewer`** (Sonnet tier) — reads the diff, applies AGENTS.md rules, reports blocker / major / minor / nit. Does NOT modify code.
+
+### When to dispatch vs solo
+
+| Task shape | Mode |
+|---|---|
+| Single-file typo, config change | Solo (main loop) |
+| 3+ related edits, single subsystem | Orchestrator + 1 implementer + 1 reviewer |
+| Independent subtasks (e.g. 3 SKILLs) | Orchestrator + N implementers in parallel + 1 reviewer per output |
+| Cross-cutting migration | Orchestrator + serial implementers (avoid file conflicts) + reviewer after each |
+
+### SubagentStop hook
+
+Every dispatched subagent's completion appends a timestamped marker to `.serena/memories/comms/active/spike-log.md`. The orchestrator reads this trail to see which subagents actually ran in its dispatch window. Hook is log-only; it never blocks.
+
+If you want to gate on test/lint before allowing "done", extend the hook script to run `npm test` (or your project's equivalent) and `exit 2` on failure — that re-prompts the subagent to keep working. Only do this once your test suite is fast enough that a per-subagent run is acceptable.
+
+### Cost disclosure
+
+This pattern is expensive on the end-user's Anthropic account:
+
+- Opus orchestrator + N Sonnet workers running concurrently.
+- Rough back-of-envelope: a 3-role dispatch on a medium task consumes ~5–10× the tokens of solo work on the same task.
+- Only worth it when task decomposition genuinely benefits from independent context (see the "When to dispatch" table).
+
+### Boundaries
+
+- Human gates stay. The orchestrator does NOT auto-merge PRs. Reviewer surfaces issues; humans decide.
+- No swarm-for-swarm's-sake. Solo is the default; dispatch is opt-in per task.
+- Requires Claude Code ≥ 2.1.178 (post-`TeamCreate`/`TeamDelete` shape).
+
+### Decision reference
+
+See `mem:decisions/v1.9-scope` in this repo's Serena for the origin R&D and kill criteria.
