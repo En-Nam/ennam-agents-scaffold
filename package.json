@@ -9,7 +9,8 @@
     "build": "npm -w @ennamjsc/agents-scaffold run build",
     "dev": "npm -w @ennamjsc/agents-scaffold run dev",
     "test": "npm -w @ennamjsc/agents-scaffold run test",
-    "lint": "tsc --noEmit -p packages/cli/tsconfig.json"
+    "lint": "tsc --noEmit -p packages/cli/tsconfig.json",
+    "release:publish": "npm publish -w @ennamjsc/agents-scaffold"
   },
   "engines": {
     "node": ">=20"
