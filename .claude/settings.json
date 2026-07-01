@@ -11,5 +11,17 @@
   "outputStyle": "default",
   "enabledPlugins": {
     "github@claude-plugins-official": true
+  },
+  "hooks": {
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/subagent-log.ps1"
+          }
+        ]
+      }
+    ]
   }
 }
