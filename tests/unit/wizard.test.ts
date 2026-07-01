@@ -39,12 +39,20 @@ describe('wizard resolveProfile matrix', () => {
     expect(resolveProfile('Developer', 'Existing repository', 'Express.js')).toBe('express');
   });
 
-  it('QA-QC + Local-root → qa', () => {
+  it('QA-QC + Local-root → qa (default kind = Manual)', () => {
     expect(resolveProfile('QA-QC', 'Local-root')).toBe('qa');
   });
 
-  it('QA-QC + Existing repository → qa', () => {
+  it('QA-QC + Existing repository → qa (default kind = Manual)', () => {
     expect(resolveProfile('QA-QC', 'Existing repository')).toBe('qa');
+  });
+
+  it('QA-QC + Manual kind → qa (explicit)', () => {
+    expect(resolveProfile('QA-QC', 'Existing repository', undefined, undefined, undefined, 'Manual')).toBe('qa');
+  });
+
+  it('QA-QC + Automation kind → qa-automation', () => {
+    expect(resolveProfile('QA-QC', 'Existing repository', undefined, undefined, undefined, 'Automation')).toBe('qa-automation');
   });
 
   it('BA → ba (projectType ignored)', () => {
@@ -98,6 +106,7 @@ describe('wizard resolveProfile matrix', () => {
       resolveProfile('Developer', 'Existing repository', 'Express.js'),
       resolveProfile('QA-QC', 'Local-root'),
       resolveProfile('QA-QC', 'Existing repository'),
+      resolveProfile('QA-QC', 'Existing repository', undefined, undefined, undefined, 'Automation'),
       resolveProfile('BA', 'Existing repository'),
       resolveProfile('HR', 'Existing repository'),
       resolveProfile('DevOps', 'Existing repository', undefined, 'AWS'),

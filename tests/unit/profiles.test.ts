@@ -17,6 +17,7 @@ const ALL_PROFILES = [
   'next',
   'python',
   'qa',
+  'qa-automation',
   'react',
   'react-native',
 ] as const;

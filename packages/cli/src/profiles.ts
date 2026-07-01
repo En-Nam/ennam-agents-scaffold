@@ -65,6 +65,12 @@ const REGISTRY: Record<string, ProfileDef> = {
     templateDir: path.join(TEMPLATES, 'qa'),
     extraMcp: [],
   },
+  'qa-automation': {
+    name: 'qa-automation',
+    description: 'QA Automation — Maestro (mobile) + Playwright (web) + Gherkin BDD parser',
+    templateDir: path.join(TEMPLATES, 'qa-automation'),
+    extraMcp: [],
+  },
   ba: {
     name: 'ba',
     description: 'Business Analyst — requirements, user stories, BPMN flows, acceptance criteria',

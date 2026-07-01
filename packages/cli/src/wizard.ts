@@ -8,6 +8,7 @@ export type ProjectType = 'Local-root' | 'Existing repository';
 export type Stack = 'Next.js' | 'React' | 'React Native' | 'Flutter' | 'Python' | 'Go' | '.NET MVC' | 'Express.js';
 export type Cloud = 'AWS' | 'Azure' | 'Google Cloud' | 'Docker';
 export type GameStack = 'Unity 2.5D Mobile';
+export type QAKind = 'Manual' | 'Automation';
 
 const STACK_TO_PROFILE: Record<Stack, string> = {
   'Next.js': 'next',
@@ -37,8 +38,9 @@ export function resolveProfile(
   stack?: Stack,
   cloud?: Cloud,
   gameStack?: GameStack,
+  qaKind?: QAKind,
 ): string {
-  if (role === 'QA-QC') return 'qa';
+  if (role === 'QA-QC') return qaKind === 'Automation' ? 'qa-automation' : 'qa';
   if (role === 'BA') return 'ba';
   if (role === 'HR') return 'hr';
   if (role === 'DevOps') {
@@ -135,6 +137,20 @@ export async function runWizard(cwd: string = process.cwd()): Promise<string> {
   // BA and HR do not branch on projectType or stack — single-profile roles.
   if (role === 'BA' || role === 'HR') {
     return resolveProfile(role, 'Existing repository');
+  }
+
+  // QA-QC branches on kind (Manual → qa, Automation → qa-automation).
+  if (role === 'QA-QC') {
+    const kind = await select<QAKind>({
+      message: 'Manual QA or Automation?',
+      options: [
+        { value: 'Manual', label: 'Manual QA (test cases + evidence capture)' },
+        { value: 'Automation', label: 'Automation (Maestro mobile + Playwright web + Gherkin BDD)' },
+      ],
+      initialValue: 'Manual',
+    });
+    if (isCancel(kind)) { cancel('Aborted.'); process.exit(1); }
+    return resolveProfile(role, 'Existing repository', undefined, undefined, undefined, kind);
   }
 
   const projectType = await select<ProjectType>({
