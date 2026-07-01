@@ -31,11 +31,15 @@ flowchart TD
     Start([npx @ennamjsc/agents-scaffold]) --> Role{role?}
 
     Role -->|Developer| PType{project type?}
-    Role -->|QA-QC| QA[qa profile]
+    Role -->|QA-QC| QAKind{manual or automation?}
     Role -->|BA| BA[ba profile]
     Role -->|HR| HR[hr profile]
     Role -->|DevOps| Cloud{cloud?}
     Role -->|Game-Dev| GameStack{game stack?}
+    Role -->|Agent-Org| AgentOrg[agent-org profile]
+
+    QAKind -->|Manual| QA[qa profile]
+    QAKind -->|Automation| QAAuto[qa-automation profile]
 
     PType -->|Local-root| LR[local-root profile]
     PType -->|Existing repository| Stack{stack?}
@@ -57,7 +61,7 @@ flowchart TD
     GameStack -->|Unity 2.5D Mobile| GameUnity[game-unity profile]
 
     classDef leaf fill:#d4edda,stroke:#155724,color:#155724;
-    class QA,BA,HR,LR,Next,React,RN,Flutter,Python,Go,Dotnet,Express,AWS,Azure,GCP,DockerProfile,GameUnity leaf;
+    class QA,QAAuto,BA,HR,LR,Next,React,RN,Flutter,Python,Go,Dotnet,Express,AWS,Azure,GCP,DockerProfile,GameUnity,AgentOrg leaf;
 ```
 
 > The diagram above renders on GitHub. On npmjs.com, the mermaid code block is shown verbatim — open this README on GitHub for the rendered flowchart.
@@ -82,6 +86,7 @@ flowchart TD
 | Profile | Role | Extra MCP |
 |---|---|---|
 | `qa` | QA workflow (test-cases + evidence + `/qa-run` `/qa-report`) | — |
+| `qa-automation` | QA Automation — Maestro (mobile) + Playwright (web) + Gherkin BDD parser; 3 skills (`qa-maestro`, `qa-playwright`, `gherkin-bdd`) | — |
 | `ba` | Business Analyst — user stories + Gherkin AC + BPMN flows + `/ba-story` `/ba-flow` | — |
 | `hr` | HR — JD authoring + interview kits + `/hr-jd` `/hr-interview-kit` | — |
 
@@ -102,9 +107,10 @@ flowchart TD
 
 ### Orchestration
 
-| Profile | Purpose | Extra MCP |
-|---|---|---|
-| `local-root` | Polyrepo coordinator — reads sub-platform `.serena/` memories | — |
+| Profile | Purpose | Extra MCP | Requires Claude Code |
+|---|---|---|---|
+| `local-root` | Polyrepo coordinator — reads sub-platform `.serena/` memories | — | any |
+| `agent-org` | Multi-agent dispatch — orchestrator + implementer + reviewer + SubagentStop hook. Cost-heavy; opt-in. | — | **>= 2.1.178** |
 
 All profiles also register `serena`, `context7`, and `jira` via the shared MCP partial. The `Extra MCP` column lists only the profile-specific additions on top of that base. (`game-unity`'s Unity MCP comes via its own `.mcp.json.partial.hbs`, not the shared catalog.)
 
@@ -151,6 +157,17 @@ v1.5.1 fixes two broken shapes the scaffold has been shipping in `.claude/settin
 
 Because `.claude/settings.json` is merged user-wins on arrays, **re-running the scaffold cannot auto-rewrite an existing broken file** — the CLI now prints a loud warning at the end of every install when it detects either legacy shape so you know to fix it by hand.
 
+### Upgrading from v1.8
+
+v1.9 adds two new profiles + one preflight flag + one preflight field:
+
+- **`qa-automation` profile** — QA Automation Engineer with 3 skills (`qa-maestro` for Maestro mobile flows, `qa-playwright` for Playwright web specs, `gherkin-bdd` as shared parser). The wizard now branches under **QA-QC → Manual or Automation?** — the existing `qa` (manual) path is unchanged. `qa-automation` references (does NOT duplicate) the Maestro install from the `react-native` profile — install order is user's discretion, but if `react-native` owns `.maestro/config.yaml`, this profile only authors under `.maestro/flows/**`. Web team convention: **NO `.feature` files for web** — BDD scenarios live as JSDoc header blocks at the top of each spec file (see [`templates/qa-automation/.claude/skills/qa-playwright/SKILL.md`](templates/qa-automation/.claude/skills/qa-playwright/SKILL.md)). Origin: GitHub [issue #2](https://github.com/En-Nam/ennam-agents-scaffold/issues/2).
+- **`agent-org` profile** — multi-agent dispatch template. Ships the 3-role trio (`orchestrator` + `implementer` + `reviewer`) as `.claude/agents/*.md.hbs` + a log-only `SubagentStop` hook. Pick from the wizard under **Agent-Org**. **Cost-heavy** (Opus orchestrator + Sonnet workers running concurrently, ~5-10× tokens vs solo) — opt-in only, disclosed in the profile's `CLAUDE.md.partial.hbs`. **Requires Claude Code >= 2.1.178** (post-`TeamCreate`/`TeamDelete` removal + `team_name` deprecation cutline). Known limitation for v1.9: the hook must be registered in `.claude/settings.json` manually after install — `printNextSteps` shows the paste-ready JSON block. Auto-merge of profile-specific hook fragments is tracked as a follow-up for v1.10.x.
+- **`--analyze-claude` flag** — Feature A from GitHub [issue #4](https://github.com/En-Nam/ennam-agents-scaffold/issues/4). `npx @ennamjsc/agents-scaffold --analyze-claude` scans `./CLAUDE.md` headings for 12 patterns that commonly overlap with scaffold-managed instructions (`Task Startup Protocol`, `Session Checkpoint Protocol`, `Serena MCP Policy`, `Workflow`, `Verification`, etc.) and prints line-cited warnings. Non-destructive by contract — short-circuits before the wizard. Feature B (`--claude-strategy=minimal`) is deferred to v1.10.
+- **`minClaudeCodeVersion` profile field** — new optional field on `ProfileDef`. On install, the wizard runs `claude --version` and WARNS (does not block) if the installed version is behind the profile's requirement. First consumer: `agent-org` (`2.1.178`). Field is stack-agnostic — future profiles depending on experimental Claude Code features can gate the same way.
+
+Meta-spike origin: the `agent-org` pattern was **validated in-place** in this repo by using its 3-role trio + SubagentStop hook to build `qa-automation` end-to-end. See [`.serena/memories/decisions/v1.9-scope.md`](.serena/memories/decisions/v1.9-scope.md) for the R&D verdict and kill criteria.
+
 ### Upgrading from v1.7
 
 v1.8 adds the **`game-unity`** profile — a Game-Dev role for Unity 2.5D mobile (URP). Pick from the wizard under **Game-Dev → Unity 2.5D Mobile**.
@@ -180,6 +197,7 @@ v1.5 adds the `devops-docker` profile — a DevOps role for self-hosted Docker f
 | `--merge-strategy <s>` | `ask` (default) \| `skip` \| `overwrite` \| `append` \| `json-merge` |
 | `--no-prompts` | Fail on missing info (CI mode) |
 | `--verbose` | Verbose output |
+| `--analyze-claude` | Scan `./CLAUDE.md` for section headers that may overlap with scaffold instructions, print line-cited warnings + recommendation, exit 0. Non-destructive; runs before the wizard/install flow. |
 
 ## Manual review after merge
 

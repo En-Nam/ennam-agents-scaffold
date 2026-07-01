@@ -40,7 +40,16 @@ export function resolveProfile(
   gameStack?: GameStack,
   qaKind?: QAKind,
 ): string {
-  if (role === 'QA-QC') return qaKind === 'Automation' ? 'qa-automation' : 'qa';
+  if (role === 'QA-QC') {
+    // Rule 12 defense-in-depth: mirror the DevOps/Game-Dev enum-throws pattern
+    // so a bogus JSON-fed value (e.g., 'Manuall') fails loud instead of silently
+    // falling back to 'qa'. Interactive wizard cannot produce a bad value; this
+    // guards direct callers of resolveProfile.
+    if (qaKind !== undefined && qaKind !== 'Manual' && qaKind !== 'Automation') {
+      throw new Error(`resolveProfile: unknown qaKind "${qaKind}" for QA-QC role (expected "Manual" | "Automation" | undefined)`);
+    }
+    return qaKind === 'Automation' ? 'qa-automation' : 'qa';
+  }
   if (role === 'BA') return 'ba';
   if (role === 'Agent-Org') return 'agent-org';
   if (role === 'HR') return 'hr';

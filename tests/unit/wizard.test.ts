@@ -55,6 +55,14 @@ describe('wizard resolveProfile matrix', () => {
     expect(resolveProfile('QA-QC', 'Existing repository', undefined, undefined, undefined, 'Automation')).toBe('qa-automation');
   });
 
+  it('QA-QC + bogus qaKind → throws (Rule 12 defense-in-depth)', () => {
+    // Exercise the runtime guard against JSON-fed bad values; TS would normally
+    // catch this at the call site but runtime callers may not.
+    const bad = 'Manuall' as unknown as 'Manual';
+    expect(() => resolveProfile('QA-QC', 'Existing repository', undefined, undefined, undefined, bad))
+      .toThrow(/unknown qaKind/i);
+  });
+
   it('BA → ba (projectType ignored)', () => {
     expect(resolveProfile('BA', 'Existing repository')).toBe('ba');
     expect(resolveProfile('BA', 'Local-root')).toBe('ba');
