@@ -15,6 +15,7 @@ export interface ProfileDef {
   description: string;           // human-readable
   templateDir: string;           // absolute path to templates/<name>
   extraMcp: string[];            // names of MCP servers added on top of _shared
+  minClaudeCodeVersion?: string; // v1.9.0 — WARN if `claude --version` < this. Semver-lite.
 }
 
 export interface FileEntry {

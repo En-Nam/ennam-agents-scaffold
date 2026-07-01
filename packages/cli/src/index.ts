@@ -14,6 +14,8 @@ import { mergeJson } from './merge/json.js';
 import { mergeLines } from './merge/lines.js';
 import { printIntro, printPlan, confirmProceed, printNextSteps, printHandoffPrompt } from './ux.js';
 import { runWizard } from './wizard.js';
+import { checkPreflight } from './preflight.js';
+import { runAnalyzeClaude } from './analyze-claude.js';
 import type { UserStrategy, OperationPlan } from './types.js';
 
 // Re-export wizard types/functions so external callers (and tests) can keep
@@ -34,10 +36,19 @@ cli
   .option('--merge-strategy <s>', 'ask | skip | overwrite (default: ask)', { default: 'ask' })
   .option('--no-prompts', 'Fail on missing info instead of prompting (CI mode)')
   .option('--verbose', 'Verbose output')
+  .option('--analyze-claude', 'Scan ./CLAUDE.md for section headers that may overlap with scaffold instructions and exit')
   .action(async (profileArg: string | undefined, flags: Record<string, unknown>) => {
     // cac normalises kebab-case flags: --dry-run → dryRun, --merge-strategy → mergeStrategy.
     // For --no-prompts, cac sets prompts: false (omit defaults to true).
     const interactive = flags.prompts !== false;
+
+    // v1.9.0 — Feature A (issue #4a): scan-only mode. Short-circuits BEFORE
+    // the wizard/install flow so mature-repo users can preflight the overlap
+    // without side-effects. Non-destructive by definition.
+    if (flags.analyzeClaude) {
+      await runAnalyzeClaude(process.cwd());
+      process.exit(0);
+    }
 
     let profileName = profileArg;
     if (!profileName) {
@@ -74,6 +85,14 @@ cli
     // an unclosed clack frame on stdout.
     if (profileArg) {
       printIntro(PKG.version);
+    }
+
+    // v1.9.0 — preflight: warn if user's local Claude Code is older than
+    // the profile recommends. Non-blocking (Rule 12 — fail loud, but let
+    // the human decide whether to continue).
+    const preflight = checkPreflight(profile);
+    for (const w of preflight.warnings) {
+      console.error(`  Preflight: ${w}`);
     }
 
     const cwd = process.cwd();
