@@ -1,10 +1,23 @@
-# @ennamjsc/agents-scaffold
+<div align="center">
 
-[![npm version](https://img.shields.io/npm/v/@ennamjsc/agents-scaffold.svg)](https://www.npmjs.com/package/@ennamjsc/agents-scaffold)
-[![node](https://img.shields.io/node/v/@ennamjsc/agents-scaffold.svg)](https://nodejs.org)
+# 🪄 @ennamjsc/agents-scaffold
+
+### *One `npx` and your repo grows a brain, a memory, and a small army of agents.*
+
+[![npm version](https://img.shields.io/npm/v/@ennamjsc/agents-scaffold.svg?logo=npm&color=cb3837)](https://www.npmjs.com/package/@ennamjsc/agents-scaffold)
+[![npm downloads](https://img.shields.io/npm/dm/@ennamjsc/agents-scaffold.svg?logo=npm&color=cb3837)](https://www.npmjs.com/package/@ennamjsc/agents-scaffold)
+[![node](https://img.shields.io/node/v/@ennamjsc/agents-scaffold.svg?logo=node.js)](https://nodejs.org)
+[![Publish to npm](https://github.com/En-Nam/ennam-agents-scaffold/actions/workflows/publish.yml/badge.svg)](https://github.com/En-Nam/ennam-agents-scaffold/actions/workflows/publish.yml)
+[![GitHub stars](https://img.shields.io/github/stars/En-Nam/ennam-agents-scaffold?style=social)](https://github.com/En-Nam/ennam-agents-scaffold/stargazers)
 [![license](https://img.shields.io/badge/license-source--available-blue.svg)](#license)
 
-Install Claude Code tooling (Superpowers workflow + Serena memories + role agents + MCP servers) into an existing project — without touching application code.
+</div>
+
+> **⭐ Current star count: 3.** Yes, *three* whole humans looked at this repo and thought "you know what, I want to find this again." One of them might be a maintainer. We don't ask questions. If you're reading this and own a mouse, the [☆ button](https://github.com/En-Nam/ennam-agents-scaffold/stargazers) is *right there* and it costs nothing but a dopamine hit. The badge above updates live — help us make it lie less.
+
+Install Claude Code tooling (Superpowers workflow + Serena memories + role agents + MCP servers) into an existing project — **without touching a single line of your application code.** It's like a personality transplant for your repo, except reversible and backed up to `.ennam-scaffold-backup/`.
+
+**Why?** Because setting all of this up by hand is a full afternoon of copy-pasting YAML and questioning your career. This does it in the time it takes to say "wait, was that supposed to prompt me?"
 
 ## Quickstart
 
@@ -230,4 +243,14 @@ See [docs/superpowers/specs/](docs/superpowers/specs/) for design.
 
 ## License
 
-Published publicly on npm for `npx` convenience. Internal Ennam Engineering tool; no proprietary content. No formal open-source license yet — treat as "source available, internal use".
+Published publicly on npm for `npx` convenience. Internal Ennam Engineering tool; no proprietary content. No formal open-source license yet — treat as "source available, internal use". (Lawyers: it's fine. Everyone else: it's fine.)
+
+---
+
+<div align="center">
+
+**Made with 🤖, ☕, and an unreasonable number of Serena memories.**
+
+If this saved you an afternoon of YAML, consider paying it forward with a ⭐ — [star the repo](https://github.com/En-Nam/ennam-agents-scaffold/stargazers) and watch that badge tick from 3 to a slightly-less-lonely 4.
+
+</div>
