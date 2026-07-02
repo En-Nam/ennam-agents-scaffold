@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.9.1 — 2026-07-02
+
+### Added
+
+- **npm auto-publish workflow** (`.github/workflows/publish.yml`) — publishes `@ennamjsc/agents-scaffold` on GitHub Release (and `workflow_dispatch`). Authenticates via the `NPM_Publish` GitHub Environment's `NPM_TOKEN` secret and publishes with `--provenance` for a verified repository link on npmjs.com.
+- **Package repository metadata** — `repository` (with `directory: packages/cli`), `homepage`, `bugs`, `keywords`, and `license` fields on the published package so the npm page links back to GitHub.
+
+### Changed
+
+- **README** — fancier header, live GitHub stars badge, CI + downloads badges, and a lighter tone.
+
+### Fixed
+
+- **`npx-symlink-bin` integration test** — the simulated package could not resolve external runtime deps (`cac`, `handlebars`, …) in an isolated temp dir, failing in CI. It now symlinks the repo's hoisted `node_modules`, so the suite passes on clean runners and unblocks the publish job.
+
 ## v1.9.0 — 2026-07-01
 
 ### Added

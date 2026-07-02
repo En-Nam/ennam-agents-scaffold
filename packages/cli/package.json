@@ -1,6 +1,6 @@
 {
   "name": "@ennamjsc/agents-scaffold",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "description": "Install Claude Code tooling into existing projects",
   "type": "module",
   "license": "SEE LICENSE IN README.md",
