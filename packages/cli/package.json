@@ -3,6 +3,26 @@
   "version": "1.9.0",
   "description": "Install Claude Code tooling into existing projects",
   "type": "module",
+  "license": "SEE LICENSE IN README.md",
+  "homepage": "https://github.com/En-Nam/ennam-agents-scaffold#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/En-Nam/ennam-agents-scaffold.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/En-Nam/ennam-agents-scaffold/issues"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "scaffold",
+    "agents",
+    "superpowers",
+    "serena",
+    "mcp",
+    "cli"
+  ],
   "bin": {
     "ennam-agents-scaffold": "./dist/index.js"
   },

@@ -74,6 +74,13 @@ describe('isMain guard tolerates symlinked bin (npx)', () => {
       path.join(REPO_ROOT, 'packages', 'cli', 'package.json'),
       path.join(pkgDir, '..', 'package.json'),
     );
+    // The bundle keeps runtime deps (cac, handlebars, …) external, so the
+    // simulated package needs them resolvable. npx installs them alongside;
+    // here we point the package at the repo's hoisted node_modules.
+    await symlink(
+      path.join(REPO_ROOT, 'node_modules'),
+      path.join(pkgDir, '..', 'node_modules'),
+    );
 
     const linkPath = path.join(binDir, 'ennam-agents-scaffold');
     await symlink(realEntry, linkPath);

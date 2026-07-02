@@ -1,0 +1,45 @@
+name: Publish to npm
+
+# Auto-publishes @ennamjsc/agents-scaffold when a GitHub Release is published.
+# Also runnable on demand from the Actions tab.
+#
+# Auth: uses the `NPM_Publish` GitHub Environment, which holds an environment
+# secret named `NPM_TOKEN` (an npm automation token with publish rights to the
+# @ennamjsc scope). The job must declare `environment:` to access it.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # enables npm provenance (the "verified" repo link on npmjs.com)
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: NPM_Publish
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          registry-url: https://registry.npmjs.org
+          scope: "@ennamjsc"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm -w @ennamjsc/agents-scaffold run build
+
+      - name: Test
+        run: npm -w @ennamjsc/agents-scaffold run test
+
+      - name: Publish
+        run: npm publish -w @ennamjsc/agents-scaffold --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
