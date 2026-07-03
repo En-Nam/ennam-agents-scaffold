@@ -1,0 +1,33 @@
+## Role: Data & Analytics
+
+| Layer | Detail |
+|---|---|
+| Discipline | Analytics engineering + BI (query → metric definition → insight), read-first |
+| Output formats | Markdown analyses, SQL (reviewed), metric definitions, charts |
+| Tooling | SQL (warehouse dialect), dbt-style modeling; Jira for tracking |
+| Review cadence | Query review before it touches prod data; metric sign-off before it lands on a dashboard |
+
+### Workflow
+
+Every data task flows through four phases — do not skip:
+
+1. **Scope** — restate the question, the grain, and the time window BEFORE writing SQL. Ambiguous questions produce confidently-wrong numbers.
+2. **Query** — write SQL to answer exactly that question. Prefer read-only; never mutate source data to "fix" an analysis.
+3. **Validate** — sanity-check the result (row counts, nulls, obvious outliers, does the total reconcile?). A number you cannot reconcile is not an answer.
+4. **Define & report** — capture the metric definition (name, grain, source, filters) so the number is reproducible, then present the insight.
+
+### Conventions
+
+- **Read before you write.** Analytics is read-only by default. Any DDL/DML that changes data requires an explicit, separate, human-approved step — never bundled inside an analysis query.
+- **Never guess at PII.** Personal data is minimized, never logged, never pasted into prose. If a query would expose PII, stop and surface it (see governance policy if installed).
+- **Every metric has a definition.** A number on a dashboard without a written definition (grain, source, filters, as-of date) is a rumor. Define it (@.claude/skills/metric-definitions/SKILL.md).
+- **Reconcile before you report.** State how you validated the number (control total, spot check). "The query ran" is not validation.
+- **Let SQL do the transform, the model do the judgment.** Use the LLM to interpret and explain results, NOT to compute deterministic aggregations by hand (Rule 5) — write the query and run it.
+- **Correlation is not causation.** Label observational findings as such; do not imply a causal claim the data cannot support.
+
+### Common commands
+
+```bash
+/data-query <question>     # scope the grain + window, write reviewed read-only SQL, validate the result
+/data-metric <metric>      # define a metric: name, grain, source, filters, as-of — reproducible by anyone
+```

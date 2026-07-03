@@ -3,7 +3,7 @@ import path from 'node:path';
 
 // Wizard matrix: (role × projectType × stack | cloud | gameStack) → profile name.
 // Exported as a pure function for unit testing; runWizard wraps it with prompts.
-export type Role = 'Developer' | 'QA-QC' | 'BA' | 'HR' | 'DevOps' | 'Game-Dev' | 'Agent-Org';
+export type Role = 'Developer' | 'QA-QC' | 'BA' | 'PM' | 'Tech-Writer' | 'Data' | 'HR' | 'DevOps' | 'Game-Dev' | 'Agent-Org';
 export type ProjectType = 'Local-root' | 'Existing repository';
 export type Stack = 'Next.js' | 'React' | 'React Native' | 'Flutter' | 'Python' | 'Go' | '.NET MVC' | 'Express.js';
 export type Cloud = 'AWS' | 'Azure' | 'Google Cloud' | 'Docker';
@@ -51,6 +51,9 @@ export function resolveProfile(
     return qaKind === 'Automation' ? 'qa-automation' : 'qa';
   }
   if (role === 'BA') return 'ba';
+  if (role === 'PM') return 'pm';
+  if (role === 'Tech-Writer') return 'tech-writer';
+  if (role === 'Data') return 'data-analytics';
   if (role === 'Agent-Org') return 'agent-org';
   if (role === 'HR') return 'hr';
   if (role === 'DevOps') {
@@ -105,6 +108,9 @@ export async function runWizard(cwd: string = process.cwd()): Promise<string> {
       { value: 'Developer', label: 'Developer' },
       { value: 'QA-QC', label: 'QA-QC' },
       { value: 'BA', label: 'Business Analyst' },
+      { value: 'PM', label: 'Product Manager / PO' },
+      { value: 'Tech-Writer', label: 'Technical Writer / Docs' },
+      { value: 'Data', label: 'Data & Analytics' },
       { value: 'HR', label: 'HR' },
       { value: 'DevOps', label: 'DevOps' },
       { value: 'Game-Dev', label: 'Game-Dev (Unity)' },
@@ -145,8 +151,8 @@ export async function runWizard(cwd: string = process.cwd()): Promise<string> {
     return resolveProfile(role, 'Existing repository', undefined, cloud);
   }
 
-  // BA and HR do not branch on projectType or stack — single-profile roles.
-  if (role === 'BA' || role === 'HR') {
+  // BA, PM, Tech-Writer, Data, and HR do not branch on projectType or stack — single-profile roles.
+  if (role === 'BA' || role === 'PM' || role === 'Tech-Writer' || role === 'Data' || role === 'HR') {
     return resolveProfile(role, 'Existing repository');
   }
 

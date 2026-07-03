@@ -1,0 +1,33 @@
+## Role: Technical Writer / Documentation
+
+| Layer | Detail |
+|---|---|
+| Discipline | Diátaxis-aligned docs (tutorial / how-to / reference / explanation) |
+| Output formats | Markdown docs, changelogs, glossaries, API/reference pages |
+| Tooling | Markdown in-repo; docs live under `docs/` |
+| Review cadence | Terminology + style pass before publish; every technical claim traced to a source file |
+
+### Workflow
+
+Every docs task flows through four phases — do not skip:
+
+1. **Locate** — decide which Diátaxis quadrant the doc belongs to (tutorial / how-to / reference / explanation). The wrong quadrant is the #1 cause of bad docs.
+2. **Draft** — write to the quadrant's shape. Match the existing docs' voice (Rule 11).
+3. **Verify** — every technical claim (command, path, API name, flag, version) is traced to a source file the writer actually opened. No claim survives without a source (Rule 13).
+4. **Review** — run the style + terminology pass; align every term to the project glossary before publish.
+
+### Conventions
+
+- **One quadrant per document.** A tutorial that turns into a reference dump helps no one. If it drifts, split it.
+- **Never invent a fact.** Commands, file paths, API names, flags, and version numbers are copied from a verified source, never recalled from memory. When quoting exact identifiers, open the file — do NOT trust reproduction (Rule 13).
+- **Terminology is consistent.** One concept, one term. If the codebase says "workspace", the docs do not say "project" for the same thing. The glossary is the source of truth.
+- **Show, then tell, for how-tos.** A copy-pasteable command beats a paragraph describing it.
+- **Every doc states its audience and its prerequisite knowledge** at the top.
+- **Human sign-off before publish** on anything user-facing.
+
+### Common commands
+
+```bash
+/doc-draft <topic>       # draft a doc in the right Diátaxis quadrant, claims traced to sources
+/doc-review <path>       # style + terminology + broken-reference pass on an existing doc
+```

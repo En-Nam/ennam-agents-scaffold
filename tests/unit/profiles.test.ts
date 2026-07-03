@@ -4,6 +4,7 @@ import { getProfile, listProfiles } from '../../packages/cli/src/profiles.js';
 const ALL_PROFILES = [
   'agent-org',
   'ba',
+  'data-analytics',
   'devops-aws',
   'devops-azure',
   'devops-docker',
@@ -16,11 +17,13 @@ const ALL_PROFILES = [
   'hr',
   'local-root',
   'next',
+  'pm',
   'python',
   'qa',
   'qa-automation',
   'react',
   'react-native',
+  'tech-writer',
 ] as const;
 
 describe('profiles', () => {

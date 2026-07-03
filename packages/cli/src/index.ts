@@ -16,6 +16,7 @@ import { printIntro, printPlan, confirmProceed, printNextSteps, printHandoffProm
 import { runWizard } from './wizard.js';
 import { checkPreflight } from './preflight.js';
 import { runAnalyzeClaude } from './analyze-claude.js';
+import { renderCatalogJson, renderCatalogHuman } from './list.js';
 import type { UserStrategy, OperationPlan } from './types.js';
 
 // Re-export wizard types/functions so external callers (and tests) can keep
@@ -37,6 +38,8 @@ cli
   .option('--no-prompts', 'Fail on missing info instead of prompting (CI mode)')
   .option('--verbose', 'Verbose output')
   .option('--analyze-claude', 'Scan ./CLAUDE.md for section headers that may overlap with scaffold instructions and exit')
+  .option('--list', 'List available profiles grouped by role and exit (add --json for machine-readable output)')
+  .option('--json', 'With --list: emit the profile catalog as JSON')
   .action(async (profileArg: string | undefined, flags: Record<string, unknown>) => {
     // cac normalises kebab-case flags: --dry-run → dryRun, --merge-strategy → mergeStrategy.
     // For --no-prompts, cac sets prompts: false (omit defaults to true).
@@ -47,6 +50,14 @@ cli
     // without side-effects. Non-destructive by definition.
     if (flags.analyzeClaude) {
       await runAnalyzeClaude(process.cwd());
+      process.exit(0);
+    }
+
+    // --list: print the profile catalog and exit. Non-destructive; runs before
+    // the wizard/install flow so a portal or script can enumerate profiles
+    // without a TTY. `--json` switches to machine-readable output.
+    if (flags.list) {
+      console.log(flags.json ? renderCatalogJson() : renderCatalogHuman());
       process.exit(0);
     }
 
