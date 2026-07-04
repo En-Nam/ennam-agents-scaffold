@@ -1,5 +1,29 @@
 # Changelog
 
+## v1.11.0 — 2026-07-04
+
+Enterprise foundation — the P0 keystone from the consultant assessment round: an org-context base layer every role inherits (issue #8).
+
+### Added
+
+- **`ORG.md` org-context base layer** (issue [#8](https://github.com/En-Nam/ennam-agents-scaffold/issues/8)).
+  - New `templates/_shared/ORG.md` — role-agnostic, seeded by **every** profile at the repo root: Company, Products & services, Glossary, Stakeholders & departments, Communication channels, and a Data & tool policy baseline.
+  - Referenced from the shared `CLAUDE.md` managed block (new **Org Context** subsection in the Session Boot Protocol) so every role agent reads it at session start — org-level facts are stated once, not re-asked or invented per role.
+  - **User-owned after seeding**: classified `skip-if-exists`, so a re-run never overwrites a filled-in `ORG.md` — verified even under `--merge-strategy=overwrite`.
+  - Fields left as `?` are unknown by contract — agents surface them, never guess (Rule 12/13).
+
+### Changed
+
+- **`classify.ts`** — new first-match rule: `ORG.md` → `skip-if-exists` (before the `CLAUDE.md` rule).
+- **`templates/_shared/CLAUDE.md.partial.hbs`** — added the **Org Context** subsection pointing agents at `ORG.md`.
+- **Version** — `1.10.0` → `1.11.0` (root + CLI package).
+
+### Notes
+
+- Purely additive — no existing profile names or behavior changed; all prior tests stay green (+4 new: 3 org-layer integration + 1 classify unit → 260 total).
+- **Decision (tech-lead, self-directed round):** emit location = standalone `ORG.md` (over CLAUDE.md-above-marker or `.serena/`) because the org layer is org-wide and reused across repos — a standalone, user-owned file is the clearest home. Recorded in `mem:decisions/org-layer-v1.11`.
+- **Still in discussion (not shipped):** role-adaptive AGENTS.md (#9), composition engine (#10) + multi-role wizard (#7), governance pack (#14), and the DoD half of #15. `ORG.md` is the foundation #9/#10 build on. Sharpened recommendations posted on each.
+
 ## v1.10.0 — 2026-07-03
 
 Enterprise-roles expansion — the first tranche of extending the scaffold beyond engineering to more knowledge-worker positions, from the consultant assessment round (GitHub issues #8–#15).

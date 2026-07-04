@@ -138,6 +138,7 @@ Each role/cloud profile ships with its own `.claude/agents/<specialist>.md`, one
 ## What gets added
 
 - `AGENTS.md` — 13 universal behavioral rules
+- `ORG.md` — org-context base layer (company facts, glossary, stakeholders, data/tool policy) read by every role. Seeded once, then **user-owned** — never overwritten on re-run
 - `CLAUDE.md` — appended scaffold-managed block (with markers, idempotent on re-run)
 - `.claude/` — settings, hooks, slash commands (`/boot`, `/checkpoint`, `/memory`, `/escalate`), role agents
 - `.mcp.json` — deep-merged with any existing config (user wins on conflicts)
@@ -175,6 +176,16 @@ v1.5.1 fixes two broken shapes the scaffold has been shipping in `.claude/settin
 2. `hooks.SessionStart` entries used the legacy bare `{command}` shape. Current Claude Code rejects this with **"Expected array, but received undefined"** and refuses to load any settings from the file. Corrected to the required nested `{hooks: [{type: "command", command: "…"}]}` wrapper.
 
 Because `.claude/settings.json` is merged user-wins on arrays, **re-running the scaffold cannot auto-rewrite an existing broken file** — the CLI now prints a loud warning at the end of every install when it detects either legacy shape so you know to fix it by hand.
+
+### Upgrading from v1.10
+
+v1.11 adds the **org-context base layer** (`ORG.md`) — the P0 keystone from the consultant assessment round ([issue #8](https://github.com/En-Nam/ennam-agents-scaffold/issues/8)) for scaling the scaffold across an enterprise:
+
+- Every profile now seeds an **`ORG.md`** at the repo root: a role-agnostic template for company facts, product list, glossary, stakeholders, comms channels, and a data/tool policy baseline. All role agents read it at session start (referenced from the shared `CLAUDE.md` managed block) so org-level facts are stated once, not re-asked or invented per role.
+- **User-owned after seeding.** `ORG.md` is classified `skip-if-exists` — the scaffold writes it once and never overwrites it on re-run, even under `--merge-strategy=overwrite`. Fill it in; re-running the scaffold leaves your content untouched.
+- Fields left as `?` are unknown by contract — agents surface them rather than guess (Rule 12/13).
+
+No existing profile names or behavior changed; `ORG.md` is purely additive. This is the foundation the role-adaptive rules ([#9](https://github.com/En-Nam/ennam-agents-scaffold/issues/9)) and composition engine ([#10](https://github.com/En-Nam/ennam-agents-scaffold/issues/10)) build on.
 
 ### Upgrading from v1.9
 

@@ -11,6 +11,10 @@ interface Rule {
 // .mcp.json.hbs before the final write.
 const RULES: Rule[] = [
   { match: r => r === 'AGENTS.md',                              kind: 'write-or-ask' },
+  // ORG.md is the org-context base layer (shared across every profile). It is
+  // user-owned after the first seed — skip-if-exists so a re-run never clobbers
+  // the org context the user has filled in (even under --merge-strategy=overwrite).
+  { match: r => r === 'ORG.md',                                 kind: 'skip-if-exists' },
   { match: r => r === 'CLAUDE.md',                              kind: 'append-marker' },
   { match: r => r === '.gitignore',                             kind: 'append-lines' },
   { match: r => r === '.mcp.json',                              kind: 'json-merge' },

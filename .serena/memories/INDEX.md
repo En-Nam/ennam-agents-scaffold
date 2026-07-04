@@ -10,6 +10,7 @@
 - [No hardcoded model (v1.6.1)](decisions/no-hardcoded-model.md) — scaffold must NOT pin `model` in shared settings template; fixes issue #3
 - [game-unity v1.8.0 big-bang + safety harness](decisions/game-unity-v1.8.0-bigbang-safety-harness.md) — new profile for Unity 2.5D mobile; CoplayDev MCP + Tripo3D `--dry-run` default + maintainer pre-publish gate; judge panel C wins over verified-first (A) / bare big-bang (B)
 - [v1.9 scope](decisions/v1.9-scope.md) — MUST: `minClaudeCodeVersion` field + wizard preflight, `--analyze-claude` (#4a), `qa-automation` profile (#2), meta-spike → `agent-org` profile; WON'T: DESIGN doc as-written; DEFER: `--claude-strategy=minimal` (#4b) to v1.10
+- [org-layer v1.11](decisions/org-layer-v1.11.md) — issue #8: org-context base layer emitted as standalone `ORG.md` (user-owned, skip-if-exists); shipped v1.11.0. Consultant-round enterprise expansion: v1.10 shipped pm/tech-writer/data-analytics + `--list` (#11/#12/#13/#15-catalog); #9/#10/#7/#14/#15-DoD still open (triage recs posted)
 
 ## Active Comms
 (empty)
