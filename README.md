@@ -46,6 +46,9 @@ flowchart TD
     Role -->|Developer| PType{project type?}
     Role -->|QA-QC| QAKind{manual or automation?}
     Role -->|BA| BA[ba profile]
+    Role -->|PM| PM[pm profile]
+    Role -->|Tech-Writer| TW[tech-writer profile]
+    Role -->|Data| DataP[data-analytics profile]
     Role -->|HR| HR[hr profile]
     Role -->|DevOps| Cloud{cloud?}
     Role -->|Game-Dev| GameStack{game stack?}
@@ -74,7 +77,7 @@ flowchart TD
     GameStack -->|Unity 2.5D Mobile| GameUnity[game-unity profile]
 
     classDef leaf fill:#d4edda,stroke:#155724,color:#155724;
-    class QA,QAAuto,BA,HR,LR,Next,React,RN,Flutter,Python,Go,Dotnet,Express,AWS,Azure,GCP,DockerProfile,GameUnity,AgentOrg leaf;
+    class QA,QAAuto,BA,PM,TW,DataP,HR,LR,Next,React,RN,Flutter,Python,Go,Dotnet,Express,AWS,Azure,GCP,DockerProfile,GameUnity,AgentOrg leaf;
 ```
 
 > The diagram above renders on GitHub. On npmjs.com, the mermaid code block is shown verbatim — open this README on GitHub for the rendered flowchart.
@@ -94,13 +97,16 @@ flowchart TD
 | `dotnet-mvc` | .NET 9 + ASP.NET Core MVC + EF Core 9 + xUnit | postgres, github |
 | `express` | Node 20 + Express 5 + TypeScript strict + Jest + Zod | github |
 
-### QA / BA / HR (role-specific, no stack branch)
+### Knowledge-worker roles (role-specific, no stack branch)
 
 | Profile | Role | Extra MCP |
 |---|---|---|
 | `qa` | QA workflow (test-cases + evidence + `/qa-run` `/qa-report`) | — |
 | `qa-automation` | QA Automation — Maestro (mobile) + Playwright (web) + Gherkin BDD parser; 3 skills (`qa-maestro`, `qa-playwright`, `gherkin-bdd`) | — |
 | `ba` | Business Analyst — user stories + Gherkin AC + BPMN flows + `/ba-story` `/ba-flow` | — |
+| `pm` | Product Manager / PO — PRDs with outcome metrics + backlog prioritization (RICE/MoSCoW) + `/pm-prd` `/pm-prioritize` | — |
+| `tech-writer` | Technical Writer — Diátaxis docs + terminology consistency + source-traced claims + `/doc-draft` `/doc-review` | — |
+| `data-analytics` | Data & Analytics — reviewed read-only SQL + reproducible metric definitions + `/data-query` `/data-metric` | — |
 | `hr` | HR — JD authoring + interview kits + `/hr-jd` `/hr-interview-kit` | — |
 
 ### DevOps (cloud / infra-target-specific)
@@ -170,6 +176,17 @@ v1.5.1 fixes two broken shapes the scaffold has been shipping in `.claude/settin
 
 Because `.claude/settings.json` is merged user-wins on arrays, **re-running the scaffold cannot auto-rewrite an existing broken file** — the CLI now prints a loud warning at the end of every install when it detects either legacy shape so you know to fix it by hand.
 
+### Upgrading from v1.9
+
+v1.10 begins the **enterprise-roles expansion** — extending the scaffold beyond engineering to more knowledge-worker positions — plus a discoverability flag:
+
+- **`pm` profile** — Product Manager / Product Owner. `product-manager` agent (owns why/what, never how), `/pm-prd` (PRD with a required outcome metric + baseline + explicit out-of-scope), `/pm-prioritize` (RICE / MoSCoW with the scoring visible), and skills `prd-authoring` + `prioritization-frameworks`. Wizard role: **Product Manager / PO**.
+- **`tech-writer` profile** — Technical Writer / Documentation. `technical-writer` agent, `/doc-draft` + `/doc-review`, and skills `docs-structure` (Diátaxis) + `style-guide` (one-concept-one-term). Every technical claim is traced to a source file — identifiers are never recalled from memory (Rule 13). Wizard role: **Technical Writer / Docs**.
+- **`data-analytics` profile** — Data & Analytics. `data-analyst` agent (read-only on source data by default), `/data-query` + `/data-metric`, and skills `sql-review` (the silent-wrong-number checklist) + `metric-definitions` (reproducible metric contract). Wizard role: **Data & Analytics**.
+- **`--list` / `--list --json` flags** — enumerate all profiles grouped by role (human) or as a machine-readable catalog (`name`, `role`, `description`, `extraMcp`, `requires`) for internal portals. Non-destructive, no TTY required.
+
+All three new profiles use the shared MCP catalog only (`serena`, `context7`, `jira`) — no extra MCP, no env vars beyond `JIRA_*`. No existing profile names or behavior changed; pin-by-name calls keep working. Origin: consultant assessment round → GitHub issues [#11](https://github.com/En-Nam/ennam-agents-scaffold/issues/11), [#12](https://github.com/En-Nam/ennam-agents-scaffold/issues/12), [#13](https://github.com/En-Nam/ennam-agents-scaffold/issues/13), and the catalog half of [#15](https://github.com/En-Nam/ennam-agents-scaffold/issues/15). The foundational issues (#8 org-layer, #9 role-adaptive rules, #10 composition engine, #14 governance pack) are in discussion and not yet shipped.
+
 ### Upgrading from v1.8
 
 v1.9 adds two new profiles + one preflight flag + one preflight field:
@@ -211,6 +228,8 @@ v1.5 adds the `devops-docker` profile — a DevOps role for self-hosted Docker f
 | `--no-prompts` | Fail on missing info (CI mode) |
 | `--verbose` | Verbose output |
 | `--analyze-claude` | Scan `./CLAUDE.md` for section headers that may overlap with scaffold instructions, print line-cited warnings + recommendation, exit 0. Non-destructive; runs before the wizard/install flow. |
+| `--list` | List available profiles grouped by wizard role and exit 0. Non-destructive; no TTY required. |
+| `--list --json` | With `--list`: emit the profile catalog as JSON (`name`, `role`, `description`, `extraMcp`, `requires`) for portals / scripts. |
 
 ## Manual review after merge
 

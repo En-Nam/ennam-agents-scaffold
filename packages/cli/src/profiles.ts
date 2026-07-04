@@ -77,6 +77,24 @@ const REGISTRY: Record<string, ProfileDef> = {
     templateDir: path.join(TEMPLATES, 'ba'),
     extraMcp: [],
   },
+  pm: {
+    name: 'pm',
+    description: 'Product Manager / PO — PRDs with outcome metrics, backlog prioritization (RICE/MoSCoW)',
+    templateDir: path.join(TEMPLATES, 'pm'),
+    extraMcp: [],
+  },
+  'tech-writer': {
+    name: 'tech-writer',
+    description: 'Technical Writer — Diátaxis docs, terminology consistency, source-traced claims',
+    templateDir: path.join(TEMPLATES, 'tech-writer'),
+    extraMcp: [],
+  },
+  'data-analytics': {
+    name: 'data-analytics',
+    description: 'Data & Analytics — reviewed read-only SQL, reproducible metric definitions, validated insights',
+    templateDir: path.join(TEMPLATES, 'data-analytics'),
+    extraMcp: [],
+  },
   hr: {
     name: 'hr',
     description: 'HR — job descriptions, interview kits, onboarding, performance reviews',

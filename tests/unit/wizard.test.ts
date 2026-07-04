@@ -73,6 +73,21 @@ describe('wizard resolveProfile matrix', () => {
     expect(resolveProfile('HR', 'Local-root')).toBe('hr');
   });
 
+  it('PM → pm (projectType ignored)', () => {
+    expect(resolveProfile('PM', 'Existing repository')).toBe('pm');
+    expect(resolveProfile('PM', 'Local-root')).toBe('pm');
+  });
+
+  it('Tech-Writer → tech-writer (projectType ignored)', () => {
+    expect(resolveProfile('Tech-Writer', 'Existing repository')).toBe('tech-writer');
+    expect(resolveProfile('Tech-Writer', 'Local-root')).toBe('tech-writer');
+  });
+
+  it('Data → data-analytics (projectType ignored)', () => {
+    expect(resolveProfile('Data', 'Existing repository')).toBe('data-analytics');
+    expect(resolveProfile('Data', 'Local-root')).toBe('data-analytics');
+  });
+
   it('DevOps + AWS → devops-aws', () => {
     expect(resolveProfile('DevOps', 'Existing repository', undefined, 'AWS')).toBe('devops-aws');
   });
@@ -121,6 +136,9 @@ describe('wizard resolveProfile matrix', () => {
       resolveProfile('QA-QC', 'Existing repository'),
       resolveProfile('QA-QC', 'Existing repository', undefined, undefined, undefined, 'Automation'),
       resolveProfile('BA', 'Existing repository'),
+      resolveProfile('PM', 'Existing repository'),
+      resolveProfile('Tech-Writer', 'Existing repository'),
+      resolveProfile('Data', 'Existing repository'),
       resolveProfile('HR', 'Existing repository'),
       resolveProfile('DevOps', 'Existing repository', undefined, 'AWS'),
       resolveProfile('DevOps', 'Existing repository', undefined, 'Azure'),

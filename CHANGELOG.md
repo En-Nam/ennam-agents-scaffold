@@ -1,5 +1,42 @@
 # Changelog
 
+## v1.10.0 — 2026-07-03
+
+Enterprise-roles expansion — the first tranche of extending the scaffold beyond engineering to more knowledge-worker positions, from the consultant assessment round (GitHub issues #8–#15).
+
+### Added
+
+- **`pm` profile** — Product Manager / Product Owner (issue [#11](https://github.com/En-Nam/ennam-agents-scaffold/issues/11)).
+  - `product-manager` agent — owns why/what, never how; refuses to invent estimates or unmeasurable metrics.
+  - `/pm-prd` — PRD / one-pager with a required outcome metric + baseline and an explicit out-of-scope list.
+  - `/pm-prioritize` — RICE / MoSCoW / value-vs-effort with the scoring visible; human overrides recorded, not silently applied (Rule 7).
+  - Skills: `prd-authoring`, `prioritization-frameworks`.
+- **`tech-writer` profile** — Technical Writer / Documentation (issue [#12](https://github.com/En-Nam/ennam-agents-scaffold/issues/12)).
+  - `technical-writer` agent — traces every command/path/API/flag/version to a source file; never recalls identifiers from memory (Rule 13).
+  - `/doc-draft` (Diátaxis-quadrant-first) + `/doc-review` (terminology + quadrant purity + broken-reference pass).
+  - Skills: `docs-structure` (Diátaxis), `style-guide` (one-concept-one-term, glossary-aligned).
+- **`data-analytics` profile** — Data & Analytics (issue [#13](https://github.com/En-Nam/ennam-agents-scaffold/issues/13)).
+  - `data-analyst` agent — read-only on source data by default; never bundles DDL/DML into an analysis; PII-aware.
+  - `/data-query` (grain + window first, reviewed read-only SQL, reconciled result) + `/data-metric` (reproducible metric contract).
+  - Skills: `sql-review` (the silent-wrong-number checklist), `metric-definitions`.
+  - Uses the LLM for interpretation, not deterministic aggregation (Rule 5); reports figures from query output, not memory (Rule 13).
+- **`--list` / `--list --json` flags** (catalog half of issue [#15](https://github.com/En-Nam/ennam-agents-scaffold/issues/15)).
+  - `--list` prints all profiles grouped by wizard role; `--list --json` emits a machine-readable catalog (`name`, `role`, `description`, `extraMcp`, `requires`) for internal portals / scripts.
+  - Non-destructive, no TTY required; short-circuits before the wizard/install flow.
+  - `list.ts` keeps a profile→role map with a test asserting no profile silently drops to `Other`.
+
+### Changed
+
+- **Wizard** — `Role` union gains `PM`, `Tech-Writer`, `Data`; three new single-profile role branches (no projectType/stack sub-prompt, mirroring BA/HR). `resolveProfile` extended; all existing call sites unchanged (backward-compatible).
+- **README** — Profiles table + wizard mermaid + Flags table + "Upgrading from v1.9" section. Section heading "QA / BA / HR" → "Knowledge-worker roles".
+- **Version** — `1.9.0` → `1.10.0` (root + CLI package).
+
+### Notes
+
+- All three new profiles use the shared MCP catalog only (`serena`, `context7`, `jira`) — no extra MCP, no `minClaudeCodeVersion`. They ship in the current convention (like `ba`/`hr`); the role-adaptive rule overlay (#9) and org-context layer (#8) will enhance them later.
+- **In discussion, not shipped:** #8 org-context base layer, #9 role-adaptive AGENTS.md, #10 composition engine, #14 governance pack, and the Definition-of-Done half of #15 (depends on #9). Tech-lead triage comments posted on each.
+- **Pre-existing, not introduced here:** `tsc --noEmit` (the `lint` script) reports 2 pre-existing errors in `analyze-claude.ts` (verified on clean HEAD). Not touched by this change. (The `npx-symlink-bin` integration test was flaky in isolated temp dirs; fixed in v1.9.1 and rebased in here.)
+
 ## v1.9.1 — 2026-07-02
 
 ### Added
