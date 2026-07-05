@@ -15,6 +15,8 @@ const RULES: Rule[] = [
   // user-owned after the first seed — skip-if-exists so a re-run never clobbers
   // the org context the user has filled in (even under --merge-strategy=overwrite).
   { match: r => r === 'ORG.md',                                 kind: 'skip-if-exists' },
+  // Governance pack (#14) — user-owned after the first seed, like ORG.md.
+  { match: r => r === 'POLICY.md',                              kind: 'skip-if-exists' },
   { match: r => r === 'CLAUDE.md',                              kind: 'append-marker' },
   { match: r => r === '.gitignore',                             kind: 'append-lines' },
   { match: r => r === '.mcp.json',                              kind: 'json-merge' },

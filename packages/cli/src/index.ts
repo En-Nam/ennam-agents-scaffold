@@ -3,8 +3,8 @@ import { readFile, access } from 'node:fs/promises';
 import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { getProfile } from './profiles.js';
-import { enumerateFiles } from './enumerate.js';
+import { resolveProfiles } from './profiles.js';
+import { enumerateProfiles } from './enumerate.js';
 import { scanConflicts } from './conflict.js';
 import { buildPlan } from './plan.js';
 import { executeOps } from './execute.js';
@@ -17,7 +17,7 @@ import { runWizard } from './wizard.js';
 import { checkPreflight } from './preflight.js';
 import { runAnalyzeClaude } from './analyze-claude.js';
 import { renderCatalogJson, renderCatalogHuman } from './list.js';
-import type { UserStrategy, OperationPlan } from './types.js';
+import type { UserStrategy, OperationPlan, ProfileDef } from './types.js';
 
 // Re-export wizard types/functions so external callers (and tests) can keep
 // importing from this file. The wizard module is the source of truth — no
@@ -31,7 +31,7 @@ const PKG = JSON.parse(await readFile(path.join(HERE, '..', 'package.json'), 'ut
 const cli = cac('ennam-agents-scaffold');
 
 cli
-  .command('[profile]', 'Install Claude Code config into the current directory')
+  .command('[...profiles]', 'Install Claude Code config into the current directory (accepts multiple profiles to compose)')
   .option('--dry-run', 'Print the plan without writing anything')
   .option('--force', 'Overwrite all conflicts without prompting (alias for --merge-strategy=overwrite)')
   .option('--merge-strategy <s>', 'ask | skip | overwrite (default: ask)', { default: 'ask' })
@@ -40,7 +40,8 @@ cli
   .option('--analyze-claude', 'Scan ./CLAUDE.md for section headers that may overlap with scaffold instructions and exit')
   .option('--list', 'List available profiles grouped by role and exit (add --json for machine-readable output)')
   .option('--json', 'With --list: emit the profile catalog as JSON')
-  .action(async (profileArg: string | undefined, flags: Record<string, unknown>) => {
+  .option('--policy [name]', 'Emit the governance/data-handling POLICY.md pack (baseline). Auto-attached for hr and data-analytics.')
+  .action(async (profileArgs: string[], flags: Record<string, unknown>) => {
     // cac normalises kebab-case flags: --dry-run → dryRun, --merge-strategy → mergeStrategy.
     // For --no-prompts, cac sets prompts: false (omit defaults to true).
     const interactive = flags.prompts !== false;
@@ -61,8 +62,9 @@ cli
       process.exit(0);
     }
 
-    let profileName = profileArg;
-    if (!profileName) {
+    let profileNames = profileArgs ?? [];
+    const fromArgs = profileNames.length > 0;
+    if (!fromArgs) {
       if (!interactive) {
         console.error('Error: profile is required in --no-prompts mode');
         process.exit(2);
@@ -79,12 +81,14 @@ cli
       // the intro after profile validation (below) to avoid leaving a dangling
       // clack frame on bad-profile errors.
       printIntro(PKG.version);
-      profileName = await runWizard();
+      profileNames = await runWizard();  // v1.11 (#7) — wizard may return multiple
     }
 
-    let profile;
+    // v1.11 (#10) — resolve one or more profiles for composition. resolveProfiles
+    // de-dupes and fails loud on any unknown name.
+    let profileDefs: ProfileDef[];
     try {
-      profile = getProfile(profileName);
+      profileDefs = resolveProfiles(profileNames);
     } catch (err) {
       // Clean stderr message, no stack trace (Rule 12 — fail loud, but cleanly).
       console.error(`Error: ${(err as Error).message}`);
@@ -92,18 +96,29 @@ cli
     }
 
     // For the direct-profile path (no wizard), defer intro until after the
-    // profile name has been validated so a bad-profile error does not leave
+    // profile names have been validated so a bad-profile error does not leave
     // an unclosed clack frame on stdout.
-    if (profileArg) {
+    if (fromArgs) {
       printIntro(PKG.version);
     }
 
-    // v1.9.0 — preflight: warn if user's local Claude Code is older than
-    // the profile recommends. Non-blocking (Rule 12 — fail loud, but let
+    // Composed display profile — the union of extra MCPs, a joined name. For a
+    // single profile this IS the profile, so single-profile UX is unchanged.
+    const displayProfile: ProfileDef = profileDefs.length === 1 ? profileDefs[0]! : {
+      name: profileDefs.map(p => p.name).join(' + '),
+      description: `composed: ${profileDefs.map(p => p.name).join(', ')}`,
+      templateDir: '',
+      extraMcp: [...new Set(profileDefs.flatMap(p => p.extraMcp))],
+    };
+
+    // v1.9.0 — preflight: warn if user's local Claude Code is older than any
+    // selected profile recommends. Non-blocking (Rule 12 — fail loud, but let
     // the human decide whether to continue).
-    const preflight = checkPreflight(profile);
-    for (const w of preflight.warnings) {
-      console.error(`  Preflight: ${w}`);
+    for (const p of profileDefs) {
+      const preflight = checkPreflight(p);
+      for (const w of preflight.warnings) {
+        console.error(`  Preflight: ${w}`);
+      }
     }
 
     const cwd = process.cwd();
@@ -119,8 +134,16 @@ cli
 
     const strategy: UserStrategy = (flags.force ? 'overwrite' : (flags.mergeStrategy as UserStrategy)) ?? 'ask';
 
-    const entries = await enumerateFiles(profile);
-    const ctx = buildContext({ profile: profileName, cwd, version: PKG.version });
+    let entries;
+    try {
+      entries = await enumerateProfiles(profileDefs, { policy: !!flags.policy });
+    } catch (err) {
+      // Fail loud on a composition conflict (two profiles ship the same path with
+      // different content) — clean stderr, no stack trace (Rule 7 + Rule 12).
+      console.error(`Error: ${(err as Error).message}`);
+      process.exit(2);
+    }
+    const ctx = buildContext({ profile: displayProfile.name, cwd, version: PKG.version });
     const byRel = new Map(entries.map(e => [e.relPath, e]));
     const provider = async (rel: string) => {
       const entry = byRel.get(rel);
@@ -182,7 +205,7 @@ cli
       process.exit(2);
     }
     const ops = buildPlan({ entries, conflicts, strategy, hasGit });
-    const plan: OperationPlan = { cwd, profile, ops, hasGit };
+    const plan: OperationPlan = { cwd, profile: displayProfile, ops, hasGit };
 
     printPlan(plan);
 
@@ -197,7 +220,7 @@ cli
     }
 
     const result = await executeOps({ cwd, ops, ctx, interactive });
-    printNextSteps(profile, result, hasGit);
+    printNextSteps(displayProfile, result, hasGit);
 
     // Migration hint: v1.1 users may still have a stale chrome-devtools entry
     // in their .mcp.json (mergeJson is user-wins, so the scaffold cannot
@@ -216,7 +239,7 @@ cli
     // scaffold marker block. Skipped in CI (--no-prompts) — there is no
     // human to paste it — and for local-root (no app to extract).
     if (interactive) {
-      printHandoffPrompt(profile.name);
+      printHandoffPrompt(displayProfile.name);
     }
   });
 

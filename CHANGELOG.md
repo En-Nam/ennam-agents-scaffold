@@ -2,27 +2,36 @@
 
 ## v1.11.0 — 2026-07-04
 
-Enterprise foundation — the P0 keystone from the consultant assessment round: an org-context base layer every role inherits (issue #8).
+**Enterprise foundation batch** — closes the remaining foundational issues from the consultant assessment round in one release: org-context layer (#8), role-adaptive rules (#9), Definition-of-Done (#15), governance pack (#14), and the composition engine + multi-role installs (#10 + #7). Decisions were reached via a CTO ⇄ tech-lead debate round (recorded in `mem:decisions/enterprise-foundation-v1.11`).
 
 ### Added
 
 - **`ORG.md` org-context base layer** (issue [#8](https://github.com/En-Nam/ennam-agents-scaffold/issues/8)).
-  - New `templates/_shared/ORG.md` — role-agnostic, seeded by **every** profile at the repo root: Company, Products & services, Glossary, Stakeholders & departments, Communication channels, and a Data & tool policy baseline.
-  - Referenced from the shared `CLAUDE.md` managed block (new **Org Context** subsection in the Session Boot Protocol) so every role agent reads it at session start — org-level facts are stated once, not re-asked or invented per role.
-  - **User-owned after seeding**: classified `skip-if-exists`, so a re-run never overwrites a filled-in `ORG.md` — verified even under `--merge-strategy=overwrite`.
-  - Fields left as `?` are unknown by contract — agents surface them, never guess (Rule 12/13).
+  - `templates/_shared/ORG.md` — role-agnostic, seeded by **every** profile: Company, Products, Glossary, Stakeholders, Comms channels, Data & tool policy baseline. Read by every role agent at session start (referenced from the shared `CLAUDE.md` block). User-owned (`skip-if-exists`) — never overwritten on re-run.
+- **Role-adaptive `AGENTS.md`** (issue [#9](https://github.com/En-Nam/ennam-agents-scaffold/issues/9)) + **Definition of Done** (issue [#15](https://github.com/En-Nam/ennam-agents-scaffold/issues/15), DoD half).
+  - New `ProfileDef.ruleFamily` (`'engineering'` default | `'doc-first'`). `templates/_shared/AGENTS.doc-first.md` mirrors the 13 rules reworded for knowledge work and folds in a **Definition of Done** section (Verify = sign-off / checklist / citation-check, not build/test).
+  - Doc-first profiles: `ba`, `hr`, `pm`, `tech-writer`, `data-analytics`. Engineering profiles keep `_shared/AGENTS.md` **byte-identical** (diff=0).
+- **Governance & data-handling policy pack** (issue [#14](https://github.com/En-Nam/ennam-agents-scaffold/issues/14)).
+  - `templates/_shared/POLICY.baseline.md` — PII handling, approval gates before irreversible/outward-facing actions, retention, audit. Opt in with **`--policy`**; **auto-attached** for `hr` and `data-analytics` (routine PII). User-owned (`skip-if-exists`). Carries a loud legal disclaimer (CTO-approved wording) enforced by test.
+- **Composition engine + multi-role installs** (issues [#10](https://github.com/En-Nam/ennam-agents-scaffold/issues/10) + [#7](https://github.com/En-Nam/ennam-agents-scaffold/issues/7)).
+  - `npx @ennamjsc/agents-scaffold pm qa data-analytics` — compose several profiles in one install. `resolveProfiles()` + `enumerateProfiles()` merge shared + every profile: CLAUDE.md concatenates each profile's section under a `#### <profile>` sub-heading; `.mcp.json` unions every partial; AGENTS.md uses the **engineering** variant if any profile is engineering (a code repo), else doc-first; POLICY.md emits if any profile auto-attaches.
+  - **Fail loud (Rule 7):** two profiles shipping the same path with different content abort with a listed conflict instead of a silent pick.
+  - Wizard gains a **single vs compose** step; compose offers a profile multiselect.
 
 ### Changed
 
-- **`classify.ts`** — new first-match rule: `ORG.md` → `skip-if-exists` (before the `CLAUDE.md` rule).
-- **`templates/_shared/CLAUDE.md.partial.hbs`** — added the **Org Context** subsection pointing agents at `ORG.md`.
-- **Version** — `1.10.0` → `1.11.0` (root + CLI package).
+- **`classify.ts`** — `ORG.md` and `POLICY.md` → `skip-if-exists`.
+- **`types.ts`** — `ProfileDef.ruleFamily` + `ProfileDef.autoPolicy` + `FileEntry.extraSrcList` + `EnumerateOptions`.
+- **`render.ts` / `execute.ts`** — shared `composeProfileSections()` helper; `renderFileEntry` / `renderJsonContent` / `maybeRender` handle multi-profile `extraSrcList`. Single-profile paths unchanged.
+- **`index.ts`** — accepts variadic profile args (`[...profiles]`); preflight loops all; composed display profile for UX.
+- **README** — role-adaptive rules, governance, composition sections; `--policy` flag; `ORG.md` + `POLICY.md` in "What gets added".
+- **Version** — `1.10.0` → `1.11.0`.
 
 ### Notes
 
-- Purely additive — no existing profile names or behavior changed; all prior tests stay green (+4 new: 3 org-layer integration + 1 classify unit → 260 total).
-- **Decision (tech-lead, self-directed round):** emit location = standalone `ORG.md` (over CLAUDE.md-above-marker or `.serena/`) because the org layer is org-wide and reused across repos — a standalone, user-owned file is the clearest home. Recorded in `mem:decisions/org-layer-v1.11`.
-- **Still in discussion (not shipped):** role-adaptive AGENTS.md (#9), composition engine (#10) + multi-role wizard (#7), governance pack (#14), and the DoD half of #15. `ORG.md` is the foundation #9/#10 build on. Sharpened recommendations posted on each.
+- Single-profile behavior is byte-identical — all prior tests stay green. **+26 tests → 286 total.**
+- Verified end-to-end: `pm qa` → engineering AGENTS + both CLAUDE sections; `hr data-analytics` → doc-first AGENTS + auto POLICY.md + disclaimer.
+- All six foundational issues (#7/#8/#9/#10/#14/#15) are now implemented; ship closes them.
 
 ## v1.10.0 — 2026-07-03
 

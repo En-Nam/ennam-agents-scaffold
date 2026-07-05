@@ -139,6 +139,7 @@ Each role/cloud profile ships with its own `.claude/agents/<specialist>.md`, one
 
 - `AGENTS.md` — 13 universal behavioral rules
 - `ORG.md` — org-context base layer (company facts, glossary, stakeholders, data/tool policy) read by every role. Seeded once, then **user-owned** — never overwritten on re-run
+- `POLICY.md` — governance / data-handling pack (PII, approval gates, retention, audit). Opt in with `--policy`; auto-attached for `hr` and `data-analytics`. User-owned after seeding
 - `CLAUDE.md` — appended scaffold-managed block (with markers, idempotent on re-run)
 - `.claude/` — settings, hooks, slash commands (`/boot`, `/checkpoint`, `/memory`, `/escalate`), role agents
 - `.mcp.json` — deep-merged with any existing config (user wins on conflicts)
@@ -185,7 +186,19 @@ v1.11 adds the **org-context base layer** (`ORG.md`) — the P0 keystone from th
 - **User-owned after seeding.** `ORG.md` is classified `skip-if-exists` — the scaffold writes it once and never overwrites it on re-run, even under `--merge-strategy=overwrite`. Fill it in; re-running the scaffold leaves your content untouched.
 - Fields left as `?` are unknown by contract — agents surface them rather than guess (Rule 12/13).
 
-No existing profile names or behavior changed; `ORG.md` is purely additive. This is the foundation the role-adaptive rules ([#9](https://github.com/En-Nam/ennam-agents-scaffold/issues/9)) and composition engine ([#10](https://github.com/En-Nam/ennam-agents-scaffold/issues/10)) build on.
+v1.11 also completes the enterprise foundation on top of `ORG.md`:
+
+- **Role-adaptive `AGENTS.md`** ([#9](https://github.com/En-Nam/ennam-agents-scaffold/issues/9)) + **Definition of Done** ([#15](https://github.com/En-Nam/ennam-agents-scaffold/issues/15)). Doc-first roles (`ba`, `hr`, `pm`, `tech-writer`, `data-analytics`) now receive an `AGENTS.md` reworded for knowledge work, with a **Definition of Done** (sign-off / checklist / citation-check instead of build/test). Engineering profiles keep the original `AGENTS.md` byte-for-byte.
+- **Governance pack** ([#14](https://github.com/En-Nam/ennam-agents-scaffold/issues/14)). `POLICY.md` (PII, approval gates, retention, audit) via `--policy`, auto-attached for `hr` and `data-analytics`. Carries a loud "not legal compliance" disclaimer.
+- **Compose multiple roles in one install** ([#10](https://github.com/En-Nam/ennam-agents-scaffold/issues/10) + [#7](https://github.com/En-Nam/ennam-agents-scaffold/issues/7)):
+
+  ```bash
+  npx @ennamjsc/agents-scaffold pm qa data-analytics
+  ```
+
+  Each profile's CLAUDE.md section is concatenated under a `#### <profile>` sub-heading, `.mcp.json` is unioned, and `AGENTS.md` resolves to the engineering variant if any selected profile is engineering (a code repo). Two profiles shipping the same path with different content **fail loud** rather than silently pick one. The interactive wizard offers a single-role guided flow or a compose-several multiselect.
+
+No existing profile names or single-profile behavior changed; everything above is additive.
 
 ### Upgrading from v1.9
 
@@ -241,6 +254,7 @@ v1.5 adds the `devops-docker` profile — a DevOps role for self-hosted Docker f
 | `--analyze-claude` | Scan `./CLAUDE.md` for section headers that may overlap with scaffold instructions, print line-cited warnings + recommendation, exit 0. Non-destructive; runs before the wizard/install flow. |
 | `--list` | List available profiles grouped by wizard role and exit 0. Non-destructive; no TTY required. |
 | `--list --json` | With `--list`: emit the profile catalog as JSON (`name`, `role`, `description`, `extraMcp`, `requires`) for portals / scripts. |
+| `--policy [name]` | Emit the governance/data-handling `POLICY.md` pack (baseline). Auto-attached for `hr` and `data-analytics`. |
 
 ## Manual review after merge
 

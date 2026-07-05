@@ -1,5 +1,6 @@
-import { select, isCancel, cancel, log } from '@clack/prompts';
+import { select, multiselect, isCancel, cancel, log } from '@clack/prompts';
 import path from 'node:path';
+import { listProfiles } from './profiles.js';
 
 // Wizard matrix: (role × projectType × stack | cloud | gameStack) → profile name.
 // Exported as a pure function for unit testing; runWizard wraps it with prompts.
@@ -92,7 +93,12 @@ export function resolveProfile(
   throw new Error(`resolveProfile: unknown combination (${role}, ${projectType}, stack=${stack ?? '<none>'}, cloud=${cloud ?? '<none>'}, gameStack=${gameStack ?? '<none>'})`);
 }
 
-export async function runWizard(cwd: string = process.cwd()): Promise<string> {
+/**
+ * v1.11 (#7 + #10) — the wizard may now return MORE than one profile to compose.
+ * First it offers single-role (guided) vs compose-several (multiselect). Single-role
+ * keeps the original guided flow untouched.
+ */
+export async function runWizard(cwd: string = process.cwd()): Promise<string[]> {
   // Fail loud on non-TTY stdin: a piped invocation forgetting `--no-prompts`
   // would otherwise hang or silently exit (Rule 12 — fail loud, never silent).
   if (!process.stdin.isTTY) {
@@ -102,6 +108,31 @@ export async function runWizard(cwd: string = process.cwd()): Promise<string> {
 
   log.info(`Installing Claude Code tooling into ${path.basename(cwd)} — you will see a plan and confirm before any file is written.`);
 
+  const mode = await select<'single' | 'compose'>({
+    message: 'Install a single role, or compose several?',
+    options: [
+      { value: 'single', label: 'Single role (guided: role → stack)' },
+      { value: 'compose', label: 'Compose several profiles (multi-role repo — advanced)' },
+    ],
+    initialValue: 'single',
+  });
+  if (isCancel(mode)) { cancel('Aborted.'); process.exit(1); }
+
+  if (mode === 'compose') {
+    const picked = await multiselect<string>({
+      message: 'Pick the profiles to compose (space toggles, enter confirms):',
+      options: listProfiles().map(p => ({ value: p.name, label: p.name, hint: p.description })),
+      required: true,
+    });
+    if (isCancel(picked)) { cancel('Aborted.'); process.exit(1); }
+    return picked as string[];
+  }
+
+  return [await chooseSingleProfile()];
+}
+
+/** The original guided single-role flow. Returns exactly one profile name. */
+async function chooseSingleProfile(): Promise<string> {
   const role = await select<Role>({
     message: "What's your role?",
     options: [

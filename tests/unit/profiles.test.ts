@@ -69,4 +69,15 @@ describe('profiles', () => {
       expect(getProfile(name).minClaudeCodeVersion).toBeUndefined();
     }
   });
+
+  it('doc-first roles declare ruleFamily=doc-first; every code/infra role leaves it undefined (engineering)', () => {
+    const docFirst = ['ba', 'hr', 'pm', 'tech-writer', 'data-analytics'];
+    for (const name of docFirst) {
+      expect(getProfile(name).ruleFamily).toBe('doc-first');
+    }
+    for (const name of ALL_PROFILES) {
+      if (docFirst.includes(name)) continue;
+      expect(getProfile(name).ruleFamily).toBeUndefined();
+    }
+  });
 });
