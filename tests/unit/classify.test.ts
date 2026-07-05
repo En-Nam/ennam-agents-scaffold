@@ -4,6 +4,8 @@ import { classifyFile } from '../../packages/cli/src/classify.js';
 describe('classifyFile', () => {
   it.each([
     ['AGENTS.md',                       'write-or-ask'],
+    ['ORG.md',                          'skip-if-exists'],
+    ['POLICY.md',                       'skip-if-exists'],
     ['CLAUDE.md',                       'append-marker'],
     ['.gitignore',                      'append-lines'],
     ['.mcp.json',                       'json-merge'],

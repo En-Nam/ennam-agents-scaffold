@@ -76,30 +76,37 @@ const REGISTRY: Record<string, ProfileDef> = {
     description: 'Business Analyst — requirements, user stories, BPMN flows, acceptance criteria',
     templateDir: path.join(TEMPLATES, 'ba'),
     extraMcp: [],
+    ruleFamily: 'doc-first',
   },
   pm: {
     name: 'pm',
     description: 'Product Manager / PO — PRDs with outcome metrics, backlog prioritization (RICE/MoSCoW)',
     templateDir: path.join(TEMPLATES, 'pm'),
     extraMcp: [],
+    ruleFamily: 'doc-first',
   },
   'tech-writer': {
     name: 'tech-writer',
     description: 'Technical Writer — Diátaxis docs, terminology consistency, source-traced claims',
     templateDir: path.join(TEMPLATES, 'tech-writer'),
     extraMcp: [],
+    ruleFamily: 'doc-first',
   },
   'data-analytics': {
     name: 'data-analytics',
     description: 'Data & Analytics — reviewed read-only SQL, reproducible metric definitions, validated insights',
     templateDir: path.join(TEMPLATES, 'data-analytics'),
     extraMcp: [],
+    ruleFamily: 'doc-first',
+    autoPolicy: true,
   },
   hr: {
     name: 'hr',
     description: 'HR — job descriptions, interview kits, onboarding, performance reviews',
     templateDir: path.join(TEMPLATES, 'hr'),
     extraMcp: [],
+    ruleFamily: 'doc-first',
+    autoPolicy: true,
   },
   'devops-aws': {
     name: 'devops-aws',
@@ -154,6 +161,18 @@ export function getProfile(name: string): ProfileDef {
   const p = REGISTRY[name];
   if (!p) throw new Error(`Unknown profile: "${name}". Available: ${Object.keys(REGISTRY).join(', ')}`);
   return p;
+}
+
+/**
+ * v1.11 (#10) — resolve one or more profile names for composition. De-duplicates
+ * (order-preserving) so `pm pm qa` behaves like `pm qa`. Throws on any unknown name
+ * (getProfile fails loud). Returns at least one profile or throws on an empty list.
+ */
+export function resolveProfiles(names: string[]): ProfileDef[] {
+  const seen = new Set<string>();
+  const unique = names.filter(n => (seen.has(n) ? false : (seen.add(n), true)));
+  if (unique.length === 0) throw new Error('resolveProfiles: at least one profile name is required');
+  return unique.map(getProfile);
 }
 
 export function listProfiles(): ProfileDef[] {

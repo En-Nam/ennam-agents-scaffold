@@ -10,12 +10,27 @@ export type UserStrategy = 'ask' | 'skip' | 'overwrite' | 'append' | 'json-merge
 // Plan 2 added: 'append' (force append-marker / append-lines), 'json-merge' (force JSON merge).
 // 'edit' was dropped — auto-backup covers manual-review use case.
 
+export type RuleFamily = 'engineering' | 'doc-first';
+
 export interface ProfileDef {
   name: string;                  // 'next' | 'flutter' | …
   description: string;           // human-readable
   templateDir: string;           // absolute path to templates/<name>
   extraMcp: string[];            // names of MCP servers added on top of _shared
   minClaudeCodeVersion?: string; // v1.9.0 — WARN if `claude --version` < this. Semver-lite.
+  // v1.11 (#9) — which AGENTS.md variant to emit. Default (undefined) = engineering
+  // (the original _shared/AGENTS.md, byte-identical). 'doc-first' emits
+  // _shared/AGENTS.doc-first.md for non-code-writing roles (ba/hr/pm/tech-writer/data).
+  ruleFamily?: RuleFamily;
+  // v1.11 (#14) — auto-attach the governance/data-handling POLICY.md for roles that
+  // routinely touch sensitive data (hr = CVs/PII, data-analytics = source data). Users
+  // of other profiles opt in with --policy.
+  autoPolicy?: boolean;
+}
+
+/** v1.11 (#10) — options threaded into enumeration (multi-profile + opt-in packs). */
+export interface EnumerateOptions {
+  policy?: boolean;              // emit the governance POLICY.md pack
 }
 
 export interface FileEntry {
@@ -24,6 +39,10 @@ export interface FileEntry {
   isTemplate: boolean;           // ends with .hbs
   kind: FileKind;
   extraSrcAbs?: string;          // for marker-merge: a second partial concatenated under {{profileSection}}
+  // v1.11 (#10) — multi-profile composition. When set, render concatenates ALL these
+  // profile partials (each under its own sub-heading) in place of the single extraSrcAbs.
+  // Single-profile installs never set this — their path is unchanged.
+  extraSrcList?: string[];
 }
 
 export type ConflictState = 'absent' | 'identical' | 'differs';
