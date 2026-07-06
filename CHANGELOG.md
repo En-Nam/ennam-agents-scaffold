@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.11.1 — 2026-07-06
+
+### Fixed
+
+- **Missing / stale README on npmjs.com.** `packages/cli/README.md` was gitignored and generated only at build time (`tsup` `onSuccess` copies the root README). npm never refreshed the published package's `readme` metadata from the generated file, so npmjs.com kept rendering a stale pre-v1.10 README (no `pm`/`tech-writer`/`data-analytics` rows) even though the tarball itself shipped the current one. The CLI README is now a **committed, tracked file** (still refreshed from the root README by the build), so every publish captures the current README into the registry. Re-published as v1.11.1 to refresh the npmjs page.
+
 ## v1.11.0 — 2026-07-04
 
 **Enterprise foundation batch** — closes the remaining foundational issues from the consultant assessment round in one release: org-context layer (#8), role-adaptive rules (#9), Definition-of-Done (#15), governance pack (#14), and the composition engine + multi-role installs (#10 + #7). Decisions were reached via a CTO ⇄ tech-lead debate round (recorded in `mem:decisions/enterprise-foundation-v1.11`).

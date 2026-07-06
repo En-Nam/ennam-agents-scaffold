@@ -8,5 +8,8 @@ coverage/
 .env.local
 .changeset/.cache/
 packages/cli/templates/
-packages/cli/README.md
+# packages/cli/README.md is committed (not ignored) so npm captures it into the
+# published package's readme metadata — a generated-only, gitignored README left
+# npmjs.com rendering a stale/blank README (registry readme field never refreshed).
+# tsup's onSuccess still refreshes it from the root README on every build.
 .ennam-scaffold-backup/
