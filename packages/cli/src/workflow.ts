@@ -25,6 +25,11 @@ export const WORKFLOW_PRESETS: WorkflowPreset[] = [
   { id: 'engineering-full', label: 'Full engineering (7-phase Superpowers)', hint: 'Understand → Plan → Isolate → Implement → Verify → Review → Complete' },
   { id: 'doc-first-signoff', label: 'Document (draft → review → sign-off)', hint: 'Frame → Draft → Self-check → Review → Sign-off — for knowledge work' },
   { id: 'data-insight', label: 'Data (question → query → validate → report)', hint: 'Question → Query → Validate → Report — read-only, reproducible' },
+  // v1.12 (#31) — role-family presets. Recommended via each profile's recommendedWorkflow
+  // (hr → people-lifecycle, ceo → exec-decision, ciso → security-incident); selectable by anyone.
+  { id: 'people-lifecycle', label: 'People lifecycle (hire → review → offboard)', hint: 'Frame → Gather → Draft → Fairness check → Human decision → Sign-off — HR/people work' },
+  { id: 'exec-decision', label: 'Executive decision & board communication', hint: 'Frame → Options → Decide → Deck → Validate figures → Sign-off — leadership calls' },
+  { id: 'security-incident', label: 'Security incident response', hint: 'Intake → Scope from evidence → Contain → Notify → Post-mortem — NIST-style' },
   { id: 'quick-change', label: 'Quick change (express lane)', hint: 'Understand → Implement → Verify — small, low-risk edits', overrideOnly: true },
   { id: 'decision-brief', label: 'Decision (frame → options → decide → communicate)', hint: 'For making a call, not a document — human decides', overrideOnly: true },
 ];

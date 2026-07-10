@@ -107,7 +107,17 @@ flowchart TD
 | `pm` | Product Manager / PO — PRDs with outcome metrics + backlog prioritization (RICE/MoSCoW) + `/pm-prd` `/pm-prioritize` | — |
 | `tech-writer` | Technical Writer — Diátaxis docs + terminology consistency + source-traced claims + `/doc-draft` `/doc-review` | — |
 | `data-analytics` | Data & Analytics — reviewed read-only SQL + reproducible metric definitions + `/data-query` `/data-metric` | — |
-| `hr` | HR — JD authoring + interview kits + `/hr-jd` `/hr-interview-kit` | — |
+| `hr` | HR — JD authoring + interview kits + `/hr-jd` `/hr-interview-kit`. Uses the `people-lifecycle` workflow | — |
+
+### Executive / Leadership & Design (role-specific)
+
+| Profile | Role | Workflow | Extra MCP |
+|---|---|---|---|
+| `ceo` | CEO / executive — strategy memos, OKRs, board decks, investor updates + `/ceo-strategy` `/ceo-okr` `/ceo-board-deck` `/ceo-investor-update` | `exec-decision` | — |
+| `ciso` | CISO / security — policy, risk register, incident briefs, control maps + `/ciso-policy` `/ciso-risk-register` `/ciso-incident-brief` `/ciso-control-map` | `security-incident` | github |
+| `design` | Design / UX — specs, design-system docs, critiques, a11y reviews + `/design-spec` `/design-critique` `/design-system` `/design-a11y` | `doc-first-signoff` | figma |
+
+Reached from the wizard via the **Executive / Leadership** role (sub-selects CEO / CISO) and the **Design / UX** role. `ceo` and `ciso` auto-attach `POLICY.md` (board material = MNPI; incident briefs carry PII).
 
 ### DevOps (cloud / infra-target-specific)
 

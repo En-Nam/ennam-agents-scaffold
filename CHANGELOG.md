@@ -1,8 +1,17 @@
 # Changelog
 
-## Unreleased — v1.12 (Waves 0–1, enterprise expansion)
+## Unreleased — v1.12 (Waves 0–2, enterprise expansion)
 
-The foundational + Wave-1 issues of the v1.12 "enterprise expansion" plan (issues [#22](https://github.com/En-Nam/ennam-agents-scaffold/issues/22)–[#33](https://github.com/En-Nam/ennam-agents-scaffold/issues/33)). Decisions recorded in `mem:decisions/v1.12-enterprise-expansion` and `mem:decisions/v1.12-role-workflows`.
+The foundational + Wave-1/2 issues of the v1.12 "enterprise expansion" plan (issues [#22](https://github.com/En-Nam/ennam-agents-scaffold/issues/22)–[#33](https://github.com/En-Nam/ennam-agents-scaffold/issues/33)). Decisions recorded in `mem:decisions/v1.12-enterprise-expansion` and `mem:decisions/v1.12-role-workflows`.
+
+### Added — Wave 2
+
+- **Executive & Design profiles** (issue [#29](https://github.com/En-Nam/ennam-agents-scaffold/issues/29)). Three new doc-first profiles, each a full template dir (agent + ~4 commands + skills):
+  - **`ceo`** — strategy memos, OKRs, board decks, investor updates. `autoPolicy` (board material = MNPI); recommends the `exec-decision` workflow. Board-deck figures must cite a source, never recalled from memory (Rule 13).
+  - **`ciso`** — security policy, risk register, incident briefs, control mapping. `+github` MCP, `autoPolicy`; recommends the `security-incident` workflow. Control status is evidence-derived (Rule 13); the incident flow has two human approval gates.
+  - **`design`** — design specs, design-system docs, critiques, accessibility reviews. `+figma` MCP; recommends `doc-first-signoff`. Accessibility is checked against WCAG AA; production tokens/components are never changed without sign-off.
+  - Wizard gains an **Executive / Leadership** role (sub-selects CEO / CISO, mirroring the QA-QC pattern) and a flat **Design / UX** role. `--list` groups them.
+- **Role-specific workflow presets** (issue [#31](https://github.com/En-Nam/ennam-agents-scaffold/issues/31)). Three role-family presets added to the `--workflow` pool, each with plain-language phases + baked guardrails: `people-lifecycle` (auto-recommended for **`hr`**), `exec-decision` (**`ceo`**), `security-incident` (**`ciso`**). `hr` now emits its people-lifecycle workflow instead of the generic doc-first one.
 
 ### Added — Wave 1
 

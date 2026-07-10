@@ -19,9 +19,11 @@ describe('workflow recommendation + catalog (#26)', () => {
   it('single-profile: engineering → engineering-full, doc-first → doc-first-signoff, data → data-insight', () => {
     expect(recommendWorkflow([getProfile('next')])).toBe('engineering-full');
     expect(recommendWorkflow([getProfile('go')])).toBe('engineering-full');
-    expect(recommendWorkflow([getProfile('hr')])).toBe('doc-first-signoff');
+    expect(recommendWorkflow([getProfile('tech-writer')])).toBe('doc-first-signoff');
     expect(recommendWorkflow([getProfile('ba')])).toBe('doc-first-signoff');
     expect(recommendWorkflow([getProfile('data-analytics')])).toBe('data-insight');
+    // hr now has a bespoke people-lifecycle workflow (#31), not the generic doc-first-signoff.
+    expect(recommendWorkflow([getProfile('hr')])).toBe('people-lifecycle');
   });
 
   it('compose: any engineering wins → engineering-full; else data present → data-insight; else doc-first-signoff', () => {

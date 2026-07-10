@@ -109,6 +109,34 @@ const REGISTRY: Record<string, ProfileDef> = {
     extraMcp: [],
     ruleFamily: 'doc-first',
     autoPolicy: true,
+    // v1.12 (#31) — people work gets the people-lifecycle workflow, not generic doc-first-signoff.
+    recommendedWorkflow: 'people-lifecycle',
+  },
+  ceo: {
+    name: 'ceo',
+    description: 'CEO / executive — strategy, OKRs, board decks, investor updates, org comms',
+    templateDir: path.join(TEMPLATES, 'ceo'),
+    extraMcp: [],
+    ruleFamily: 'doc-first',
+    autoPolicy: true,                       // board material = MNPI; reorg/comp comms carry PII
+    recommendedWorkflow: 'exec-decision',
+  },
+  ciso: {
+    name: 'ciso',
+    description: 'CISO / security — policy, risk register, incident briefs, control mapping',
+    templateDir: path.join(TEMPLATES, 'ciso'),
+    extraMcp: ['github'],
+    ruleFamily: 'doc-first',
+    autoPolicy: true,                       // incident briefs carry victim PII + drive breach notices
+    recommendedWorkflow: 'security-incident',
+  },
+  design: {
+    name: 'design',
+    description: 'Design / UX — specs, design-system docs, critiques, accessibility reviews',
+    templateDir: path.join(TEMPLATES, 'design'),
+    extraMcp: ['figma'],
+    ruleFamily: 'doc-first',
+    // design uses the generic doc-first-signoff workflow (no bespoke preset needed).
   },
   'devops-aws': {
     name: 'devops-aws',

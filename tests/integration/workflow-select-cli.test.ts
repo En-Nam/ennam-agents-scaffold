@@ -30,9 +30,9 @@ describe('workflow selection (#26)', () => {
     expect(c).toContain('### Task Complexity Guide');
   });
 
-  it('doc-first profile (hr) auto-recommends the doc-first-signoff workflow', async () => {
+  it('a generic doc-first profile (ba) auto-recommends the doc-first-signoff workflow', async () => {
     const { path: cwd } = await tmpDir({ unsafeCleanup: true });
-    await install(cwd, ['hr']);
+    await install(cwd, ['ba']);
     const c = await claudeMd(cwd);
     expect(c).toContain('Doc-First Workflow');
     expect(c).not.toContain('### Superpowers Workflow');
