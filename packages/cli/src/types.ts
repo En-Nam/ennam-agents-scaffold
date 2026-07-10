@@ -12,6 +12,12 @@ export type UserStrategy = 'ask' | 'skip' | 'overwrite' | 'append' | 'json-merge
 
 export type RuleFamily = 'engineering' | 'doc-first';
 
+// v1.12 (#23) — id of a workflow preset. A preset is a phase-list markdown file at
+// templates/_shared/workflow/<id>.md fed into the CLAUDE.md {{{workflowSection}}} slot.
+// Kept a plain string alias in v1.12 #23 (only 'engineering-full' ships); #26 adds the
+// other presets + the wizard/--workflow selection that narrows how this is chosen.
+export type WorkflowPresetId = string;
+
 export interface ProfileDef {
   name: string;                  // 'next' | 'flutter' | …
   description: string;           // human-readable
@@ -26,11 +32,19 @@ export interface ProfileDef {
   // routinely touch sensitive data (hr = CVs/PII, data-analytics = source data). Users
   // of other profiles opt in with --policy.
   autoPolicy?: boolean;
+  // v1.12 (#23) — which workflow preset this role recommends for the CLAUDE.md
+  // {{{workflowSection}}} slot. Default (undefined) resolves to 'engineering-full'
+  // (the original 7-phase Superpowers text, byte-identical). Doc-first roles will point
+  // this at people-lifecycle / exec-decision / etc. as those presets ship (#26, #31).
+  recommendedWorkflow?: WorkflowPresetId;
 }
 
 /** v1.11 (#10) — options threaded into enumeration (multi-profile + opt-in packs). */
 export interface EnumerateOptions {
   policy?: boolean;              // emit the governance POLICY.md pack
+  // v1.12 (#26) — explicit workflow preset chosen by the wizard step or --workflow flag.
+  // When unset, enumeration falls back to recommendWorkflow(profiles).
+  workflow?: WorkflowPresetId;
 }
 
 export interface FileEntry {
@@ -43,6 +57,10 @@ export interface FileEntry {
   // profile partials (each under its own sub-heading) in place of the single extraSrcAbs.
   // Single-profile installs never set this — their path is unchanged.
   extraSrcList?: string[];
+  // v1.12 (#23) — absolute path to the resolved workflow preset file whose (trailing-
+  // newline-stripped) content fills the CLAUDE.md {{{workflowSection}}} slot. Only the
+  // CLAUDE.md marker entry sets this; other entries leave it undefined.
+  workflowSrc?: string;
 }
 
 export type ConflictState = 'absent' | 'identical' | 'differs';
@@ -75,4 +93,5 @@ export interface RenderContext {
   date: string;
   isWindows: boolean;
   profileSection?: string;       // populated for marker-merge to feed shared partial's {{#if profileSection}} slot
+  workflowSection?: string;      // v1.12 (#23) — fills the shared partial's {{{workflowSection}}} slot
 }

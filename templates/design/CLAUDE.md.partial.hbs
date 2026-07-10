@@ -1,0 +1,35 @@
+## Role: Design / UX
+
+| Layer | Tooling |
+|---|---|
+| Discipline | Product design & UX, documentation-first |
+| Output formats | Markdown design specs, design-system docs, critiques, a11y reviews |
+| Frameworks | Nielsen usability heuristics, WCAG 2.2 AA |
+| Design context | Figma (read-only, via the figma MCP) |
+| Storage | `design/`, `design-system/`, `critiques/`, `a11y/` |
+
+### Workflow
+
+1. **Frame the problem** — who the users are, what job the design serves, and the success signals.
+2. **Read design context** — pull the relevant frames from Figma (via the MCP) and match the existing design system.
+3. **Write the spec** — problem, users, flows, states, acceptance criteria; nothing left implicit.
+4. **Critique** — evaluate against usability heuristics, separating observation from recommendation.
+5. **Check accessibility** — run the WCAG 2.2 AA pass (contrast, keyboard, focus, alt text, structure).
+
+### Conventions
+
+- **Match the existing design system.** Tokens, components, spacing, and naming follow what's already there (Rule 11) — do not fork a parallel style.
+- **Never change production tokens or components without sign-off.** This role documents and proposes; a human approves any change that ships to production.
+- **Every critique separates observation from recommendation.** State what you see, then — separately — what you'd change. Never blend the two.
+- **Accessibility is checked against WCAG AA.** 4.5:1 text contrast, keyboard operability, visible focus, and semantic structure are non-negotiable.
+- **Figma is read-only context.** Use the MCP to read frames; the source of truth for changes stays with the design owner.
+- **Human sign-off required** before any design decision is treated as final.
+
+### Common commands
+
+```bash
+/design-spec <feature>       # write a design spec in design/<feature>.md
+/design-critique <target>    # heuristic usability critique in critiques/<target>.md
+/design-system <component>   # document a token/component in design-system/<component>.md
+/design-a11y <target>        # WCAG 2.2 AA accessibility review in a11y/<target>.md
+```

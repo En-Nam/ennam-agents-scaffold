@@ -1,15 +1,19 @@
 import { select, multiselect, isCancel, cancel, log } from '@clack/prompts';
 import path from 'node:path';
 import { listProfiles } from './profiles.js';
+import { WORKFLOW_PRESETS, recommendWorkflow } from './workflow.js';
+import type { ProfileDef } from './types.js';
 
 // Wizard matrix: (role × projectType × stack | cloud | gameStack) → profile name.
 // Exported as a pure function for unit testing; runWizard wraps it with prompts.
-export type Role = 'Developer' | 'QA-QC' | 'BA' | 'PM' | 'Tech-Writer' | 'Data' | 'HR' | 'DevOps' | 'Game-Dev' | 'Agent-Org';
+export type Role = 'Developer' | 'QA-QC' | 'BA' | 'PM' | 'Tech-Writer' | 'Data' | 'HR' | 'DevOps' | 'Game-Dev' | 'Agent-Org' | 'Executive' | 'Design';
 export type ProjectType = 'Local-root' | 'Existing repository';
 export type Stack = 'Next.js' | 'React' | 'React Native' | 'Flutter' | 'Python' | 'Go' | '.NET MVC' | 'Express.js';
 export type Cloud = 'AWS' | 'Azure' | 'Google Cloud' | 'Docker';
 export type GameStack = 'Unity 2.5D Mobile';
 export type QAKind = 'Manual' | 'Automation';
+// v1.12 (#29) — the Executive role group sub-selects a chief (mirrors QA-QC's 2-option sub-select).
+export type ExecRole = 'CEO' | 'CISO';
 
 const STACK_TO_PROFILE: Record<Stack, string> = {
   'Next.js': 'next',
@@ -33,6 +37,11 @@ const GAME_STACK_TO_PROFILE: Record<GameStack, string> = {
   'Unity 2.5D Mobile': 'game-unity',
 };
 
+const EXEC_ROLE_TO_PROFILE: Record<ExecRole, string> = {
+  'CEO': 'ceo',
+  'CISO': 'ciso',
+};
+
 export function resolveProfile(
   role: Role,
   projectType: ProjectType,
@@ -40,6 +49,7 @@ export function resolveProfile(
   cloud?: Cloud,
   gameStack?: GameStack,
   qaKind?: QAKind,
+  execRole?: ExecRole,
 ): string {
   if (role === 'QA-QC') {
     // Rule 12 defense-in-depth: mirror the DevOps/Game-Dev enum-throws pattern
@@ -57,6 +67,19 @@ export function resolveProfile(
   if (role === 'Data') return 'data-analytics';
   if (role === 'Agent-Org') return 'agent-org';
   if (role === 'HR') return 'hr';
+  if (role === 'Design') return 'design';
+  if (role === 'Executive') {
+    // Mirror the DevOps/Game-Dev enum-throw pattern so a bogus JSON-fed value fails loud
+    // instead of silently defaulting (Rule 12). The wizard cannot produce a bad value.
+    if (!execRole) {
+      throw new Error(`resolveProfile: execRole is required for Executive role; got (${role}, ${projectType}, execRole=<none>)`);
+    }
+    const name = EXEC_ROLE_TO_PROFILE[execRole];
+    if (!name) {
+      throw new Error(`resolveProfile: unknown execRole "${execRole}" for Executive role (expected "CEO" | "CISO")`);
+    }
+    return name;
+  }
   if (role === 'DevOps') {
     if (!cloud) {
       throw new Error(`resolveProfile: cloud is required for DevOps role; got (${role}, ${projectType}, stack=${stack ?? '<none>'}, cloud=<none>)`);
@@ -143,6 +166,8 @@ async function chooseSingleProfile(): Promise<string> {
       { value: 'Tech-Writer', label: 'Technical Writer / Docs' },
       { value: 'Data', label: 'Data & Analytics' },
       { value: 'HR', label: 'HR' },
+      { value: 'Executive', label: 'Executive / Leadership (CEO, CISO)' },
+      { value: 'Design', label: 'Design / UX' },
       { value: 'DevOps', label: 'DevOps' },
       { value: 'Game-Dev', label: 'Game-Dev (Unity)' },
       { value: 'Agent-Org', label: 'Agent-Org (multi-agent dispatch — advanced, cost-heavy)' },
@@ -182,8 +207,22 @@ async function chooseSingleProfile(): Promise<string> {
     return resolveProfile(role, 'Existing repository', undefined, cloud);
   }
 
-  // BA, PM, Tech-Writer, Data, and HR do not branch on projectType or stack — single-profile roles.
-  if (role === 'BA' || role === 'PM' || role === 'Tech-Writer' || role === 'Data' || role === 'HR') {
+  // Executive branches on the chief (CEO/CISO), mirroring QA-QC's 2-option sub-select.
+  if (role === 'Executive') {
+    const execRole = await select<ExecRole>({
+      message: 'Which executive role?',
+      options: [
+        { value: 'CEO', label: 'CEO / executive (strategy, OKRs, board decks, investor updates)' },
+        { value: 'CISO', label: 'CISO / security (policy, risk register, incident briefs, control maps)' },
+      ],
+      initialValue: 'CEO',
+    });
+    if (isCancel(execRole)) { cancel('Aborted.'); process.exit(1); }
+    return resolveProfile(role, 'Existing repository', undefined, undefined, undefined, undefined, execRole);
+  }
+
+  // BA, PM, Tech-Writer, Data, HR, and Design do not branch on projectType or stack — single-profile roles.
+  if (role === 'BA' || role === 'PM' || role === 'Tech-Writer' || role === 'Data' || role === 'HR' || role === 'Design') {
     return resolveProfile(role, 'Existing repository');
   }
 
@@ -237,4 +276,25 @@ async function chooseSingleProfile(): Promise<string> {
   }
 
   return resolveProfile(role, projectType, stack);
+}
+
+/**
+ * v1.12 (#26) — after the profile(s) are chosen, ask which workflow the agents should
+ * follow (the phase list written into CLAUDE.md). The role-appropriate preset is
+ * pre-selected so a novice can just press Enter; override-only presets (quick-change,
+ * decision-brief) are offered but never the default. Returns the chosen preset id.
+ */
+export async function chooseWorkflow(profiles: ProfileDef[]): Promise<string> {
+  const recommended = recommendWorkflow(profiles);
+  const picked = await select<string>({
+    message: 'Which workflow should your agents follow? (Written into CLAUDE.md — you can change it later.)',
+    options: WORKFLOW_PRESETS.map(p => ({
+      value: p.id,
+      label: p.id === recommended ? `${p.label}  (recommended)` : p.label,
+      hint: p.hint,
+    })),
+    initialValue: recommended,
+  });
+  if (isCancel(picked)) { cancel('Aborted.'); process.exit(1); }
+  return picked as string;
 }

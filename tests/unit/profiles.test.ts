@@ -4,7 +4,10 @@ import { getProfile, listProfiles } from '../../packages/cli/src/profiles.js';
 const ALL_PROFILES = [
   'agent-org',
   'ba',
+  'ceo',
+  'ciso',
   'data-analytics',
+  'design',
   'devops-aws',
   'devops-azure',
   'devops-docker',
@@ -71,7 +74,7 @@ describe('profiles', () => {
   });
 
   it('doc-first roles declare ruleFamily=doc-first; every code/infra role leaves it undefined (engineering)', () => {
-    const docFirst = ['ba', 'hr', 'pm', 'tech-writer', 'data-analytics'];
+    const docFirst = ['ba', 'hr', 'pm', 'tech-writer', 'data-analytics', 'ceo', 'ciso', 'design'];
     for (const name of docFirst) {
       expect(getProfile(name).ruleFamily).toBe('doc-first');
     }

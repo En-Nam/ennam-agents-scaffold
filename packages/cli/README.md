@@ -107,7 +107,17 @@ flowchart TD
 | `pm` | Product Manager / PO — PRDs with outcome metrics + backlog prioritization (RICE/MoSCoW) + `/pm-prd` `/pm-prioritize` | — |
 | `tech-writer` | Technical Writer — Diátaxis docs + terminology consistency + source-traced claims + `/doc-draft` `/doc-review` | — |
 | `data-analytics` | Data & Analytics — reviewed read-only SQL + reproducible metric definitions + `/data-query` `/data-metric` | — |
-| `hr` | HR — JD authoring + interview kits + `/hr-jd` `/hr-interview-kit` | — |
+| `hr` | HR — JD authoring + interview kits + `/hr-jd` `/hr-interview-kit`. Uses the `people-lifecycle` workflow | — |
+
+### Executive / Leadership & Design (role-specific)
+
+| Profile | Role | Workflow | Extra MCP |
+|---|---|---|---|
+| `ceo` | CEO / executive — strategy memos, OKRs, board decks, investor updates + `/ceo-strategy` `/ceo-okr` `/ceo-board-deck` `/ceo-investor-update` | `exec-decision` | — |
+| `ciso` | CISO / security — policy, risk register, incident briefs, control maps + `/ciso-policy` `/ciso-risk-register` `/ciso-incident-brief` `/ciso-control-map` | `security-incident` | github |
+| `design` | Design / UX — specs, design-system docs, critiques, a11y reviews + `/design-spec` `/design-critique` `/design-system` `/design-a11y` | `doc-first-signoff` | figma |
+
+Reached from the wizard via the **Executive / Leadership** role (sub-selects CEO / CISO) and the **Design / UX** role. `ceo` and `ciso` auto-attach `POLICY.md` (board material = MNPI; incident briefs carry PII).
 
 ### DevOps (cloud / infra-target-specific)
 
@@ -255,6 +265,16 @@ v1.5 adds the `devops-docker` profile — a DevOps role for self-hosted Docker f
 | `--list` | List available profiles grouped by wizard role and exit 0. Non-destructive; no TTY required. |
 | `--list --json` | With `--list`: emit the profile catalog as JSON (`name`, `role`, `description`, `extraMcp`, `requires`) for portals / scripts. |
 | `--policy [name]` | Emit the governance/data-handling `POLICY.md` pack (baseline). Auto-attached for `hr` and `data-analytics`. |
+| `--workflow <id>` | Workflow preset written into `CLAUDE.md`: `engineering-full` \| `doc-first-signoff` \| `data-insight` \| `quick-change` \| `decision-brief`. Default = recommended for the chosen role. The guided wizard also asks this, pre-selecting the recommendation. |
+| `--doctor` | Read-only health check of an **installed** scaffold — required env keys (with where to get them), `.mcp.json`/`settings.json` validity, legacy shapes, and `claude --version`. Add `--json`. Non-destructive; exits 1 only on errors. |
+
+## Workflows
+
+Every install writes a **workflow** — the phase list your agents follow — into the `CLAUDE.md` managed block. The wizard picks the role-appropriate one for you (engineering → the 7-phase Superpowers workflow; knowledge-worker roles → a draft→review→sign-off flow; data → a question→query→validate→report flow), and you can override it with `--workflow <id>` or by editing that section. Each phase is written in plain language so non-technical teammates can follow it.
+
+## Official plugins
+
+See **[`docs/plugins.md`](docs/plugins.md)** for a popularity-ranked menu of official Claude Code plugins that amplify each role (language servers, `code-review`, `playwright`, `notion`, the built-in document skills, …). You install them yourself — the scaffold emits config, it does not enable plugins on your behalf.
 
 ## Manual review after merge
 

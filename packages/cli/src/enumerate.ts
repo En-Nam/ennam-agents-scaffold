@@ -5,6 +5,7 @@ import fg from 'fast-glob';
 import type { ProfileDef, FileEntry, EnumerateOptions } from './types.js';
 import { getSharedDir } from './profiles.js';
 import { classifyFile } from './classify.js';
+import { resolveWorkflowSrc, recommendWorkflow } from './workflow.js';
 
 /**
  * Strip .hbs and .partial.hbs and .append suffixes to derive the on-disk relPath.
@@ -49,6 +50,9 @@ export async function enumerateFiles(profile: ProfileDef, opts: EnumerateOptions
   for (const { src, rel } of shared) {
     if (collectMarker(src, rel, true)) continue;
     if (src.endsWith('.partial.hbs')) continue;  // non-CLAUDE partial — handled in T11
+    // v1.12 (#23) — workflow/*.md are preset SOURCES for the {{{workflowSection}}} slot,
+    // never emitted as standalone files (mirrors the AGENTS.doc-first.md / POLICY.baseline.md skips).
+    if (rel.startsWith('workflow/')) continue;
     // v1.11 (#9) — AGENTS.doc-first.md is a family VARIANT, never emitted under its own
     // name. It is swapped in as the AGENTS.md source below for doc-first profiles.
     if (rel === 'AGENTS.doc-first.md') continue;
@@ -85,6 +89,14 @@ export async function enumerateFiles(profile: ProfileDef, opts: EnumerateOptions
       kind: 'append-marker',
       extraSrcAbs: pair.profileSrc,
     });
+  }
+
+  // v1.12 (#23/#26) — resolve the workflow preset for the CLAUDE.md slot: explicit
+  // --workflow/wizard choice wins, else the profile's recommendation (engineering →
+  // engineering-full, so engineering installs stay byte-identical).
+  const claudeEntry = map.get('CLAUDE.md');
+  if (claudeEntry) {
+    claudeEntry.workflowSrc = resolveWorkflowSrc(opts.workflow ?? recommendWorkflow([profile]));
   }
 
   // v1.11 (#9) — doc-first roles emit the doc-first AGENTS.md variant in place of the
@@ -150,6 +162,7 @@ export async function enumerateProfiles(profiles: ProfileDef[], opts: EnumerateO
   // 1. Shared static files. Skip partials + variants; AGENTS.md source depends on family.
   for (const { src, rel } of shared) {
     if (src.endsWith('.partial.hbs')) continue;         // CLAUDE partial handled below
+    if (rel.startsWith('workflow/')) continue;          // v1.12 (#23) — preset sources, not emitted
     if (rel === 'AGENTS.doc-first.md') continue;
     if (rel === 'POLICY.baseline.md') continue;
     if (rel === 'AGENTS.md') {
@@ -194,6 +207,8 @@ export async function enumerateProfiles(profiles: ProfileDef[], opts: EnumerateO
   }
 
   // 4. CLAUDE.md — concatenate every profile's partial under the shared base's marker block.
+  // v1.12 (#26) — workflow slot: explicit --workflow/wizard choice wins, else the compose
+  // recommendation (any-engineering-wins → engineering-full; else data-insight; else doc-first-signoff).
   map.set('CLAUDE.md', {
     srcAbs: path.join(sharedDir, 'CLAUDE.md.partial.hbs'),
     relPath: 'CLAUDE.md',
@@ -202,6 +217,7 @@ export async function enumerateProfiles(profiles: ProfileDef[], opts: EnumerateO
     extraSrcList: profiles
       .map(p => path.join(p.templateDir, 'CLAUDE.md.partial.hbs'))
       .filter(existsSync),
+    workflowSrc: resolveWorkflowSrc(opts.workflow ?? recommendWorkflow(profiles)),
   });
 
   // 5. .mcp.json — union every profile's partial onto the shared base.

@@ -1,5 +1,43 @@
 # Changelog
 
+## Unreleased — v1.12 (Waves 0–2, enterprise expansion)
+
+The foundational + Wave-1/2 issues of the v1.12 "enterprise expansion" plan (issues [#22](https://github.com/En-Nam/ennam-agents-scaffold/issues/22)–[#33](https://github.com/En-Nam/ennam-agents-scaffold/issues/33)). Decisions recorded in `mem:decisions/v1.12-enterprise-expansion` and `mem:decisions/v1.12-role-workflows`.
+
+### Added — Wave 2
+
+- **Executive & Design profiles** (issue [#29](https://github.com/En-Nam/ennam-agents-scaffold/issues/29)). Three new doc-first profiles, each a full template dir (agent + ~4 commands + skills):
+  - **`ceo`** — strategy memos, OKRs, board decks, investor updates. `autoPolicy` (board material = MNPI); recommends the `exec-decision` workflow. Board-deck figures must cite a source, never recalled from memory (Rule 13).
+  - **`ciso`** — security policy, risk register, incident briefs, control mapping. `+github` MCP, `autoPolicy`; recommends the `security-incident` workflow. Control status is evidence-derived (Rule 13); the incident flow has two human approval gates.
+  - **`design`** — design specs, design-system docs, critiques, accessibility reviews. `+figma` MCP; recommends `doc-first-signoff`. Accessibility is checked against WCAG AA; production tokens/components are never changed without sign-off.
+  - Wizard gains an **Executive / Leadership** role (sub-selects CEO / CISO, mirroring the QA-QC pattern) and a flat **Design / UX** role. `--list` groups them.
+- **Role-specific workflow presets** (issue [#31](https://github.com/En-Nam/ennam-agents-scaffold/issues/31)). Three role-family presets added to the `--workflow` pool, each with plain-language phases + baked guardrails: `people-lifecycle` (auto-recommended for **`hr`**), `exec-decision` (**`ceo`**), `security-incident` (**`ciso`**). `hr` now emits its people-lifecycle workflow instead of the generic doc-first one.
+
+### Added — Wave 1
+
+- **Workflow selection** (issue [#26](https://github.com/En-Nam/ennam-agents-scaffold/issues/26)). The wizard now asks which workflow the agents should follow, pre-selecting the role-appropriate preset (press Enter to accept). New **`--workflow <id>`** flag for scripted/CI installs (fails loud with the valid list on a bad id, in interactive AND CI). Presets shipped: `engineering-full` (default for code), `doc-first-signoff` (Frame → Draft → Self-check → Review → Sign-off — auto-recommended for `ba`/`pm`/`tech-writer`/`hr`), `data-insight` (Question → Query → Validate → Report — auto-recommended for `data-analytics`), plus override-only `quick-change` and `decision-brief`. Every phase carries a one-line plain-language explanation for non-technical users. **Behavior change:** doc-first profiles now emit their doc-first workflow instead of the engineering 7-phase text; engineering profiles are unchanged (byte-identical).
+- **`--doctor` health check** (issue [#27](https://github.com/En-Nam/ennam-agents-scaffold/issues/27)). `npx @ennamjsc/agents-scaffold --doctor` (`+ --json`) runs a **read-only** diagnostic of an installed scaffold — required env keys (via the #22 scanner, with obtain-URLs), `.mcp.json` / `.claude/settings.json` validity + the known legacy shapes, a stale `chrome-devtools` entry, `.env` gitignore coverage, and `claude --version`. Reads only the cwd and execs only `claude --version`; never writes. Exits 1 only on an ERROR-severity finding.
+- **Official plugin menu** (issue [#24](https://github.com/En-Nam/ennam-agents-scaffold/issues/24)). New [`docs/plugins.md`](../docs/plugins.md) — popularity-ranked `/plugin install …@claude-plugins-official` one-liners grouped by profile, that **you** run (zero settings mutation). Resolves the figma/jira Rule-7 overlap: the scaffold's `@ennamjsc/*` wrappers stay the answer; official plugins are alternatives, not additions. `printNextSteps` and the README point to it.
+
+### Added — Wave 0
+
+- **Code-derived env-var scanner + key-source report** (issue [#22](https://github.com/En-Nam/ennam-agents-scaffold/issues/22)).
+  - New `packages/cli/src/env-scan.ts`: `scanRequiredEnv(cwd)` derives the required keys from the config **actually written to disk** (`${VAR}` tokens in `.mcp.json` + `.claude/settings.json`, plus an explicit skill-key allowlist keyed off an on-disk fingerprint — today only `TRIPO_API_KEY` for `game-unity`). It deliberately does **not** freeform-scan `.claude/skills/**` (avoids false positives like `$MESHY_API_KEY`).
+  - `printNextSteps` now consumes the scanner instead of a hardcoded env-var list (Rule 13): it prints each still-missing key with **where to obtain it + a guide link + the target file** (`.env.local`), and surfaces any unknown token rather than dropping it. Keys already set in the environment are omitted.
+  - **Secret-leak fix:** `_shared/.gitignore.append` now ignores `.env.local` and `.env` — the very file the post-install steps tell you to create.
+- **Workflow-section slot** (issue [#23](https://github.com/En-Nam/ennam-agents-scaffold/issues/23)).
+  - The fixed 7-phase Superpowers workflow text is lifted verbatim into `templates/_shared/workflow/engineering-full.md` and the shared `CLAUDE.md` partial now fills a single `{{{workflowSection}}}` slot (rendered exactly like the existing `{{{profileSection}}}` slot). New optional `ProfileDef.recommendedWorkflow` field selects a preset; unset resolves to `engineering-full`.
+  - **Byte-identical guarantee:** a golden snapshot test asserts the rendered engineering block is diff=0 versus the pre-refactor output. This is the mechanism the workflow-selection step (#26) and the role-specific presets (#31/#32) plug into — no user-facing behavior changes yet.
+
+### Changed
+
+- **`types.ts`** — `ProfileDef.recommendedWorkflow?`, `FileEntry.workflowSrc?`, `RenderContext.workflowSection?`, new `WorkflowPresetId` alias.
+- **`render.ts` / `execute.ts`** — both render paths fill the workflow slot from the resolved preset (trailing-newline-stripped, matching the marker-block convention).
+- **`enumerate.ts`** — resolves the workflow preset onto the `CLAUDE.md` entry (single + compose, honouring `--workflow` / the recommendation) and skips `workflow/*.md` from being emitted as standalone files.
+- **`workflow.ts`** — preset catalog (`WORKFLOW_PRESETS`), `recommendWorkflow`, `assertWorkflowId`, `listWorkflowPresetIds`.
+- **`profiles.ts`** — `data-analytics` gains `recommendedWorkflow: 'data-insight'`.
+- **`checks.ts`** (new) — the legacy-settings / stale-`chrome-devtools` detectors are extracted here and shared by both the post-install warnings (`index.ts`, output unchanged) and `--doctor`.
+
 ## v1.11.1 — 2026-07-06
 
 ### Fixed
