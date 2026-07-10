@@ -1,3 +1,7 @@
+# Local secrets — MCP keys the scaffold tells you to set (JIRA/FIGMA/GITHUB/PG/TRIPO tokens)
+.env.local
+.env
+
 # Claude Code local overrides
 .claude/settings.local.json
 .claude/.cache/

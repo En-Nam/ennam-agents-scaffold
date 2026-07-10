@@ -2,6 +2,7 @@ import pc from 'picocolors';
 import { intro, outro, log, confirm, isCancel, cancel } from '@clack/prompts';
 import type { OperationPlan, ProfileDef } from './types.js';
 import type { ExecuteResult } from './execute.js';
+import { buildKeyReport, formatKeyReportStep } from './env-scan.js';
 
 export function printIntro(version: string): void {
   intro(pc.cyan(`Ennam Agents Scaffold v${version}`));
@@ -25,19 +26,16 @@ export async function confirmProceed(): Promise<boolean> {
   return yes === true;
 }
 
-export function printNextSteps(profile: ProfileDef, result: ExecuteResult, hasGit: boolean): void {
-  const envVars = ['JIRA_URL', 'JIRA_TOKEN'];
-  if (profile.extraMcp.includes('figma')) envVars.push('FIGMA_TOKEN');
-  if (profile.extraMcp.includes('github')) envVars.push('GITHUB_TOKEN');
-  if (profile.extraMcp.includes('postgres')) envVars.push('PG_CONN_STR');
-  if (profile.name === 'game-unity') envVars.push('TRIPO_API_KEY');
+export async function printNextSteps(profile: ProfileDef, result: ExecuteResult, hasGit: boolean, cwd: string): Promise<void> {
   const steps: string[] = [];
   if (hasGit) {
     steps.push('Review changes: git diff');
   } else {
     steps.push('Inspect changes in your editor (no .git detected — run `git init` first if you want diff/version tracking)');
   }
-  steps.push(`Set env vars in .env.local: ${envVars.join(', ')}`);
+  // v1.12 (#22) — derive required keys from the config actually written to disk (not a
+  // hardcoded list), and tell the user where to obtain each still-missing one.
+  steps.push(formatKeyReportStep(await buildKeyReport(cwd)));
 
   // v1.9.0 — agent-org profile needs a manual SubagentStop hook wire-in.
   // The shared settings.json.hbs merger doesn't support profile-specific hook

@@ -50,24 +50,39 @@ export async function composeProfileSections(paths: string[], ctx: RenderContext
 }
 
 /**
+ * v1.12 (#23) — read a FileEntry's resolved workflow preset and strip a single trailing
+ * newline so it drops into the `{{{workflowSection}}}` slot byte-for-byte (mirrors the
+ * marker-block trailing-newline handling in execute.ts). Only the CLAUDE.md marker entry
+ * carries `workflowSrc`; every other entry returns undefined (no slot to fill).
+ */
+export async function readWorkflowSection(entry: FileEntry): Promise<string | undefined> {
+  if (!entry.workflowSrc) return undefined;
+  const raw = await readFile(entry.workflowSrc, 'utf8');
+  return raw.replace(/\n$/, '');
+}
+
+/**
  * Render a FileEntry to the exact content the scaffold would write to disk.
  * Used by scanConflicts to detect already-installed files (identical → skip).
  * Handles extraSrcAbs (marker-merge) by combining shared + profile partials.
  */
 export async function renderFileEntry(entry: FileEntry, ctx: RenderContext): Promise<string> {
   const raw = await readFile(entry.srcAbs, 'utf8');
+  // v1.12 (#23) — fill the workflow slot (only set on the CLAUDE.md marker entry).
+  const workflowSection = await readWorkflowSection(entry);
+  const baseCtx: RenderContext = workflowSection !== undefined ? { ...ctx, workflowSection } : ctx;
   // v1.11 (#10) — multi-profile: concatenate all profile partials under sub-headings.
   if (entry.extraSrcList && entry.extraSrcList.length > 0) {
     const profileSection = await composeProfileSections(entry.extraSrcList, ctx);
-    return renderString(raw, { ...ctx, profileSection } as RenderContext);
+    return renderString(raw, { ...baseCtx, profileSection } as RenderContext);
   }
   if (!entry.extraSrcAbs) {
-    return entry.isTemplate ? renderString(raw, ctx) : raw;
+    return entry.isTemplate ? renderString(raw, baseCtx) : raw;
   }
   // Combine shared partial + profile partial via the `profileSection` slot.
   const profileRaw = await readFile(entry.extraSrcAbs, 'utf8');
   const profileRendered = renderString(profileRaw, ctx);
-  const extendedCtx = { ...ctx, profileSection: profileRendered };
+  const extendedCtx = { ...baseCtx, profileSection: profileRendered };
   return renderString(raw, extendedCtx as RenderContext);
 }
 

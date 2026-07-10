@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased — v1.12 Wave 0 (enterprise-expansion foundations)
+
+The two P0 keystones of the v1.12 "enterprise expansion" plan (issues [#22](https://github.com/En-Nam/ennam-agents-scaffold/issues/22)–[#33](https://github.com/En-Nam/ennam-agents-scaffold/issues/33)). Both are foundational: nothing user-facing changes for existing installs beyond a better post-install key report. Decisions recorded in `mem:decisions/v1.12-enterprise-expansion` and `mem:decisions/v1.12-role-workflows`.
+
+### Added
+
+- **Code-derived env-var scanner + key-source report** (issue [#22](https://github.com/En-Nam/ennam-agents-scaffold/issues/22)).
+  - New `packages/cli/src/env-scan.ts`: `scanRequiredEnv(cwd)` derives the required keys from the config **actually written to disk** (`${VAR}` tokens in `.mcp.json` + `.claude/settings.json`, plus an explicit skill-key allowlist keyed off an on-disk fingerprint — today only `TRIPO_API_KEY` for `game-unity`). It deliberately does **not** freeform-scan `.claude/skills/**` (avoids false positives like `$MESHY_API_KEY`).
+  - `printNextSteps` now consumes the scanner instead of a hardcoded env-var list (Rule 13): it prints each still-missing key with **where to obtain it + a guide link + the target file** (`.env.local`), and surfaces any unknown token rather than dropping it. Keys already set in the environment are omitted.
+  - **Secret-leak fix:** `_shared/.gitignore.append` now ignores `.env.local` and `.env` — the very file the post-install steps tell you to create.
+- **Workflow-section slot** (issue [#23](https://github.com/En-Nam/ennam-agents-scaffold/issues/23)).
+  - The fixed 7-phase Superpowers workflow text is lifted verbatim into `templates/_shared/workflow/engineering-full.md` and the shared `CLAUDE.md` partial now fills a single `{{{workflowSection}}}` slot (rendered exactly like the existing `{{{profileSection}}}` slot). New optional `ProfileDef.recommendedWorkflow` field selects a preset; unset resolves to `engineering-full`.
+  - **Byte-identical guarantee:** a golden snapshot test asserts the rendered engineering block is diff=0 versus the pre-refactor output. This is the mechanism the workflow-selection step (#26) and the role-specific presets (#31/#32) plug into — no user-facing behavior changes yet.
+
+### Changed
+
+- **`types.ts`** — `ProfileDef.recommendedWorkflow?`, `FileEntry.workflowSrc?`, `RenderContext.workflowSection?`, new `WorkflowPresetId` alias.
+- **`render.ts` / `execute.ts`** — both render paths fill the workflow slot from the resolved preset (trailing-newline-stripped, matching the marker-block convention).
+- **`enumerate.ts`** — resolves the workflow preset onto the `CLAUDE.md` entry (single + compose) and skips `workflow/*.md` from being emitted as standalone files.
+
 ## v1.11.1 — 2026-07-06
 
 ### Fixed

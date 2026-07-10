@@ -2,7 +2,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { confirm, isCancel, cancel } from '@clack/prompts';
 import type { PlannedOp, RenderContext } from './types.js';
-import { renderString, renderJsonContent, composeProfileSections } from './render.js';
+import { renderString, renderJsonContent, composeProfileSections, readWorkflowSection } from './render.js';
 import { mergeMarker } from './merge/marker.js';
 import { mergeJson } from './merge/json.js';
 import { mergeLines } from './merge/lines.js';
@@ -23,18 +23,22 @@ export interface ExecuteResult {
 
 async function maybeRender(op: PlannedOp, ctx: RenderContext): Promise<string> {
   const raw = await readFile(op.src.srcAbs, 'utf8');
+  // v1.12 (#23) — fill the workflow slot (only set on the CLAUDE.md marker entry). Kept
+  // identical to render.ts renderFileEntry so the conflict-scan and write paths agree.
+  const workflowSection = await readWorkflowSection(op.src);
+  const baseCtx: RenderContext = workflowSection !== undefined ? { ...ctx, workflowSection } : ctx;
   // v1.11 (#10) — multi-profile: concatenate all profile partials under sub-headings.
   if (op.src.extraSrcList && op.src.extraSrcList.length > 0) {
     const profileSection = await composeProfileSections(op.src.extraSrcList, ctx);
-    return renderString(raw, { ...ctx, profileSection } as RenderContext);
+    return renderString(raw, { ...baseCtx, profileSection } as RenderContext);
   }
   if (!op.src.extraSrcAbs) {
-    return op.src.isTemplate ? renderString(raw, ctx) : raw;
+    return op.src.isTemplate ? renderString(raw, baseCtx) : raw;
   }
   // Combine shared partial + profile partial via the `profileSection` Handlebars slot.
   const profileRaw = await readFile(op.src.extraSrcAbs, 'utf8');
   const profileRendered = renderString(profileRaw, ctx);
-  const extendedCtx = { ...ctx, profileSection: profileRendered };
+  const extendedCtx = { ...baseCtx, profileSection: profileRendered };
   return renderString(raw, extendedCtx as RenderContext);
 }
 

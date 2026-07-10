@@ -220,7 +220,7 @@ cli
     }
 
     const result = await executeOps({ cwd, ops, ctx, interactive });
-    printNextSteps(displayProfile, result, hasGit);
+    await printNextSteps(displayProfile, result, hasGit, cwd);
 
     // Migration hint: v1.1 users may still have a stale chrome-devtools entry
     // in their .mcp.json (mergeJson is user-wins, so the scaffold cannot
