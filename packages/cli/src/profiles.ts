@@ -99,6 +99,8 @@ const REGISTRY: Record<string, ProfileDef> = {
     extraMcp: [],
     ruleFamily: 'doc-first',
     autoPolicy: true,
+    // v1.12 (#26) — data work gets the data-insight workflow, not the generic doc-first-signoff.
+    recommendedWorkflow: 'data-insight',
   },
   hr: {
     name: 'hr',

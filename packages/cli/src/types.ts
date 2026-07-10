@@ -42,6 +42,9 @@ export interface ProfileDef {
 /** v1.11 (#10) — options threaded into enumeration (multi-profile + opt-in packs). */
 export interface EnumerateOptions {
   policy?: boolean;              // emit the governance POLICY.md pack
+  // v1.12 (#26) — explicit workflow preset chosen by the wizard step or --workflow flag.
+  // When unset, enumeration falls back to recommendWorkflow(profiles).
+  workflow?: WorkflowPresetId;
 }
 
 export interface FileEntry {

@@ -1,6 +1,8 @@
 import { select, multiselect, isCancel, cancel, log } from '@clack/prompts';
 import path from 'node:path';
 import { listProfiles } from './profiles.js';
+import { WORKFLOW_PRESETS, recommendWorkflow } from './workflow.js';
+import type { ProfileDef } from './types.js';
 
 // Wizard matrix: (role × projectType × stack | cloud | gameStack) → profile name.
 // Exported as a pure function for unit testing; runWizard wraps it with prompts.
@@ -237,4 +239,25 @@ async function chooseSingleProfile(): Promise<string> {
   }
 
   return resolveProfile(role, projectType, stack);
+}
+
+/**
+ * v1.12 (#26) — after the profile(s) are chosen, ask which workflow the agents should
+ * follow (the phase list written into CLAUDE.md). The role-appropriate preset is
+ * pre-selected so a novice can just press Enter; override-only presets (quick-change,
+ * decision-brief) are offered but never the default. Returns the chosen preset id.
+ */
+export async function chooseWorkflow(profiles: ProfileDef[]): Promise<string> {
+  const recommended = recommendWorkflow(profiles);
+  const picked = await select<string>({
+    message: 'Which workflow should your agents follow? (Written into CLAUDE.md — you can change it later.)',
+    options: WORKFLOW_PRESETS.map(p => ({
+      value: p.id,
+      label: p.id === recommended ? `${p.label}  (recommended)` : p.label,
+      hint: p.hint,
+    })),
+    initialValue: recommended,
+  });
+  if (isCancel(picked)) { cancel('Aborted.'); process.exit(1); }
+  return picked as string;
 }

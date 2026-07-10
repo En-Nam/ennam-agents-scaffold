@@ -13,10 +13,13 @@ import { mergeMarker } from './merge/marker.js';
 import { mergeJson } from './merge/json.js';
 import { mergeLines } from './merge/lines.js';
 import { printIntro, printPlan, confirmProceed, printNextSteps, printHandoffPrompt } from './ux.js';
-import { runWizard } from './wizard.js';
+import { runWizard, chooseWorkflow } from './wizard.js';
+import { assertWorkflowId } from './workflow.js';
 import { checkPreflight } from './preflight.js';
 import { runAnalyzeClaude } from './analyze-claude.js';
 import { renderCatalogJson, renderCatalogHuman } from './list.js';
+import { runDoctor } from './doctor.js';
+import { detectLegacySettings, hasStaleChromeDevtools } from './checks.js';
 import type { UserStrategy, OperationPlan, ProfileDef } from './types.js';
 
 // Re-export wizard types/functions so external callers (and tests) can keep
@@ -41,6 +44,8 @@ cli
   .option('--list', 'List available profiles grouped by role and exit (add --json for machine-readable output)')
   .option('--json', 'With --list: emit the profile catalog as JSON')
   .option('--policy [name]', 'Emit the governance/data-handling POLICY.md pack (baseline). Auto-attached for hr and data-analytics.')
+  .option('--workflow <id>', 'Workflow preset written into CLAUDE.md (default: recommended for the role). Ids: engineering-full | doc-first-signoff | data-insight | quick-change | decision-brief')
+  .option('--doctor', 'Read-only health check of an installed scaffold (env keys, .mcp.json/settings.json, versions) and exit. Add --json for machine-readable output.')
   .action(async (profileArgs: string[], flags: Record<string, unknown>) => {
     // cac normalises kebab-case flags: --dry-run → dryRun, --merge-strategy → mergeStrategy.
     // For --no-prompts, cac sets prompts: false (omit defaults to true).
@@ -60,6 +65,13 @@ cli
     if (flags.list) {
       console.log(flags.json ? renderCatalogJson() : renderCatalogHuman());
       process.exit(0);
+    }
+
+    // v1.12 (#27) — read-only doctor. Short-circuits BEFORE the wizard/install flow like
+    // --analyze-claude/--list: it never writes, and exits non-zero only on ERROR findings.
+    if (flags.doctor) {
+      const code = await runDoctor(process.cwd(), { json: !!flags.json });
+      process.exit(code);
     }
 
     let profileNames = profileArgs ?? [];
@@ -121,6 +133,22 @@ cli
       }
     }
 
+    // v1.12 (#26) — resolve the workflow preset for CLAUDE.md: explicit --workflow wins
+    // (fail loud on a bad id, in interactive AND CI), else the guided wizard asks (pre-
+    // selecting the role recommendation), else enumeration falls back to the recommendation
+    // — deterministic under --no-prompts.
+    let workflow: string | undefined = typeof flags.workflow === 'string' ? flags.workflow : undefined;
+    if (workflow) {
+      try {
+        assertWorkflowId(workflow);
+      } catch (err) {
+        console.error(`Error: ${(err as Error).message}`);
+        process.exit(2);
+      }
+    } else if (interactive && !fromArgs) {
+      workflow = await chooseWorkflow(profileDefs);
+    }
+
     const cwd = process.cwd();
 
     // Auto-detect: if there is no .git in cwd, the scaffold silently skips
@@ -136,7 +164,7 @@ cli
 
     let entries;
     try {
-      entries = await enumerateProfiles(profileDefs, { policy: !!flags.policy });
+      entries = await enumerateProfiles(profileDefs, { policy: !!flags.policy, workflow });
     } catch (err) {
       // Fail loud on a composition conflict (two profiles ship the same path with
       // different content) — clean stderr, no stack trace (Rule 7 + Rule 12).
@@ -220,7 +248,7 @@ cli
     }
 
     const result = await executeOps({ cwd, ops, ctx, interactive });
-    await printNextSteps(displayProfile, result, hasGit, cwd);
+    await printNextSteps(displayProfile, result, hasGit, cwd, workflow);
 
     // Migration hint: v1.1 users may still have a stale chrome-devtools entry
     // in their .mcp.json (mergeJson is user-wins, so the scaffold cannot
@@ -274,7 +302,7 @@ async function maybeWarnStaleChromeDevtools(cwd: string): Promise<void> {
     const mcpPath = path.join(cwd, '.mcp.json');
     const txt = await readFile(mcpPath, 'utf8');
     const obj = JSON.parse(txt) as { mcpServers?: Record<string, unknown> };
-    if (obj.mcpServers && Object.prototype.hasOwnProperty.call(obj.mcpServers, 'chrome-devtools')) {
+    if (hasStaleChromeDevtools(obj)) {
       console.log();
       console.log('  Warning: .mcp.json still contains a `chrome-devtools` entry.');
       console.log('  v1.2 no longer ships chrome-devtools-mcp. Consider removing');
@@ -303,36 +331,7 @@ async function maybeWarnLegacySettings(cwd: string): Promise<void> {
     const txt = await readFile(settingsPath, 'utf8');
     const obj = JSON.parse(txt) as Record<string, unknown>;
 
-    const warnings: string[] = [];
-
-    const perms = obj.permissions as Record<string, unknown> | undefined;
-    if (perms && typeof perms === 'object' && 'additionalAllowList' in perms) {
-      // Warn even if `allow` is also present — after a v1.5.1 re-run, mergeJson
-      // ADDS `allow` from the new template but KEEPS the user's legacy key
-      // (user-wins on arrays). The legacy key is dead weight; tell the user
-      // to delete it for cleanliness.
-      warnings.push(
-        'permissions.additionalAllowList is a legacy key Claude Code silently ignores. ' +
-        'Move its entries into `permissions.allow` (or delete it if `allow` already mirrors them).',
-      );
-    }
-
-    const hooks = obj.hooks as Record<string, unknown> | undefined;
-    const sessionStart = hooks?.SessionStart;
-    if (Array.isArray(sessionStart)) {
-      const hasBareCommand = sessionStart.some((entry) =>
-        entry && typeof entry === 'object' && !Array.isArray(entry) &&
-        'command' in (entry as Record<string, unknown>) &&
-        !('hooks' in (entry as Record<string, unknown>)),
-      );
-      if (hasBareCommand) {
-        warnings.push(
-          'hooks.SessionStart uses the legacy bare `{command}` shape. ' +
-          'Wrap each entry as `{hooks: [{type: "command", command: "..."}]}` ' +
-          '— current Claude Code rejects the old shape with "Expected array, but received undefined".',
-        );
-      }
-    }
+    const warnings = detectLegacySettings(obj);
 
     if (warnings.length > 0) {
       console.log();

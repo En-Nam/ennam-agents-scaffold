@@ -26,7 +26,7 @@ export async function confirmProceed(): Promise<boolean> {
   return yes === true;
 }
 
-export async function printNextSteps(profile: ProfileDef, result: ExecuteResult, hasGit: boolean, cwd: string): Promise<void> {
+export async function printNextSteps(profile: ProfileDef, result: ExecuteResult, hasGit: boolean, cwd: string, workflow?: string): Promise<void> {
   const steps: string[] = [];
   if (hasGit) {
     steps.push('Review changes: git diff');
@@ -36,6 +36,15 @@ export async function printNextSteps(profile: ProfileDef, result: ExecuteResult,
   // v1.12 (#22) — derive required keys from the config actually written to disk (not a
   // hardcoded list), and tell the user where to obtain each still-missing one.
   steps.push(formatKeyReportStep(await buildKeyReport(cwd)));
+  // v1.12 (#27) — verify the install any time with the read-only doctor.
+  steps.push('Verify the install any time: npx @ennamjsc/agents-scaffold --doctor');
+  // v1.12 (#26) — the workflow the agents follow lives in CLAUDE.md; it can be changed.
+  steps.push(
+    `Workflow: your agents follow the ${workflow ? `"${workflow}"` : 'role-recommended'} workflow (see the Workflow section in CLAUDE.md). ` +
+    'Change it later with --workflow <id> on re-run, or by editing that section.',
+  );
+  // v1.12 (#24) — point users at the official-plugin menu (guidance only; nothing installed).
+  steps.push('Amplify your role with official plugins — see docs/plugins.md: https://github.com/En-Nam/ennam-agents-scaffold/blob/main/docs/plugins.md');
 
   // v1.9.0 — agent-org profile needs a manual SubagentStop hook wire-in.
   // The shared settings.json.hbs merger doesn't support profile-specific hook

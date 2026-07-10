@@ -5,7 +5,7 @@ import fg from 'fast-glob';
 import type { ProfileDef, FileEntry, EnumerateOptions } from './types.js';
 import { getSharedDir } from './profiles.js';
 import { classifyFile } from './classify.js';
-import { resolveWorkflowSrc } from './workflow.js';
+import { resolveWorkflowSrc, recommendWorkflow } from './workflow.js';
 
 /**
  * Strip .hbs and .partial.hbs and .append suffixes to derive the on-disk relPath.
@@ -91,11 +91,12 @@ export async function enumerateFiles(profile: ProfileDef, opts: EnumerateOptions
     });
   }
 
-  // v1.12 (#23) — resolve the workflow preset for the CLAUDE.md slot. Unset
-  // recommendedWorkflow → 'engineering-full' (byte-identical to pre-#23 output).
+  // v1.12 (#23/#26) — resolve the workflow preset for the CLAUDE.md slot: explicit
+  // --workflow/wizard choice wins, else the profile's recommendation (engineering →
+  // engineering-full, so engineering installs stay byte-identical).
   const claudeEntry = map.get('CLAUDE.md');
   if (claudeEntry) {
-    claudeEntry.workflowSrc = resolveWorkflowSrc(profile.recommendedWorkflow);
+    claudeEntry.workflowSrc = resolveWorkflowSrc(opts.workflow ?? recommendWorkflow([profile]));
   }
 
   // v1.11 (#9) — doc-first roles emit the doc-first AGENTS.md variant in place of the
@@ -206,8 +207,8 @@ export async function enumerateProfiles(profiles: ProfileDef[], opts: EnumerateO
   }
 
   // 4. CLAUDE.md — concatenate every profile's partial under the shared base's marker block.
-  // v1.12 (#23) — compose resolves the workflow slot to the default ('engineering-full');
-  // per-profile compose recommendation (any-engineering-wins → …) is #26's concern.
+  // v1.12 (#26) — workflow slot: explicit --workflow/wizard choice wins, else the compose
+  // recommendation (any-engineering-wins → engineering-full; else data-insight; else doc-first-signoff).
   map.set('CLAUDE.md', {
     srcAbs: path.join(sharedDir, 'CLAUDE.md.partial.hbs'),
     relPath: 'CLAUDE.md',
@@ -216,7 +217,7 @@ export async function enumerateProfiles(profiles: ProfileDef[], opts: EnumerateO
     extraSrcList: profiles
       .map(p => path.join(p.templateDir, 'CLAUDE.md.partial.hbs'))
       .filter(existsSync),
-    workflowSrc: resolveWorkflowSrc(),
+    workflowSrc: resolveWorkflowSrc(opts.workflow ?? recommendWorkflow(profiles)),
   });
 
   // 5. .mcp.json — union every profile's partial onto the shared base.
