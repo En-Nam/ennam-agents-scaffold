@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased — v1.12 (Waves 0–2, enterprise expansion)
+## v1.12.0 — 2026-07-10
 
-The foundational + Wave-1/2 issues of the v1.12 "enterprise expansion" plan (issues [#22](https://github.com/En-Nam/ennam-agents-scaffold/issues/22)–[#33](https://github.com/En-Nam/ennam-agents-scaffold/issues/33)). Decisions recorded in `mem:decisions/v1.12-enterprise-expansion` and `mem:decisions/v1.12-role-workflows`.
+**Enterprise-expansion batch (Waves 0–2)** — closes issues [#22](https://github.com/En-Nam/ennam-agents-scaffold/issues/22), [#23](https://github.com/En-Nam/ennam-agents-scaffold/issues/23), [#24](https://github.com/En-Nam/ennam-agents-scaffold/issues/24), [#26](https://github.com/En-Nam/ennam-agents-scaffold/issues/26), [#27](https://github.com/En-Nam/ennam-agents-scaffold/issues/27), [#29](https://github.com/En-Nam/ennam-agents-scaffold/issues/29), [#31](https://github.com/En-Nam/ennam-agents-scaffold/issues/31) in one release. Additive; engineering installs stay byte-identical. Decisions recorded in `mem:decisions/v1.12-enterprise-expansion` and `mem:decisions/v1.12-role-workflows`. (Deferred to a later release: finance-close/accounting #32/#33, settings-partial infra #25, OAuth spike #28, exec-expand #30.)
 
 ### Added — Wave 2
 
