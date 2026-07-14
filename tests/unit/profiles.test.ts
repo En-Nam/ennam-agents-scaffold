@@ -2,10 +2,14 @@ import { describe, it, expect } from 'vitest';
 import { getProfile, listProfiles } from '../../packages/cli/src/profiles.js';
 
 const ALL_PROFILES = [
+  'accounting',
   'agent-org',
   'ba',
   'ceo',
   'ciso',
+  'cmo',
+  'coo',
+  'cto',
   'data-analytics',
   'design',
   'devops-aws',
@@ -74,7 +78,7 @@ describe('profiles', () => {
   });
 
   it('doc-first roles declare ruleFamily=doc-first; every code/infra role leaves it undefined (engineering)', () => {
-    const docFirst = ['ba', 'hr', 'pm', 'tech-writer', 'data-analytics', 'ceo', 'ciso', 'design'];
+    const docFirst = ['ba', 'hr', 'pm', 'tech-writer', 'data-analytics', 'ceo', 'ciso', 'design', 'cto', 'coo', 'cmo', 'accounting'];
     for (const name of docFirst) {
       expect(getProfile(name).ruleFamily).toBe('doc-first');
     }

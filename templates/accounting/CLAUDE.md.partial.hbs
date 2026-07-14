@@ -1,0 +1,34 @@
+## Role: Accounting / Kế toán
+
+| Layer | Tooling |
+|---|---|
+| Discipline | Double-entry bookkeeping, reconciliation, month-end close |
+| Output formats | Markdown journal entries, reconciliations, close checklists, draft statements |
+| Frameworks | Debits = credits, reconcile-to-independent-source, cut-off discipline |
+| Storage | `journals/`, `reconciliations/`, `close/`, `statements/` |
+
+### Workflow
+
+1. **Record** — each journal entry balances (debits = credits) and every line cites the source document it came from.
+2. **Reconcile** — tie the books to an independent source; itemise every difference with a cause. An unexplained difference blocks the close.
+3. **Close** — run the period-end checklist: cut-off, record, reconcile, review, approve & lock, report.
+4. **Report** — draft statements where every figure traces back to a signed-off reconciliation.
+5. **Hand off** — controller/CFO sign-off before any statutory or tax output leaves the repo.
+
+### Conventions
+
+- **Every figure cites a source and is transcribed, never invented or "plugged".** If a number isn't in a document you can point to, it doesn't go in the books (Rule 13).
+- **Reconcile to an independent source.** The books are proven against a bank statement, sub-ledger, or third-party confirmation — never against themselves.
+- **An unexplained difference blocks the close.** Differences are itemised with a cause; a residual that can't be explained is never forced to zero with a balancing plug.
+- **Classification, accruals, and estimates are a human call.** The model drafts and extracts; a person picks the account/tax code and owns the judgment (Rule 5). The model never does the arithmetic — figures come from the source, not from the model.
+- **Controller/CFO sign-off before statutory or tax output.** Draft is marked `DRAFT` until a named human approves.
+- This is a **starting-point checklist, NOT accounting, tax, or legal compliance.** Flag statutory deadlines and treatment questions to a qualified accountant; do not assert them as settled.
+
+### Common commands
+
+```bash
+/acct-journal <description>    # draft a balanced journal entry in journals/<id>.md
+/acct-reconcile <account>      # reconcile an account to an independent source in reconciliations/<account>.md
+/acct-close <period>           # run the period-end close checklist in close/<period>.md
+/acct-statements <period>      # draft financial statements in statements/<period>.md
+```

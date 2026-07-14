@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased — v1.13.0 (enterprise expansion — completion: #25 #28 #30 #32 #33)
+
+Closes the remaining v1.12-plan issues after the v1.12.0 batch. Additive; engineering installs stay byte-identical. Decisions in `mem:decisions/v1.12-oauth-mcp-spike` + `mem:decisions/v1.12-role-workflows`.
+
+### Added
+
+- **Executive round-2 + Finance profiles** (issues [#30](https://github.com/En-Nam/ennam-agents-scaffold/issues/30), [#33](https://github.com/En-Nam/ennam-agents-scaffold/issues/33)) — four new doc-first profiles, each a full template dir (agent + ~4 commands + skills) with Rule-9/13 tests:
+  - **`cto`** (`+github`, `exec-decision`) — tech strategy, ADRs, tech radar, eng roadmap. ADRs record the decision + trade-offs; the human owns the call (Rule 5).
+  - **`coo`** (`+github`, `ops-review-cadence`) — SOPs, ops reviews, KPI cadence. Every action item has a named owner + due date.
+  - **`cmo`** (`+canva`, `exec-decision`) — positioning, campaigns, content, growth metrics. Figures cite a source (Rule 13). Uses the **Canva remote MCP**.
+  - **`accounting`** / kế toán (`autoPolicy`, `finance-close`) — journal entries, reconciliation, month-end close, statements. Carries the strongest Rule-13 discipline: every figure traces to an independent source, differences are itemised (never plugged), and an unexplained difference blocks the close.
+  - Wizard **Executive** role now sub-selects CEO / CISO / CTO / COO / CMO; new **Finance / Accounting** role.
+- **Two role workflow presets** (issue [#32](https://github.com/En-Nam/ennam-agents-scaffold/issues/32)) added to the `--workflow` pool: `finance-close` (Cut-off → Record → Reconcile-to-source → Review → Approve & lock → Report) and `ops-review-cadence` (Metrics → Diagnose → Assign owners → Follow-up). Each phase in plain language with baked guardrails.
+- **Remote-OAuth MCP support** (issue [#28](https://github.com/En-Nam/ennam-agents-scaffold/issues/28) spike). The scaffold can now emit remote MCP servers (`{"type":"http","url":...}`). **Canva** ships as `https://mcp.canva.com/mcp` (no token — interactive OAuth); `printNextSteps` surfaces the one-time `/mcp` sign-in. **Gmail is NOT emittable** (Claude Code has no local OAuth for it) — connect via claude.ai Connectors instead.
+- **`.claude/settings.json.partial.hbs` per-profile merge infra** (issue [#25](https://github.com/En-Nam/ennam-agents-scaffold/issues/25)). Profile-specific settings deep-merge onto the shared base (same user-wins json-merge as `.mcp.json`). Proof-of-use: **agent-org's SubagentStop hook is now installed automatically** — the manual paste is gone from `printNextSteps`.
+
+### Changed
+
+- **`workflow.ts`** — `finance-close` + `ops-review-cadence` in `WORKFLOW_PRESETS`.
+- **`enumerate.ts`** — attaches a profile's `settings.json.partial.hbs` (single + compose), mirroring the `.mcp.json` partial.
+- **`wizard.ts` / `list.ts` / `profiles.ts`** — cto/coo/cmo/accounting registered; Executive sub-select + Finance role wired.
+- **`ux.ts`** — Canva remote-MCP connect note; agent-org manual-paste step removed (now auto-merged).
+
 ## v1.12.0 — 2026-07-10
 
 **Enterprise-expansion batch (Waves 0–2)** — closes issues [#22](https://github.com/En-Nam/ennam-agents-scaffold/issues/22), [#23](https://github.com/En-Nam/ennam-agents-scaffold/issues/23), [#24](https://github.com/En-Nam/ennam-agents-scaffold/issues/24), [#26](https://github.com/En-Nam/ennam-agents-scaffold/issues/26), [#27](https://github.com/En-Nam/ennam-agents-scaffold/issues/27), [#29](https://github.com/En-Nam/ennam-agents-scaffold/issues/29), [#31](https://github.com/En-Nam/ennam-agents-scaffold/issues/31) in one release. Additive; engineering installs stay byte-identical. Decisions recorded in `mem:decisions/v1.12-enterprise-expansion` and `mem:decisions/v1.12-role-workflows`. (Deferred to a later release: finance-close/accounting #32/#33, settings-partial infra #25, OAuth spike #28, exec-expand #30.)
