@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased — v1.13.0 (enterprise expansion — completion: #25 #28 #30 #32 #33)
+## v1.13.0 — 2026-07-10
 
-Closes the remaining v1.12-plan issues after the v1.12.0 batch. Additive; engineering installs stay byte-identical. Decisions in `mem:decisions/v1.12-oauth-mcp-spike` + `mem:decisions/v1.12-role-workflows`.
+**Enterprise-expansion completion** — closes the remaining v1.12-plan issues (#25, #28, #30, #32, #33) after the v1.12.0 batch. Additive; engineering installs stay byte-identical. Decisions in `mem:decisions/v1.12-oauth-mcp-spike` + `mem:decisions/v1.12-role-workflows`.
 
 ### Added
 
