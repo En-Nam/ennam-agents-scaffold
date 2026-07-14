@@ -109,15 +109,19 @@ flowchart TD
 | `data-analytics` | Data & Analytics — reviewed read-only SQL + reproducible metric definitions + `/data-query` `/data-metric` | — |
 | `hr` | HR — JD authoring + interview kits + `/hr-jd` `/hr-interview-kit`. Uses the `people-lifecycle` workflow | — |
 
-### Executive / Leadership & Design (role-specific)
+### Executive / Leadership, Design & Finance (role-specific)
 
 | Profile | Role | Workflow | Extra MCP |
 |---|---|---|---|
-| `ceo` | CEO / executive — strategy memos, OKRs, board decks, investor updates + `/ceo-strategy` `/ceo-okr` `/ceo-board-deck` `/ceo-investor-update` | `exec-decision` | — |
-| `ciso` | CISO / security — policy, risk register, incident briefs, control maps + `/ciso-policy` `/ciso-risk-register` `/ciso-incident-brief` `/ciso-control-map` | `security-incident` | github |
-| `design` | Design / UX — specs, design-system docs, critiques, a11y reviews + `/design-spec` `/design-critique` `/design-system` `/design-a11y` | `doc-first-signoff` | figma |
+| `ceo` | CEO / executive — strategy memos, OKRs, board decks, investor updates | `exec-decision` | — |
+| `ciso` | CISO / security — policy, risk register, incident briefs, control maps | `security-incident` | github |
+| `cto` | CTO / technology — tech strategy, ADRs, tech radar, engineering roadmap | `exec-decision` | github |
+| `coo` | COO / operations — SOPs, ops reviews, KPI cadence, runbooks | `ops-review-cadence` | github |
+| `cmo` | CMO / marketing — positioning, campaigns, content calendar, growth metrics | `exec-decision` | canva (remote) |
+| `design` | Design / UX — specs, design-system docs, critiques, a11y reviews | `doc-first-signoff` | figma |
+| `accounting` | Accounting / kế toán — journal entries, reconciliation, month-end close, statements | `finance-close` | — |
 
-Reached from the wizard via the **Executive / Leadership** role (sub-selects CEO / CISO) and the **Design / UX** role. `ceo` and `ciso` auto-attach `POLICY.md` (board material = MNPI; incident briefs carry PII).
+Reached from the wizard via the **Executive / Leadership** role (sub-selects CEO / CISO / CTO / COO / CMO), the **Design / UX** role, and the **Finance / Accounting** role. `ceo`, `ciso`, and `accounting` auto-attach `POLICY.md` (board material = MNPI; incident briefs carry PII; accounting handles bank/salary data). **`cmo` uses the Canva remote MCP** — a `{"type":"http"}` server with interactive OAuth (no token to paste); the post-install steps prompt you to sign in via `/mcp`.
 
 ### DevOps (cloud / infra-target-specific)
 

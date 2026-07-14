@@ -51,17 +51,7 @@ export async function printNextSteps(profile: ProfileDef, result: ExecuteResult,
   // fragments yet (backlog: `.claude/settings.json.partial.hbs` merge, v1.10.x).
   // Surface the exact JSON so users don't have to guess. Rule 12 — fail loud.
   if (profile.name === 'agent-org') {
-    steps.push(
-      'Register the SubagentStop hook in .claude/settings.json — paste this into your `hooks` object:\n' +
-      '        "SubagentStop": [\n' +
-      '          {\n' +
-      '            "hooks": [\n' +
-      '              { "type": "command", "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/subagent-log.ps1" }\n' +
-      '            ]\n' +
-      '          }\n' +
-      '        ]'
-    );
-    steps.push('On non-Windows: swap the command to `bash .claude/hooks/subagent-log.sh` (the .sh script is shipped alongside).');
+    steps.push('The SubagentStop hook is now installed automatically in .claude/settings.json (merged from the profile; the OS-correct .ps1/.sh command is already selected) — no manual paste needed.');
     steps.push('COST DISCLOSURE: agent-org runs Opus orchestrator + Sonnet workers concurrently — 5-10x tokens vs solo. Only dispatch when task decomposition genuinely helps.');
     steps.push('Requires Claude Code >= 2.1.178 (post-TeamCreate/Delete removal + team_name deprecation). The wizard preflight will WARN if you are behind.');
   }
@@ -77,6 +67,12 @@ export async function printNextSteps(profile: ProfileDef, result: ExecuteResult,
     steps.push('Initialize Git LFS: `git lfs install && git add .gitattributes && git commit -m "Add Git LFS rules"`');
     steps.push('Fill in GDD.md + art-bible.md + docs/perf-budget.md (agents will STOP at placeholders per Rule 12)');
     steps.push('Tripo3D asset-pipeline skill DEFAULTS to --dry-run (no API calls). To make real Tripo API calls: pass --live and confirm Pro tier ($13.93/mo annual minimum — Free tier is CC BY 4.0 NON-COMMERCIAL).');
+  }
+
+  // v1.12 (#28/#30) — Canva is a remote-OAuth MCP: static config (type:http, no token), but the
+  // connect step is interactive and cannot be derived from the env-key scan. Surface it explicitly.
+  if (profile.extraMcp.includes('canva')) {
+    steps.push('Canva uses a remote MCP (interactive OAuth — no token to paste). On your first `claude` run, approve the project-scoped `canva` server, then run `/mcp` and sign in to Canva.');
   }
 
   steps.push('Start Claude Code: claude');

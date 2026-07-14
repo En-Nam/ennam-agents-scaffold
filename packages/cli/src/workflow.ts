@@ -30,6 +30,10 @@ export const WORKFLOW_PRESETS: WorkflowPreset[] = [
   { id: 'people-lifecycle', label: 'People lifecycle (hire → review → offboard)', hint: 'Frame → Gather → Draft → Fairness check → Human decision → Sign-off — HR/people work' },
   { id: 'exec-decision', label: 'Executive decision & board communication', hint: 'Frame → Options → Decide → Deck → Validate figures → Sign-off — leadership calls' },
   { id: 'security-incident', label: 'Security incident response', hint: 'Intake → Scope from evidence → Contain → Notify → Post-mortem — NIST-style' },
+  // v1.12 (#32) — finance-close ships workflow-only: selectable via --workflow, but no profile
+  // recommends it yet (the accounting profile #33 is gated on the Rule-13 altered-number harness).
+  { id: 'finance-close', label: 'Financial close (record → reconcile → report)', hint: 'Cut-off → Record → Reconcile-to-source → Review → Approve & lock → Report — accounting close' },
+  { id: 'ops-review-cadence', label: 'Operations review cadence', hint: 'Metrics → Diagnose → Assign owners → Follow-up — recurring operating rhythm (COO)' },
   { id: 'quick-change', label: 'Quick change (express lane)', hint: 'Understand → Implement → Verify — small, low-risk edits', overrideOnly: true },
   { id: 'decision-brief', label: 'Decision (frame → options → decide → communicate)', hint: 'For making a call, not a document — human decides', overrideOnly: true },
 ];

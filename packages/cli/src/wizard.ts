@@ -6,14 +6,14 @@ import type { ProfileDef } from './types.js';
 
 // Wizard matrix: (role × projectType × stack | cloud | gameStack) → profile name.
 // Exported as a pure function for unit testing; runWizard wraps it with prompts.
-export type Role = 'Developer' | 'QA-QC' | 'BA' | 'PM' | 'Tech-Writer' | 'Data' | 'HR' | 'DevOps' | 'Game-Dev' | 'Agent-Org' | 'Executive' | 'Design';
+export type Role = 'Developer' | 'QA-QC' | 'BA' | 'PM' | 'Tech-Writer' | 'Data' | 'HR' | 'DevOps' | 'Game-Dev' | 'Agent-Org' | 'Executive' | 'Design' | 'Finance';
 export type ProjectType = 'Local-root' | 'Existing repository';
 export type Stack = 'Next.js' | 'React' | 'React Native' | 'Flutter' | 'Python' | 'Go' | '.NET MVC' | 'Express.js';
 export type Cloud = 'AWS' | 'Azure' | 'Google Cloud' | 'Docker';
 export type GameStack = 'Unity 2.5D Mobile';
 export type QAKind = 'Manual' | 'Automation';
-// v1.12 (#29) — the Executive role group sub-selects a chief (mirrors QA-QC's 2-option sub-select).
-export type ExecRole = 'CEO' | 'CISO';
+// v1.12 (#29/#30) — the Executive role group sub-selects a chief (mirrors QA-QC's sub-select).
+export type ExecRole = 'CEO' | 'CISO' | 'CTO' | 'COO' | 'CMO';
 
 const STACK_TO_PROFILE: Record<Stack, string> = {
   'Next.js': 'next',
@@ -40,6 +40,9 @@ const GAME_STACK_TO_PROFILE: Record<GameStack, string> = {
 const EXEC_ROLE_TO_PROFILE: Record<ExecRole, string> = {
   'CEO': 'ceo',
   'CISO': 'ciso',
+  'CTO': 'cto',
+  'COO': 'coo',
+  'CMO': 'cmo',
 };
 
 export function resolveProfile(
@@ -68,6 +71,7 @@ export function resolveProfile(
   if (role === 'Agent-Org') return 'agent-org';
   if (role === 'HR') return 'hr';
   if (role === 'Design') return 'design';
+  if (role === 'Finance') return 'accounting';
   if (role === 'Executive') {
     // Mirror the DevOps/Game-Dev enum-throw pattern so a bogus JSON-fed value fails loud
     // instead of silently defaulting (Rule 12). The wizard cannot produce a bad value.
@@ -166,8 +170,9 @@ async function chooseSingleProfile(): Promise<string> {
       { value: 'Tech-Writer', label: 'Technical Writer / Docs' },
       { value: 'Data', label: 'Data & Analytics' },
       { value: 'HR', label: 'HR' },
-      { value: 'Executive', label: 'Executive / Leadership (CEO, CISO)' },
+      { value: 'Executive', label: 'Executive / Leadership (CEO, CISO, CTO, COO, CMO)' },
       { value: 'Design', label: 'Design / UX' },
+      { value: 'Finance', label: 'Finance / Accounting' },
       { value: 'DevOps', label: 'DevOps' },
       { value: 'Game-Dev', label: 'Game-Dev (Unity)' },
       { value: 'Agent-Org', label: 'Agent-Org (multi-agent dispatch — advanced, cost-heavy)' },
@@ -214,6 +219,9 @@ async function chooseSingleProfile(): Promise<string> {
       options: [
         { value: 'CEO', label: 'CEO / executive (strategy, OKRs, board decks, investor updates)' },
         { value: 'CISO', label: 'CISO / security (policy, risk register, incident briefs, control maps)' },
+        { value: 'CTO', label: 'CTO / technology (tech strategy, ADRs, tech radar, eng roadmap)' },
+        { value: 'COO', label: 'COO / operations (SOPs, ops reviews, KPI cadence)' },
+        { value: 'CMO', label: 'CMO / marketing (positioning, campaigns, content, growth — Canva)' },
       ],
       initialValue: 'CEO',
     });
@@ -221,8 +229,8 @@ async function chooseSingleProfile(): Promise<string> {
     return resolveProfile(role, 'Existing repository', undefined, undefined, undefined, undefined, execRole);
   }
 
-  // BA, PM, Tech-Writer, Data, HR, and Design do not branch on projectType or stack — single-profile roles.
-  if (role === 'BA' || role === 'PM' || role === 'Tech-Writer' || role === 'Data' || role === 'HR' || role === 'Design') {
+  // BA, PM, Tech-Writer, Data, HR, Design, and Finance do not branch on projectType or stack.
+  if (role === 'BA' || role === 'PM' || role === 'Tech-Writer' || role === 'Data' || role === 'HR' || role === 'Design' || role === 'Finance') {
     return resolveProfile(role, 'Existing repository');
   }
 

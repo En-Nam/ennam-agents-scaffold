@@ -138,6 +138,40 @@ const REGISTRY: Record<string, ProfileDef> = {
     ruleFamily: 'doc-first',
     // design uses the generic doc-first-signoff workflow (no bespoke preset needed).
   },
+  cto: {
+    name: 'cto',
+    description: 'CTO — tech strategy, architecture decision records, tech radar, engineering roadmap',
+    templateDir: path.join(TEMPLATES, 'cto'),
+    extraMcp: ['github'],
+    ruleFamily: 'doc-first',
+    recommendedWorkflow: 'exec-decision',
+  },
+  coo: {
+    name: 'coo',
+    description: 'COO / Operations — SOPs, ops reviews, KPI cadence, cross-functional execution',
+    templateDir: path.join(TEMPLATES, 'coo'),
+    extraMcp: ['github'],
+    ruleFamily: 'doc-first',
+    recommendedWorkflow: 'ops-review-cadence',
+  },
+  cmo: {
+    name: 'cmo',
+    description: 'CMO / Marketing — positioning, campaign briefs, content calendar, growth metrics',
+    templateDir: path.join(TEMPLATES, 'cmo'),
+    // canva is a remote-OAuth MCP (type:http, no static token) — see mem:decisions/v1.12-oauth-mcp-spike (#28).
+    extraMcp: ['canva'],
+    ruleFamily: 'doc-first',
+    recommendedWorkflow: 'exec-decision',
+  },
+  accounting: {
+    name: 'accounting',
+    description: 'Accounting / kế toán — journal entries, reconciliation, month-end close, statements',
+    templateDir: path.join(TEMPLATES, 'accounting'),
+    extraMcp: [],
+    ruleFamily: 'doc-first',
+    autoPolicy: true,                       // handles bank/salary/vendor PII + statutory output
+    recommendedWorkflow: 'finance-close',
+  },
   'devops-aws': {
     name: 'devops-aws',
     description: 'DevOps — Terraform + AWS (ECS, RDS, IAM, Secrets Manager, CloudWatch)',

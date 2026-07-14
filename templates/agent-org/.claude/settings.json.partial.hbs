@@ -1,0 +1,11 @@
+{
+  "hooks": {
+    "SubagentStop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "{{#if isWindows}}powershell -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/subagent-log.ps1{{else}}bash .claude/hooks/subagent-log.sh{{/if}}" }
+        ]
+      }
+    ]
+  }
+}

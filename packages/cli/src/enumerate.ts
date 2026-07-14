@@ -130,6 +130,17 @@ export async function enumerateFiles(profile: ProfileDef, opts: EnumerateOptions
     }
   }
 
+  // v1.12 (#25) — profile-specific `.claude/settings.json.partial.hbs` deep-merges onto the
+  // shared settings.json base (same json-merge path as .mcp.json; profile wins on conflict).
+  // Profiles without a partial leave settings.json byte-identical to the shared base.
+  const profileSettingsPartial = profileFiles.find(({ rel }) => rel === '.claude/settings.json.partial.hbs');
+  if (profileSettingsPartial) {
+    const existing = map.get('.claude/settings.json');
+    if (existing) {
+      existing.extraSrcAbs = profileSettingsPartial.src;
+    }
+  }
+
   return [...map.values()].sort((a, b) => a.relPath.localeCompare(b.relPath));
 }
 
@@ -226,6 +237,15 @@ export async function enumerateProfiles(profiles: ProfileDef[], opts: EnumerateO
     mcpEntry.extraSrcList = profiles
       .map(p => path.join(p.templateDir, '.mcp.json.partial.hbs'))
       .filter(existsSync);
+  }
+
+  // 5b. .claude/settings.json — union every profile's settings partial onto the shared base (#25).
+  const settingsEntry = map.get('.claude/settings.json');
+  if (settingsEntry) {
+    const settingsPartials = profiles
+      .map(p => path.join(p.templateDir, '.claude', 'settings.json.partial.hbs'))
+      .filter(existsSync);
+    if (settingsPartials.length > 0) settingsEntry.extraSrcList = settingsPartials;
   }
 
   // 6. Governance pack.
