@@ -1,0 +1,1 @@
+test('stale build output', () => {});
