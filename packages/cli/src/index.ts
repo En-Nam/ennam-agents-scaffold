@@ -3,7 +3,7 @@ import { readFile, access } from 'node:fs/promises';
 import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { resolveProfiles } from './profiles.js';
+import { resolveProfiles, roleVoters } from './profiles.js';
 import { enumerateProfiles } from './enumerate.js';
 import { scanConflicts } from './conflict.js';
 import { buildPlan } from './plan.js';
@@ -117,7 +117,11 @@ cli
 
     // Composed display profile — the union of extra MCPs, a joined name. For a
     // single profile this IS the profile, so single-profile UX is unchanged.
-    const displayProfile: ProfileDef = profileDefs.length === 1 ? profileDefs[0]! : {
+    // v1.15 — one role + add-ons (`game-unity automation`) displays and renders AS the role,
+    // so role-specific next steps / handoff behave exactly as for the role alone.
+    const voters = roleVoters(profileDefs);
+    const addOnNames = profileDefs.filter(p => !voters.includes(p)).map(p => p.name);
+    const displayProfile: ProfileDef = voters.length === 1 ? voters[0]! : {
       name: profileDefs.map(p => p.name).join(' + '),
       description: `composed: ${profileDefs.map(p => p.name).join(', ')}`,
       templateDir: '',
@@ -261,7 +265,7 @@ cli
     }
 
     const result = await executeOps({ cwd, ops, ctx, interactive });
-    await printNextSteps(displayProfile, result, hasGit, cwd, workflow);
+    await printNextSteps(displayProfile, result, hasGit, cwd, workflow, addOnNames);
     printBlockedHooks(blockedHooks);
 
     // Migration hint: v1.1 users may still have a stale chrome-devtools entry

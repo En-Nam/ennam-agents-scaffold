@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import fg from 'fast-glob';
 import type { ProfileDef, FileEntry, EnumerateOptions } from './types.js';
-import { getSharedDir } from './profiles.js';
+import { getSharedDir, roleVoters } from './profiles.js';
 import { classifyFile } from './classify.js';
 import { resolveWorkflowSrc, recommendWorkflow } from './workflow.js';
 
@@ -161,14 +161,45 @@ export async function enumerateFiles(profile: ProfileDef, opts: EnumerateOptions
  * - Fail loud (Rule 7): if two profiles ship the SAME file path with DIFFERENT content
  *   (an agent/command/skill collision), throw a listed error instead of silently picking one.
  */
+/**
+ * v1.15 — add the static files of add-on (augmentation) profiles to a role's entries.
+ * Add-ons ship guidance files only: a partial (CLAUDE/.mcp/settings) or a path the role
+ * already ships is a contract violation → fail loud (Rule 12), never a silent pick.
+ */
+async function overlayAddOns(entries: FileEntry[], addOns: ProfileDef[]): Promise<FileEntry[]> {
+  const taken = new Set(entries.map(e => e.relPath));
+  for (const addOn of addOns) {
+    for (const { src, rel } of await collect(addOn.templateDir)) {
+      if (src.endsWith('.partial.hbs')) {
+        throw new Error(`Add-on profile "${addOn.name}" must not ship partials (found ${rel}).`);
+      }
+      const target = profileTargetRelPath(rel, addOn.name);
+      if (taken.has(target)) {
+        throw new Error(`Add-on profile "${addOn.name}" collides with the selected role on ${target}.`);
+      }
+      taken.add(target);
+      entries.push({ srcAbs: src, relPath: target, isTemplate: src.endsWith('.hbs'), kind: classifyFile(target) });
+    }
+  }
+  return entries;
+}
+
 export async function enumerateProfiles(profiles: ProfileDef[], opts: EnumerateOptions = {}): Promise<FileEntry[]> {
   if (profiles.length <= 1) {
     return enumerateFiles(profiles[0]!, opts);
   }
 
+  // v1.15 — one role + add-ons: install the role exactly as if alone (CLAUDE.md, AGENTS.md,
+  // settings byte-identical) and overlay the add-ons' static files on top.
+  const voters = roleVoters(profiles);
+  if (voters.length === 1) {
+    return overlayAddOns(await enumerateFiles(voters[0]!, opts), profiles.filter(p => p !== voters[0]));
+  }
+
+  // v1.15 — `anyEngineering` below already ignores add-ons via roleVoters.
   const sharedDir = getSharedDir();
   const shared = await collect(sharedDir);
-  const anyEngineering = profiles.some(p => p.ruleFamily !== 'doc-first');
+  const anyEngineering = voters.some(p => p.ruleFamily !== 'doc-first');
   const wantPolicy = !!opts.policy || profiles.some(p => p.autoPolicy);
 
   const map = new Map<string, FileEntry>();

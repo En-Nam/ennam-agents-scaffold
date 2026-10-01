@@ -26,6 +26,8 @@ const RULES: Rule[] = [
   { match: r => r.startsWith('.claude/commands/'),              kind: 'skip-if-exists' },
   { match: r => r.startsWith('.claude/agents/'),                kind: 'skip-if-exists' },
   { match: r => r.startsWith('.claude/workflows/'),             kind: 'skip-if-exists' },
+  // v1.15 (automation) — the default /loop prompt is meant to be edited; never clobber it.
+  { match: r => r === '.claude/loop.md',                        kind: 'skip-if-exists' },
   { match: r => r.startsWith('.claude/skills/'),                kind: 'skip-if-exists' },
   { match: r => r.startsWith('.serena/'),                       kind: 'skip-if-exists' },
   { match: r => r.startsWith('docs/superpowers/'),              kind: 'skip-if-exists' },

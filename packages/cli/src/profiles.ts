@@ -220,12 +220,33 @@ const REGISTRY: Record<string, ProfileDef> = {
     // (TeamCreate/Delete removal) cutline. See mem:decisions/v1.14-dynamic-workflows-messaging.
     minClaudeCodeVersion: '2.1.248',
   },
+  automation: {
+    name: 'automation',
+    description: 'Add-on — Claude Code automation guidance: /goal, /loop + report-only loop.md, schedules, headless runs. Guidance only; composes onto any role.',
+    templateDir: path.join(TEMPLATES, 'automation'),
+    extraMcp: [],
+    augmentation: true,
+    // v1.15 — 2.1.246 caps /goal idle check-ins at 3 between user prompts (uncapped
+    // before). The skill's turn/time clause is the real cost bound. Warn-only, like every floor.
+    // See mem:decisions/automation-profile-v1.15.
+    minClaudeCodeVersion: '2.1.246',
+  },
 };
 
 export function getProfile(name: string): ProfileDef {
   const p = REGISTRY[name];
   if (!p) throw new Error(`Unknown profile: "${name}". Available: ${Object.keys(REGISTRY).join(', ')}`);
   return p;
+}
+
+/**
+ * v1.15 — the profiles that decide role semantics (AGENTS.md family, workflow preset)
+ * in a composition. Augmentations don't vote; if only augmentations were selected,
+ * they decide (i.e. the defaults apply).
+ */
+export function roleVoters(profiles: ProfileDef[]): ProfileDef[] {
+  const voters = profiles.filter(p => !p.augmentation);
+  return voters.length > 0 ? voters : profiles;
 }
 
 /**

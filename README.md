@@ -82,6 +82,8 @@ flowchart TD
 
 > The diagram above renders on GitHub. On npmjs.com, the mermaid code block is shown verbatim — open this README on GitHub for the rendered flowchart.
 
+After any guided role, the wizard asks **"Add Claude Code automation guidance?"** (default: No) — see [Add-ons](#add-ons-compose-onto-any-role).
+
 ## Profiles
 
 ### Developer (stack-specific)
@@ -145,6 +147,18 @@ Reached from the wizard via the **Executive / Leadership** role (sub-selects CEO
 | `local-root` | Polyrepo coordinator — reads sub-platform `.serena/` memories | — | any |
 | `agent-org` | Multi-agent dispatch — orchestrator + implementer + reviewer, dynamic workflows (`/review-changes`, `/judge-panel`, `/fix-loop`), SubagentStop audit hook. Cost-heavy; opt-in. | — | **>= 2.1.248** |
 
+### Add-ons (compose onto any role)
+
+| Profile | Purpose | Extra MCP | Requires Claude Code |
+|---|---|---|---|
+| `automation` | Claude Code automation guidance — `ennam-automation` skill (`/goal`, `/loop`, schedules, headless `claude -p`), a report-only `.claude/loop.md`, runbook. Guidance only: no settings, hooks, MCP or CLAUDE.md section. | — | >= 2.1.246 (warns if older) |
+
+```bash
+npx @ennamjsc/agents-scaffold next automation     # any role + automation
+```
+
+An add-on never changes the role it is added to: `hr automation` installs HR exactly as `hr` alone does (same `CLAUDE.md`, doc-first `AGENTS.md`, `people-lifecycle` workflow, settings) plus the add-on's files.
+
 All profiles also register `serena`, `context7`, and `jira` via the shared MCP partial. The `Extra MCP` column lists only the profile-specific additions on top of that base. (`game-unity`'s Unity MCP comes via its own `.mcp.json.partial.hbs`, not the shared catalog.)
 
 Each role/cloud profile ships with its own `.claude/agents/<specialist>.md`, one or two `.claude/commands/<verb>.md` slash commands, and one or two `.claude/skills/<topic>/SKILL.md` skills that auto-load when the topic comes up in conversation. `game-unity` is the first profile to ship 3 agents + 3 commands + 4 skills (rationale: game-dev domain rạch ròi between gameplay code / asset pipeline / build-and-test; each agent has explicit "When NOT" boundaries).
@@ -192,6 +206,10 @@ v1.5.1 fixes two broken shapes the scaffold has been shipping in `.claude/settin
 2. `hooks.SessionStart` entries used the legacy bare `{command}` shape. Current Claude Code rejects this with **"Expected array, but received undefined"** and refuses to load any settings from the file. Corrected to the required nested `{hooks: [{type: "command", command: "…"}]}` wrapper.
 
 Because `.claude/settings.json` is merged user-wins on arrays, **re-running the scaffold cannot auto-rewrite an existing broken file** — the CLI now prints a loud warning at the end of every install when it detects either legacy shape so you know to fix it by hand.
+
+### Upgrading from v1.14
+
+v1.15 adds the opt-in **`automation` add-on** — guidance for Claude Code's `/goal`, `/loop`, scheduled tasks and headless runs, written the Ennam way (every goal bounded, evidence printed, results checkpointed to Serena). Add it with `npx @ennamjsc/agents-scaffold <your-profile> automation`, or answer Yes in the wizard. Nothing changes unless you add it, except one line for every profile: `.gitignore` now ignores `.claude/scheduled_tasks.json`.
 
 ### Upgrading from v1.13
 

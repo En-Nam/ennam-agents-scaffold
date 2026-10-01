@@ -17,3 +17,6 @@
 
 # Ennam runtime caches (game-unity profile: asset-pipeline job persistence, perf-budget results)
 .ennam/
+
+# Claude Code scheduled tasks — runtime state, folder-specific (automation add-on docs)
+.claude/scheduled_tasks.json

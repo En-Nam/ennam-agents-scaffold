@@ -1,5 +1,30 @@
 # Changelog
 
+## v1.15.0 — 2026-10-01
+
+Adds the opt-in **`automation` add-on**: guidance that teaches Claude to use Claude Code's own automation (`/goal`, `/loop`, scheduled tasks, headless `claude -p`) the Ennam way. **Guidance only**: the scaffold switches nothing on. Decision: `mem:decisions/automation-profile-v1.15` (composable add-on profile, not a separate `--with-automation` flag, because composition exists since v1.11 — Rule 7).
+
+### Added
+
+- **`automation` profile (add-on)**, composed onto any role: `npx @ennamjsc/agents-scaffold next automation`.
+  - `.claude/skills/ennam-automation/SKILL.md` — loads only when used. Picks the mechanism (goal / loop / reminder / cloud routine / dynamic workflow), and sets `/goal` rules that match how the evaluator works: it only reads the transcript, so evidence must be printed; every goal ends with `or stop after N turns`; `/goal clear` before leaving, since resume restores it. Also covers `/loop` limits (7-day expiry, local time, jitter, idle-only firing), "Serena is the record", and `--bare` vs non-bare headless runs.
+  - `.claude/loop.md` — this repo's default prompt for a bare `/loop`. **Report-only**: Serena INDEX → comms → backlog → PR status → ≤5-line report → one checkpoint (its only write). No code edits, and no push, delete, merge or release. `skip-if-exists`: edit it freely, re-runs never overwrite it.
+  - `docs/agents-scaffold/automation.md` — runbook covering version floors, costs, the two headless traps (no trust dialog without `--bare`; `--bare` needs `ANTHROPIC_API_KEY`), the settings we deliberately don't set, and why Channels stay unsupported (research preview).
+  - No CLAUDE.md section, no settings, no hooks, no MCP. Per-session cost is only the skill's one-line description.
+  - `minClaudeCodeVersion: 2.1.246` (warn-only). That release caps `/goal` idle check-ins at 3.
+- **Wizard**: after any guided role, asks "Add Claude Code automation guidance?" (default **No**). Compose mode lists `automation` in the multiselect. `--list` shows it under **Add-on**.
+- **`ProfileDef.augmentation`** + `roleVoters()` — add-on profiles never change the role they are added to:
+  - **One role + add-ons** (`hr automation`, or a wizard Yes) installs the role exactly as if alone. CLAUDE.md, AGENTS.md, workflow preset, settings, next steps and handoff are all byte-identical; the add-on's static files are overlaid. An add-on that ships a partial, or a path the role already ships, fails loud.
+  - **Several roles + add-ons** (`pm qa automation`): add-ons don't vote on the AGENTS.md family or the workflow preset. Without this, a profile with no `ruleFamily` would have flipped a doc-first install to engineering.
+
+### Changed
+
+- **Every profile**: `.gitignore` now ignores `.claude/scheduled_tasks.json`. Claude Code may write this file per folder, and it must not be committed.
+
+### Not shipped, by decision
+
+- Channels, `ultracode` / `workflowSizeGuideline`, `crossSessionInbound`, prompt/agent Stop hooks, CI scripts. Reasons are in the runbook and the decision memo.
+
 ## v1.14.0 — 2026-10-01
 
 Brings two newer Claude Code primitives into the scaffold as **config the user's Claude Code runs** — no scaffold runtime: **dynamic workflows** (in `agent-org`) and **cross-session messaging** (a convention for every profile). Plus five hardening fixes. Decision + live-doc verification: `mem:decisions/v1.14-dynamic-workflows-messaging`. Spec: `docs/superpowers/specs/2026-10-01-v1.10-workflows-messaging-design.md` (drafted as "v1.10" on a stale base; renumbered on rebase).
