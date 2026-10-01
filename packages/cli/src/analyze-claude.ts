@@ -38,10 +38,10 @@ export function analyzeClaude(text: string): AnalyzeResult {
   if (!text) return { matches };
   const lines = text.split('\n');
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    const line = lines[i] ?? '';
     const m = line.match(/^\s*(#{1,6})\s+(.+?)\s*$/);
     if (!m) continue;
-    const heading = m[2].trim();
+    const heading = (m[2] ?? '').trim();
     for (const p of PATTERNS) {
       if (p.regex.test(heading)) {
         matches.push({ pattern: p.name, line: i + 1, heading });

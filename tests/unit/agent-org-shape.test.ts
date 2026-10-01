@@ -35,8 +35,9 @@ describe('agent-org profile shape', () => {
     expect(t).toMatch(/Cost disclosure/i);
     expect(t).toMatch(/Opus/);
     expect(t).toMatch(/Sonnet/);
-    // Version gate documented alongside preflight WARN.
-    expect(t).toMatch(/2\.1\.178/);
+    // Version gate documented alongside preflight WARN — must match the registry.
+    expect(t).toMatch(/2\.1\.248/);
+    expect(t).not.toMatch(/2\.1\.178/);
   });
 
   it('orchestrator has Task tool + does-not-edit-code rule', async () => {
@@ -79,9 +80,31 @@ describe('agent-org profile shape', () => {
     expect(t.startsWith('#!/usr/bin/env bash') || t.startsWith('#!/bin/bash')).toBe(true);
   });
 
-  it('profile registry entry: minClaudeCodeVersion = 2.1.178, extraMcp empty', () => {
+  it('profile registry entry: minClaudeCodeVersion = 2.1.248, extraMcp empty', () => {
     const p = getProfile('agent-org');
-    expect(p.minClaudeCodeVersion).toBe('2.1.178');
+    expect(p.minClaudeCodeVersion).toBe('2.1.248');
     expect(p.extraMcp).toEqual([]);
   });
+
+  // v1.14 — the partial is the only place an agent learns the workflows exist and
+  // where the audit log lives; a stale name or path sends it to the wrong place.
+  it('CLAUDE partial names all 3 workflow commands and the real hook log path', async () => {
+    const t = await read('CLAUDE.md.partial.hbs');
+    for (const cmd of ['/review-changes', '/judge-panel', '/fix-loop']) expect(t).toContain(cmd);
+    expect(t).toContain('.serena/memories/qa/agent-org-log.md');
+    expect(await read('.claude/hooks/subagent-log.ps1')).toContain('\\.serena\\memories\\qa\\agent-org-log.md');
+    const sh = await read('.claude/hooks/subagent-log.sh');
+    expect(sh).toContain('/.serena/memories/qa"');
+    expect(sh).toContain('/agent-org-log.md');
+  });
+
+  it('settings partial registers SubagentStop via an interpreter and sets isolatePeerMachines', async () => {
+    const t = await read('.claude/settings.json.partial.hbs');
+    expect(t).toMatch(/"isolatePeerMachines": true/);
+    expect(t).toMatch(/powershell -NoProfile -ExecutionPolicy Bypass -File \.claude\/hooks\/subagent-log\.ps1/);
+    expect(t).toMatch(/bash \.claude\/hooks\/subagent-log\.sh/);
+    // Cost/policy settings are the user's call (mem:decisions/no-hardcoded-model precedent).
+    expect(t).not.toMatch(/ultracode|workflowSizeGuideline|crossSessionInbound|"model"/);
+  });
 });
+

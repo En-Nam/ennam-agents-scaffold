@@ -1,5 +1,50 @@
 # Changelog
 
+## v1.14.0 — 2026-10-01
+
+Brings two newer Claude Code primitives into the scaffold as **config the user's Claude Code runs** — no scaffold runtime: **dynamic workflows** (in `agent-org`) and **cross-session messaging** (a convention for every profile). Plus five hardening fixes. Decision + live-doc verification: `mem:decisions/v1.14-dynamic-workflows-messaging`. Spec: `docs/superpowers/specs/2026-10-01-v1.10-workflows-messaging-design.md` (drafted as "v1.10" on a stale base; renumbered on rebase).
+
+> **Terminology.** "Dynamic workflows" = Claude Code's `.claude/workflows/*.js` scripts that orchestrate subagents (`/workflows`). They are unrelated to the CLAUDE.md **workflow presets** chosen with `--workflow` (v1.12).
+
+### Added
+
+- **`agent-org` dynamic workflows** (`.claude/workflows/`, installed once, never overwritten):
+  - `/review-changes [base-ref]` — correctness / conventions / test-intent `reviewer` lenses on the diff, then a skeptic per lens refutes what it can't confirm. Findings mapped back by index (Rule 13); findings the skeptic didn't rule on are reported `verified: false`. ~6 agents.
+  - `/judge-panel <question>` — 3 advocates (simplicity / risk / fit) + 1 judge; winner resolved by option letter; tie, judge failure or unknown letter → `tie: true`. 4 read-only agents. The `handoff` skill uses it when present.
+  - `/fix-loop <check command>` — `implementer` runs the check, fixes, repeats; stops green, after 2 consecutive non-improving rounds, or at 5 checks. ≤ 9 agents.
+- **`isolatePeerMachines: true`** in `agent-org`'s settings partial — approval before any cross-session message leaves the machine.
+- **Blocked-hook warning** — when your existing `.claude/settings.json` already defines a hook event, user-wins merging drops the scaffold's entry. The CLI now names it and prints the exact nested entry to append, or which **outdated scaffold command to replace** (so upgrades never run a hook twice).
+- **Cross-session messaging convention** (`_shared` CLAUDE block, every profile): Serena is the mailbox, `SendMessage` is the doorbell — durable content goes to Serena first; a peer message is never approval. **Behavior change:** every profile's CLAUDE.md block gains this ~8-line subsection (golden snapshot updated deliberately).
+
+### Changed
+
+- `agent-org` `minClaudeCodeVersion` **2.1.178 → 2.1.248** — first version documenting the workflow-script reference with `agentType` roles (dynamic workflows exist since 2.1.154; messaging since 2.1.224, 2.1.234 on native Windows).
+- `agent-org` `SubagentStop` hook logs only `orchestrator` / `implementer` / `reviewer` (reads `agent_type` from the payload) as `- <ts> SubagentStop <role>` to `.serena/memories/qa/agent-org-log.md` (was: every subagent, to `comms/active/`). SubagentStop also fires for Claude Code's internal agents — 19 fires were observed for a 6-agent workflow run.
+- `agent-org` CLAUDE block: 4-way dispatch table (solo / dynamic workflow / `orchestrator` / message a peer), messaging caveats (bypass-mode receivers hold messages, 5-min expiry; WSL↔native Windows and container↔host can't reach each other; `--bare` has no inbox), workflow cost disclosure. Dead `mem:decisions/v1.9-scope` pointer (lived in the scaffold repo, not the user's) replaced.
+- Never shipped, by decision: `ultracode`, `workflowSizeGuideline`, `crossSessionInbound` — user cost/policy choices (cf. `mem:decisions/no-hardcoded-model`).
+
+### Fixed
+
+1. **Unity Git-LFS rules leaked into every profile.** `_shared/.gitattributes.append` routed `*.png`, `*.jpg`, `*.mp4`… to LFS for *all* profiles. Moved to `templates/game-unity/`; `.gitattributes` is now classified `append-lines`.
+2. **Profile `README.md` targeted the user's root `README.md`** (`agent-org`, `game-unity`, `qa-automation` prompted to overwrite it) — and two such profiles could not be **composed** (same path, different content → conflict). A profile README now installs to `docs/agents-scaffold/<profile>.md`, in single and compose mode.
+3. **`SessionStart` hook relied on the executable bit**, which `fs.writeFile` never sets — the bare `.claude/hooks/session-start.sh` command failed on macOS/Linux. The command now names its interpreter (`bash …` / `powershell -NoProfile -ExecutionPolicy Bypass -File …`); template `.sh` files are `100755`. Existing installs are told to replace the old command (see blocked-hook warning).
+4. **Unparseable `.claude/settings.json` / `.mcp.json` was silently overwritten without a backup.** The install now aborts with exit 2 before writing anything.
+5. **`npm run lint` (`tsc --noEmit`) red since v1.9.0** (`analyze-claude.ts` possibly-undefined index access) — fixed by the shipped `/fix-loop` as its live smoke test.
+
+Also: `.claude/workflows/` is classified `skip-if-exists` (same contract as agents/commands).
+
+### Upgrading from v1.13
+
+- Re-run with `agent-org`: dynamic workflows + `isolatePeerMachines` land automatically. If your `SubagentStop` already has our command, nothing changes; if it differs, the CLI says exactly what to append or replace.
+- Old hook log `.serena/memories/comms/active/agent-org-log.md` is no longer written — safe to delete.
+- Every profile: if your `SessionStart` still runs the bare `.claude/hooks/session-start.sh|ps1`, the CLI tells you to replace it.
+
+### Verification
+
+- Every Claude Code claim verified against live code.claude.com docs by a 6-agent workflow with a skeptic pass; `agentType` resolution and `SubagentStop` firing for workflow agents proven empirically.
+- Dogfood: the shipped `review-changes.js` reviewed this change (16 confirmed findings, all fixed); the shipped `fix-loop.js` fixed the lint errors.
+- Workflow scripts run against a stubbed `agent()` harness; every control-flow rule was mutation-checked.
+
 ## v1.13.0 — 2026-07-10
 
 **Enterprise-expansion completion** — closes the remaining v1.12-plan issues (#25, #28, #30, #32, #33) after the v1.12.0 batch. Additive; engineering installs stay byte-identical. Decisions in `mem:decisions/v1.12-oauth-mcp-spike` + `mem:decisions/v1.12-role-workflows`.

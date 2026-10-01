@@ -143,7 +143,7 @@ Reached from the wizard via the **Executive / Leadership** role (sub-selects CEO
 | Profile | Purpose | Extra MCP | Requires Claude Code |
 |---|---|---|---|
 | `local-root` | Polyrepo coordinator — reads sub-platform `.serena/` memories | — | any |
-| `agent-org` | Multi-agent dispatch — orchestrator + implementer + reviewer + SubagentStop hook. Cost-heavy; opt-in. | — | **>= 2.1.178** |
+| `agent-org` | Multi-agent dispatch — orchestrator + implementer + reviewer, dynamic workflows (`/review-changes`, `/judge-panel`, `/fix-loop`), SubagentStop audit hook. Cost-heavy; opt-in. | — | **>= 2.1.248** |
 
 All profiles also register `serena`, `context7`, and `jira` via the shared MCP partial. The `Extra MCP` column lists only the profile-specific additions on top of that base. (`game-unity`'s Unity MCP comes via its own `.mcp.json.partial.hbs`, not the shared catalog.)
 
@@ -159,6 +159,7 @@ Each role/cloud profile ships with its own `.claude/agents/<specialist>.md`, one
 - `.mcp.json` — deep-merged with any existing config (user wins on conflicts)
 - `.serena/` — memories skeleton + checkpoint folder
 - `docs/superpowers/` — empty specs and plans folders
+- `docs/agents-scaffold/<profile>.md` — the profile's own reference doc (only profiles that ship one; your project `README.md` is never touched)
 - `.gitignore` — append-only with dedup (no duplicates on re-run)
 
 Each merge backs up the original to `.ennam-scaffold-backup/<timestamp>/`. Backups rotate to the 3 most recent.
@@ -191,6 +192,16 @@ v1.5.1 fixes two broken shapes the scaffold has been shipping in `.claude/settin
 2. `hooks.SessionStart` entries used the legacy bare `{command}` shape. Current Claude Code rejects this with **"Expected array, but received undefined"** and refuses to load any settings from the file. Corrected to the required nested `{hooks: [{type: "command", command: "…"}]}` wrapper.
 
 Because `.claude/settings.json` is merged user-wins on arrays, **re-running the scaffold cannot auto-rewrite an existing broken file** — the CLI now prints a loud warning at the end of every install when it detects either legacy shape so you know to fix it by hand.
+
+### Upgrading from v1.13
+
+v1.14 brings Claude Code's newer multi-agent primitives into the scaffold as config, plus hardening fixes:
+
+- **Dynamic workflows in `agent-org`** — `/review-changes [base-ref]`, `/judge-panel <question>`, `/fix-loop <check command>` in `.claude/workflows/`. Scripts drive the existing `reviewer` / `implementer` roles (`agentType`), so routing is code, not model turns (AGENTS.md Rule 5). Watch runs with `/workflows`. Not to be confused with the CLAUDE.md `--workflow` presets.
+- **`isolatePeerMachines: true`** in `agent-org`, and a **cross-session messaging convention** for every profile: Serena is the mailbox, `SendMessage` is the doorbell.
+- **Blocked-hook warning** — if your settings already define a hook event, the CLI prints exactly what to append, or which outdated scaffold command to replace.
+- **`agent-org` requires Claude Code >= 2.1.248** (preflight warns). The scaffold never sets `ultracode`, `workflowSizeGuideline`, or `crossSessionInbound` — your cost choices.
+- **Fixes** — Unity Git-LFS rules no longer leak into non-Unity profiles; a profile README installs to `docs/agents-scaffold/<profile>.md` (never your `README.md`, and no more compose conflicts); the `SessionStart` hook names its interpreter (no exec bit needed); an unparseable `.claude/settings.json` / `.mcp.json` aborts the install (exit 2) instead of being overwritten.
 
 ### Upgrading from v1.10
 

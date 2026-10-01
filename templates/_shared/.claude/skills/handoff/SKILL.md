@@ -25,8 +25,10 @@ Switch from "ask → confirm → act" mode into "decide → execute" mode for th
 1. **Restate scope** in one sentence and write it to your todos. This is the boundary you must not cross.
 
 2. **Internal judge panel** (capped at 3 advocates + 1 judge):
-   - Spawn 3 parallel agents via `superpowers:dispatching-parallel-agents`, each proposing a distinct solution approach with rationale and trade-offs.
-   - Spawn 1 judge agent that reads all 3 proposals and picks the winner, with a written verdict (criteria: simplicity, fit-to-codebase, reversibility, test surface).
+   - **If `.claude/workflows/judge-panel.js` exists** (agent-org profile), run `/judge-panel <restated scope>` — it is this same 3 + 1 panel as a saved workflow (deterministic, resumable). A result with `tie: true` is a hard stop (below).
+   - **Otherwise:**
+     - spawn 3 parallel agents via `superpowers:dispatching-parallel-agents`, each proposing a distinct solution approach with rationale and trade-offs;
+     - then spawn 1 judge agent that reads all 3 proposals and picks the winner, with a written verdict (criteria: simplicity, fit-to-codebase, reversibility, test surface).
 
 3. **Plan the winner** via `superpowers:writing-plans` — convert the verdict into success criteria + step list.
 

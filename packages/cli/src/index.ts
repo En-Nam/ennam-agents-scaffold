@@ -20,6 +20,7 @@ import { runAnalyzeClaude } from './analyze-claude.js';
 import { renderCatalogJson, renderCatalogHuman } from './list.js';
 import { runDoctor } from './doctor.js';
 import { detectLegacySettings, hasStaleChromeDevtools } from './checks.js';
+import { findBlockedHooks, type BlockedHook } from './hook-conflict.js';
 import type { UserStrategy, OperationPlan, ProfileDef } from './types.js';
 
 // Re-export wizard types/functions so external callers (and tests) can keep
@@ -173,6 +174,7 @@ cli
     }
     const ctx = buildContext({ profile: displayProfile.name, cwd, version: PKG.version });
     const byRel = new Map(entries.map(e => [e.relPath, e]));
+    let blockedHooks: BlockedHook[] = [];  // filled by the json-merge provider for .claude/settings.json
     const provider = async (rel: string) => {
       const entry = byRel.get(rel);
       if (!entry) return null;
@@ -194,15 +196,25 @@ cli
         // For json-merge: "identical" means the existing file already has the same merged result.
         // Compute mergeJson(userExisting, scaffoldCombined) to match execute.ts exactly.
         let existingObj: Record<string, unknown> = {};
+        let existingText: string;
         try {
-          const existingText = await readFile(path.join(cwd, rel), 'utf8');
-          if (existingText.trim().length > 0) {
-            existingObj = JSON.parse(existingText) as Record<string, unknown>;
-          }
+          existingText = await readFile(path.join(cwd, rel), 'utf8');
         } catch {
           return null;  // file absent — scanConflicts handles absent separately
         }
+        if (existingText.trim().length > 0) {
+          try {
+            existingObj = JSON.parse(existingText) as Record<string, unknown>;
+          } catch (err) {
+            // Never merge over a file we cannot read — that would silently replace the user's
+            // settings (v1.14 review finding). Abort before anything is written (Rule 12).
+            throw new Error(`${rel} is not valid JSON (${(err as Error).message}). Fix or remove it, then re-run — nothing was written.`);
+          }
+        }
         const scaffoldObj = await renderJsonContent(entry, ctx);
+        // v1.14 — name scaffold hooks that user-wins merging will drop (e.g. agent-org's
+        // SubagentStop), from the same parsed objects the merge uses.
+        if (rel === '.claude/settings.json') blockedHooks = findBlockedHooks(existingObj, scaffoldObj);
         const merged = mergeJson(
           existingObj as Parameters<typeof mergeJson>[0],
           scaffoldObj as Parameters<typeof mergeJson>[0],
@@ -238,6 +250,7 @@ cli
     printPlan(plan);
 
     if (flags.dryRun) {
+      printBlockedHooks(blockedHooks);
       console.log('\n(dry-run — no files written)');
       process.exit(0);
     }
@@ -249,6 +262,7 @@ cli
 
     const result = await executeOps({ cwd, ops, ctx, interactive });
     await printNextSteps(displayProfile, result, hasGit, cwd, workflow);
+    printBlockedHooks(blockedHooks);
 
     // Migration hint: v1.1 users may still have a stale chrome-devtools entry
     // in their .mcp.json (mergeJson is user-wins, so the scaffold cannot
@@ -295,6 +309,22 @@ const isMain = (() => {
 })();
 if (isMain) {
   cli.parse();
+}
+
+function printBlockedHooks(blocked: BlockedHook[]): void {
+  if (!blocked.length) return;
+  console.log('');
+  console.log('  Warning: your .claude/settings.json already defines these hook events, so the');
+  console.log('  scaffold did NOT add its own entry (your settings win). Fix by hand if you want it:');
+  for (const b of blocked) {
+    for (const old of b.replaces) {
+      console.log(`    hooks.${b.event}: REPLACE the outdated scaffold command "${old}"`);
+    }
+    for (const c of b.commands) {
+      const verb = b.replaces.length ? '      with' : `    Append to the hooks.${b.event} array:`;
+      console.log(`${verb} { "hooks": [ { "type": "command", "command": "${c}" } ] }`);
+    }
+  }
 }
 
 async function maybeWarnStaleChromeDevtools(cwd: string): Promise<void> {

@@ -23,7 +23,7 @@ describe('profile catalog (--list)', () => {
 
   it('surfaces minClaudeCodeVersion as `requires` (agent-org gated, others null)', () => {
     const byName = new Map(buildCatalog().map(e => [e.name, e]));
-    expect(byName.get('agent-org')?.requires).toBe('2.1.178');
+    expect(byName.get('agent-org')?.requires).toBe('2.1.248');
     expect(byName.get('pm')?.requires).toBeNull();
   });
 
