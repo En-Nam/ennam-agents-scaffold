@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "showreel/facts.schema.json",
+  "title": "showreel facts (C3) - produced by code (cli facts), never by the LLM",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "minimumGate", "brand", "facts"],
+  "properties": {
+    "version": { "const": 1 },
+    "minimumGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["passed", "missing"],
+      "properties": {
+        "passed": { "type": "boolean" },
+        "missing": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "brand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "palette", "wordmark"],
+      "properties": {
+        "name": { "type": "string" },
+        "palette": { "enum": ["violet", "cyan", "amber", "mint"] },
+        "wordmark": { "type": ["string", "null"], "pattern": "^f\\.app\\.name\\.\\d+$" }
+      }
+    },
+    "facts": { "type": "array", "items": { "oneOf": [{ "$ref": "#/$defs/countFact" }, { "$ref": "#/$defs/textFact" }] } }
+  },
+  "$defs": {
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file", "locator", "extractor", "rule"],
+      "properties": {
+        "file": { "type": "string" },
+        "locator": { "type": "string" },
+        "extractor": { "type": "string" },
+        "rule": { "type": "string" }
+      }
+    },
+    "hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{16}$" },
+    "collection": { "type": ["string", "null"] },
+    "order": { "type": ["integer", "null"], "minimum": 1 },
+    "countFact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "value", "display", "unit", "source", "hash"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^f\\.count\\.[1-9][0-9]*$" },
+        "kind": { "const": "count" },
+        "value": { "type": "integer", "minimum": 0 },
+        "display": { "type": "string", "pattern": "^[0-9]+$" },
+        "unit": { "type": "string", "pattern": "^[a-z]+$" },
+        "source": { "$ref": "#/$defs/source" },
+        "collection": { "$ref": "#/$defs/collection" },
+        "order": { "$ref": "#/$defs/order" },
+        "hash": { "$ref": "#/$defs/hash" }
+      }
+    },
+    "textFact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "value", "display", "unit", "source", "hash"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^f\\.(app\\.name|app\\.tagline|feature|stack\\.item|route|command|problem)\\.[1-9][0-9]*$" },
+        "kind": { "enum": ["app.name", "app.tagline", "feature", "stack.item", "route", "command", "problem"] },
+        "value": { "type": "string" },
+        "display": { "type": "string" },
+        "unit": { "type": "null" },
+        "source": { "$ref": "#/$defs/source" },
+        "collection": { "$ref": "#/$defs/collection" },
+        "order": { "$ref": "#/$defs/order" },
+        "hash": { "$ref": "#/$defs/hash" }
+      }
+    }
+  }
+}

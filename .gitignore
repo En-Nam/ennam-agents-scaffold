@@ -13,3 +13,5 @@ packages/cli/templates/
 # npmjs.com rendering a stale/blank README (registry readme field never refreshed).
 # tsup's onSuccess still refreshes it from the root README on every build.
 .ennam-scaffold-backup/
+# v1.16 showreel — repo dev tool dir (puppeteer-core/ffmpeg-static/fonts via npm ci); tests read SHOWREEL_TOOL_DIR.
+.showreel-dev/

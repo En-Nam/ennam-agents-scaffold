@@ -19,6 +19,8 @@ describe('classifyFile', () => {
     // v1.14 — dynamic workflows are user-editable commands, same contract as agents/commands.
     ['.claude/workflows/review-changes.js', 'skip-if-exists'],
     ['.claude/skills/aws-iam-least-priv/SKILL.md', 'skip-if-exists'],
+    // v1.16 (showreel) — the toolkit upgrades as one unit (B4): write-or-ask, never skip-if-exists.
+    ['.claude/showreel/engine/core.mjs', 'write-or-ask'],
     ['.serena/memories/INDEX.md',       'skip-if-exists'],
     ['.serena/checkpoint/.gitkeep',     'skip-if-exists'],
     ['docs/superpowers/specs/.gitkeep', 'skip-if-exists'],

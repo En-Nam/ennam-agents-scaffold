@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "archetypes": {
+    "cold-open-command": {
+      "role": "open",
+      "variants": ["terminal"],
+      "minWeight": 0.75,
+      "slots": {
+        "command": { "source": "fact", "kinds": ["command"], "min": 1, "max": 1, "maxChars": 64 },
+        "caption": { "source": "phrase", "tags": ["open"], "min": 0, "max": 1 }
+      },
+      "typing": "command",
+      "defaultCues": [{ "name": "enter", "at": 0.72, "kind": "boom", "amp": 1.0 }]
+    },
+    "kinetic-text": {
+      "role": "body",
+      "variants": ["stack", "punch"],
+      "minWeight": 0.5,
+      "slots": {
+        "lines": { "source": "fact", "kinds": ["feature", "app.tagline", "stack.item", "problem"], "min": 1, "max": 3, "maxChars": 48 },
+        "lead": { "source": "phrase", "tags": ["lead"], "min": 0, "max": 1 }
+      },
+      "defaultCues": [{ "name": "line", "at": 0.15, "kind": "snap", "amp": 0.3 }]
+    },
+    "metrics-counter-lock": {
+      "role": "body",
+      "variants": ["row", "grid"],
+      "minWeight": 0.75,
+      "slots": {
+        "counters": { "source": "fact", "kinds": ["count"], "min": 1, "max": 4, "maxChars": 12 },
+        "label": { "source": "phrase", "tags": ["metrics"], "min": 0, "max": 1 }
+      },
+      "defaultCues": [{ "name": "lock", "at": 0.6, "kind": "lock", "amp": 0.4 }]
+    },
+    "lockup-cta": {
+      "role": "close",
+      "variants": ["center"],
+      "minWeight": 1.0,
+      "slots": {
+        "name": { "source": "fact", "kinds": ["app.name"], "min": 1, "max": 1, "maxChars": 32 },
+        "tagline": { "source": "fact", "kinds": ["app.tagline"], "min": 0, "max": 1, "maxChars": 64 },
+        "command": { "source": "fact", "kinds": ["command"], "min": 0, "max": 1, "maxChars": 64 },
+        "cta": { "source": "phrase", "tags": ["cta"], "min": 0, "max": 1 }
+      },
+      "defaultCues": [
+        { "name": "slam", "at": 0.12, "kind": "slam", "amp": 1.0 },
+        { "name": "sweep", "at": 0.6, "kind": "sweep", "amp": 0.35 }
+      ]
+    }
+  }
+}

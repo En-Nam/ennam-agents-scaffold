@@ -231,6 +231,14 @@ const REGISTRY: Record<string, ProfileDef> = {
     // See mem:decisions/automation-profile-v1.15.
     minClaudeCodeVersion: '2.1.246',
   },
+  showreel: {
+    name: 'showreel',
+    description: 'Add-on — /showreel: renders a 15–60 s promo film of THIS repo from code-extracted facts (Node >= 22.12, Chrome/Edge, ~200 MB first-run deps). Opt-in.',
+    templateDir: path.join(TEMPLATES, 'showreel'),
+    extraMcp: [],
+    augmentation: true,
+    // v1.16 — see mem:decisions/showreel-addon-v1.16. No Claude Code floor: the toolkit is plain Node.
+  },
 };
 
 export function getProfile(name: string): ProfileDef {

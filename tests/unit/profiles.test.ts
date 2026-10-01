@@ -31,6 +31,7 @@ const ALL_PROFILES = [
   'qa-automation',
   'react',
   'react-native',
+  'showreel',
   'tech-writer',
 ] as const;
 

@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "showreel/timeline.schema.json",
+  "title": "showreel compiled timeline (C8) - the only time source for picture and audio",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "fps", "durationS", "frames", "seed", "palette", "beats", "hits", "typing", "sections", "music"],
+  "properties": {
+    "version": { "const": 1 },
+    "fps": { "enum": [30, 60] },
+    "durationS": { "enum": [15, 30, 45, 60] },
+    "frames": { "type": "integer", "minimum": 1 },
+    "seed": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+    "palette": { "enum": ["violet", "cyan", "amber", "mint"] },
+    "beats": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/beat" } },
+    "hits": { "type": "array", "items": { "$ref": "#/$defs/hit" } },
+    "typing": { "type": "array", "items": { "$ref": "#/$defs/typing" } },
+    "sections": { "type": "array", "items": { "$ref": "#/$defs/section" } },
+    "music": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bpm", "key"],
+      "properties": {
+        "bpm": { "type": "number", "minimum": 1 },
+        "key": { "type": "string", "pattern": "^[A-G][#b]?m?$" }
+      }
+    }
+  },
+  "$defs": {
+    "beatId": { "type": "string", "pattern": "^b[0-9]{1,2}$" },
+    "seconds": { "type": "number", "minimum": 0 },
+    "beat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "archetype", "variant", "t0", "t1", "overlapIn", "overlapOut", "transitionOut"],
+      "properties": {
+        "id": { "$ref": "#/$defs/beatId" },
+        "archetype": { "enum": ["cold-open-command", "kinetic-text", "metrics-counter-lock", "lockup-cta"] },
+        "variant": { "enum": ["terminal", "stack", "punch", "row", "grid", "center"] },
+        "t0": { "$ref": "#/$defs/seconds" },
+        "t1": { "$ref": "#/$defs/seconds" },
+        "overlapIn": { "$ref": "#/$defs/seconds" },
+        "overlapOut": { "$ref": "#/$defs/seconds" },
+        "transitionOut": { "enum": ["cut", "zoom-through"] }
+      }
+    },
+    "hit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["t", "kind", "amp", "beatId", "cue"],
+      "properties": {
+        "t": { "$ref": "#/$defs/seconds" },
+        "kind": { "enum": ["boom", "snap", "sweep", "thud", "lock", "ignite", "pop", "slam"] },
+        "amp": { "type": "number", "minimum": 0, "maximum": 1 },
+        "beatId": { "$ref": "#/$defs/beatId" },
+        "cue": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,23}$" }
+      }
+    },
+    "typing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["beatId", "t0", "interval", "chars", "enterAt"],
+      "properties": {
+        "beatId": { "$ref": "#/$defs/beatId" },
+        "t0": { "$ref": "#/$defs/seconds" },
+        "interval": { "$ref": "#/$defs/seconds" },
+        "chars": { "type": "integer", "minimum": 0 },
+        "enterAt": { "$ref": "#/$defs/seconds" }
+      }
+    },
+    "section": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "t0", "t1"],
+      "properties": {
+        "name": { "enum": ["intro", "build", "peak", "outro"] },
+        "t0": { "$ref": "#/$defs/seconds" },
+        "t1": { "$ref": "#/$defs/seconds" }
+      }
+    }
+  }
+}
