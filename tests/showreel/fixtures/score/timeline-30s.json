@@ -1,0 +1,34 @@
+{
+  "version": 1, "fps": 60, "durationS": 30, "frames": 1800, "seed": 7, "palette": "violet",
+  "beats": [
+    { "id": "b1", "archetype": "cold-open-command", "variant": "terminal", "t0": 0, "t1": 4.25, "overlapIn": 0, "overlapOut": 0.375, "transitionOut": "zoom-through" },
+    { "id": "b2", "archetype": "kinetic-text", "variant": "stack", "t0": 3.875, "t1": 8, "overlapIn": 0.375, "overlapOut": 0, "transitionOut": "cut" },
+    { "id": "b3", "archetype": "metrics-counter-lock", "variant": "row", "t0": 8, "t1": 12.5, "overlapIn": 0, "overlapOut": 0, "transitionOut": "cut" },
+    { "id": "b4", "archetype": "kinetic-text", "variant": "punch", "t0": 12.5, "t1": 15.5, "overlapIn": 0, "overlapOut": 0.375, "transitionOut": "zoom-through" },
+    { "id": "b5", "archetype": "kinetic-text", "variant": "stack", "t0": 15.125, "t1": 19, "overlapIn": 0.375, "overlapOut": 0, "transitionOut": "cut" },
+    { "id": "b6", "archetype": "metrics-counter-lock", "variant": "grid", "t0": 19, "t1": 23.5, "overlapIn": 0, "overlapOut": 0, "transitionOut": "cut" },
+    { "id": "b7", "archetype": "lockup-cta", "variant": "center", "t0": 23.5, "t1": 30, "overlapIn": 0, "overlapOut": 0, "transitionOut": "cut" }
+  ],
+  "hits": [
+    { "t": 3, "kind": "boom", "amp": 1, "beatId": "b1", "cue": "enter" },
+    { "t": 4.5, "kind": "snap", "amp": 0.3, "beatId": "b2", "cue": "line" },
+    { "t": 9, "kind": "thud", "amp": 0.5, "beatId": "b3", "cue": "slab" },
+    { "t": 10.75, "kind": "lock", "amp": 0.4, "beatId": "b3", "cue": "lock" },
+    { "t": 13, "kind": "snap", "amp": 0.3, "beatId": "b4", "cue": "line" },
+    { "t": 14, "kind": "pop", "amp": 0.15, "beatId": "b4", "cue": "pop-a" },
+    { "t": 14.25, "kind": "pop", "amp": 0.15, "beatId": "b4", "cue": "pop-b" },
+    { "t": 15.75, "kind": "snap", "amp": 0.3, "beatId": "b5", "cue": "line" },
+    { "t": 17, "kind": "ignite", "amp": 0.8, "beatId": "b5", "cue": "core" },
+    { "t": 21.75, "kind": "lock", "amp": 0.4, "beatId": "b6", "cue": "lock" },
+    { "t": 24.25, "kind": "slam", "amp": 1, "beatId": "b7", "cue": "slam" },
+    { "t": 27.5, "kind": "sweep", "amp": 0.35, "beatId": "b7", "cue": "sweep" }
+  ],
+  "typing": [ { "beatId": "b1", "t0": 0.45, "interval": 0.052, "chars": 11, "enterAt": 3 } ],
+  "sections": [
+    { "name": "intro", "t0": 0, "t1": 4.25 },
+    { "name": "build", "t0": 4.25, "t1": 15.5 },
+    { "name": "peak", "t0": 15.5, "t1": 23.5 },
+    { "name": "outro", "t0": 23.5, "t1": 30 }
+  ],
+  "music": { "bpm": 120, "key": "F#m" }
+}
