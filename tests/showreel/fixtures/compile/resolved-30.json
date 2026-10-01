@@ -1,0 +1,272 @@
+{
+  "version": 1,
+  "beats": {
+    "b1": {
+      "archetype": "cold-open-command",
+      "variant": "terminal",
+      "slots": {
+        "command": {
+          "source": "fact",
+          "items": [
+            {
+              "id": "f.command.1",
+              "text": "npx @acme/shop dev",
+              "number": null,
+              "unit": null
+            }
+          ],
+          "fitSizePx": null
+        },
+        "caption": {
+          "source": "phrase",
+          "items": [
+            {
+              "id": "p.open.1",
+              "text": "One command.",
+              "number": null,
+              "unit": null
+            }
+          ],
+          "fitSizePx": null
+        }
+      }
+    },
+    "b2": {
+      "archetype": "kinetic-text",
+      "variant": "stack",
+      "slots": {
+        "lines": {
+          "source": "fact",
+          "items": [
+            {
+              "id": "f.feature.1",
+              "text": "Checkout",
+              "number": null,
+              "unit": null
+            },
+            {
+              "id": "f.feature.2",
+              "text": "Search",
+              "number": null,
+              "unit": null
+            }
+          ],
+          "fitSizePx": null
+        },
+        "lead": {
+          "source": "phrase",
+          "items": [
+            {
+              "id": "p.lead.1",
+              "text": "Built for speed.",
+              "number": null,
+              "unit": null
+            }
+          ],
+          "fitSizePx": null
+        }
+      }
+    },
+    "b3": {
+      "archetype": "metrics-counter-lock",
+      "variant": "row",
+      "slots": {
+        "counters": {
+          "source": "fact",
+          "items": [
+            {
+              "id": "f.count.1",
+              "text": "42",
+              "number": 42,
+              "unit": "routes"
+            },
+            {
+              "id": "f.count.2",
+              "text": "7",
+              "number": 7,
+              "unit": "services"
+            }
+          ],
+          "fitSizePx": null
+        },
+        "label": {
+          "source": "phrase",
+          "items": [
+            {
+              "id": "p.metrics.1",
+              "text": "By the numbers.",
+              "number": null,
+              "unit": null
+            }
+          ],
+          "fitSizePx": null
+        }
+      }
+    },
+    "b4": {
+      "archetype": "kinetic-text",
+      "variant": "punch",
+      "slots": {
+        "lines": {
+          "source": "fact",
+          "items": [
+            {
+              "id": "f.feature.1",
+              "text": "Checkout",
+              "number": null,
+              "unit": null
+            },
+            {
+              "id": "f.feature.2",
+              "text": "Search",
+              "number": null,
+              "unit": null
+            }
+          ],
+          "fitSizePx": null
+        },
+        "lead": {
+          "source": "phrase",
+          "items": [
+            {
+              "id": "p.lead.1",
+              "text": "Built for speed.",
+              "number": null,
+              "unit": null
+            }
+          ],
+          "fitSizePx": null
+        }
+      }
+    },
+    "b5": {
+      "archetype": "kinetic-text",
+      "variant": "stack",
+      "slots": {
+        "lines": {
+          "source": "fact",
+          "items": [
+            {
+              "id": "f.feature.1",
+              "text": "Checkout",
+              "number": null,
+              "unit": null
+            },
+            {
+              "id": "f.feature.2",
+              "text": "Search",
+              "number": null,
+              "unit": null
+            }
+          ],
+          "fitSizePx": null
+        },
+        "lead": {
+          "source": "phrase",
+          "items": [
+            {
+              "id": "p.lead.1",
+              "text": "Built for speed.",
+              "number": null,
+              "unit": null
+            }
+          ],
+          "fitSizePx": null
+        }
+      }
+    },
+    "b6": {
+      "archetype": "metrics-counter-lock",
+      "variant": "grid",
+      "slots": {
+        "counters": {
+          "source": "fact",
+          "items": [
+            {
+              "id": "f.count.1",
+              "text": "42",
+              "number": 42,
+              "unit": "routes"
+            },
+            {
+              "id": "f.count.2",
+              "text": "7",
+              "number": 7,
+              "unit": "services"
+            }
+          ],
+          "fitSizePx": null
+        },
+        "label": {
+          "source": "phrase",
+          "items": [
+            {
+              "id": "p.metrics.1",
+              "text": "By the numbers.",
+              "number": null,
+              "unit": null
+            }
+          ],
+          "fitSizePx": null
+        }
+      }
+    },
+    "b7": {
+      "archetype": "lockup-cta",
+      "variant": "center",
+      "slots": {
+        "name": {
+          "source": "fact",
+          "items": [
+            {
+              "id": "f.app.name.1",
+              "text": "Acme Shop",
+              "number": null,
+              "unit": null
+            }
+          ],
+          "fitSizePx": null
+        },
+        "tagline": {
+          "source": "fact",
+          "items": [
+            {
+              "id": "f.app.tagline.1",
+              "text": "Shop faster",
+              "number": null,
+              "unit": null
+            }
+          ],
+          "fitSizePx": null
+        },
+        "cta": {
+          "source": "phrase",
+          "items": [
+            {
+              "id": "p.cta.1",
+              "text": "Get started",
+              "number": null,
+              "unit": null
+            }
+          ],
+          "fitSizePx": null
+        }
+      }
+    }
+  },
+  "allowed": [
+    "42",
+    "7",
+    "Acme Shop",
+    "Built for speed.",
+    "By the numbers.",
+    "Checkout",
+    "Get started",
+    "One command.",
+    "Search",
+    "Shop faster",
+    "npx @acme/shop dev",
+    "routes",
+    "services"
+  ]
+}
