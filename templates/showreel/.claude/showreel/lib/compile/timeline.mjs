@@ -7,7 +7,10 @@ import { ShowreelError } from '../util/out.mjs';
 // timeline (test-enforced: no literal seconds outside lib/compile).
 const MUSIC = { bpm: 120, key: 'F#m' };
 const GRID = 60 / MUSIC.bpm / 4; // one 1/16 note (0.125 s at 120 bpm)
-const ZOOM_OVERLAP = 3 * GRID; // 0.375 s
+// Overlap per transition. Each straddles the core boundary B with the same ties-down rounding:
+// outgoing t1 = B + snap(overlap/2), incoming t0 = B − (overlap − snap(overlap/2)).
+//   zoom-through 3 GRID (0.375 s) → B − 2 GRID … B + 1 GRID ; column-wipe 2 GRID (0.25 s) → B − 1 GRID … B + 1 GRID
+const OVERLAP = { cut: 0, 'zoom-through': 3 * GRID, 'column-wipe': 2 * GRID };
 const MIN_BEAT_S = 1.0;
 const TYPING_START = 0.45; // after the beat window opens
 const TYPING_INTERVAL = 0.052; // max seconds per character
@@ -29,6 +32,26 @@ function snapFrame(x, fps) {
 
 function inputError(message, fix) {
   return new ShowreelError('E_TIMELINE_INPUT', message, fix);
+}
+
+const asList = (v) => (v === undefined ? [] : Array.isArray(v) ? v : [v]);
+
+/**
+ * Every beat must be on screen ALONE for a while: if its incoming and outgoing overlaps cover its whole
+ * window, three beats would be active at once (the engine refuses) or the beat is never seen by itself.
+ * Throws E_TIMELINE naming the first such beat. (With the 1.0 s beat floor and ≤ 3-GRID transitions this
+ * cannot trigger today; it guards any future change to either.)
+ */
+export function assertOverlapsFit(beats) {
+  for (const b of beats) {
+    if (b.overlapIn + b.overlapOut >= b.t1 - b.t0 - EPS) {
+      throw new ShowreelError(
+        'E_TIMELINE',
+        `Beat ${b.id}: its transitions overlap ${(b.overlapIn + b.overlapOut).toFixed(3)} s of a ${(b.t1 - b.t0).toFixed(3)} s window, so it is never on screen alone.`,
+        `Raise the weight of ${b.id}, or use "cut" for the transition into or out of it.`,
+      );
+    }
+  }
 }
 
 /**
@@ -97,27 +120,72 @@ export function compileTimeline(storyboard, resolved, archetypes, { fps } = {}) 
   const n = beats.length;
 
   // Overlaps straddle each core boundary B. Centred would be B ± overlap/2 (off grid), so each
-  // edge is snapped with the same ties-down rule: outgoing t1 = B + GRID, incoming t0 = B − 2·GRID.
-  const overlapAfter = beats.map((b, i) => (i < n - 1 && b.transitionOut === 'zoom-through' ? ZOOM_OVERLAP : 0));
+  // edge is snapped with the same ties-down rule (see OVERLAP). The last beat's transitionOut is ignored.
+  const overlapAfter = beats.map((b, i) => {
+    if (i === n - 1) return 0;
+    if (!(b.transitionOut in OVERLAP)) {
+      throw inputError(`Beat ${b.id} uses unknown transition "${b.transitionOut}".`, `Use one of: ${Object.keys(OVERLAP).join(', ')}.`);
+    }
+    return OVERLAP[b.transitionOut];
+  });
   const outBeats = beats.map((b, i) => {
     const overlapIn = i > 0 ? overlapAfter[i - 1] : 0;
     const overlapOut = overlapAfter[i];
-    const t0 = Math.max(0, overlapIn ? cuts[i] - (ZOOM_OVERLAP - snap(ZOOM_OVERLAP / 2, GRID)) : cuts[i]);
-    const t1 = Math.min(durationS, overlapOut ? cuts[i + 1] + snap(ZOOM_OVERLAP / 2, GRID) : cuts[i + 1]);
+    const t0 = Math.max(0, overlapIn ? cuts[i] - (overlapIn - snap(overlapIn / 2, GRID)) : cuts[i]);
+    const t1 = Math.min(durationS, overlapOut ? cuts[i + 1] + snap(overlapOut / 2, GRID) : cuts[i + 1]);
     return { id: b.id, archetype: b.archetype, variant: b.variant, t0, t1, overlapIn, overlapOut, transitionOut: b.transitionOut };
   });
+  assertOverlapsFit(outBeats);
 
-  // Hits: archetype default cues merged with storyboard cues (storyboard wins by name).
+  // Hits: archetype default cues, then cue-map expansions (C14: one `<name>.<i>` per item bound to the
+  // map's slot, spread from..to), then storyboard cues — later sources win by name. Fixed hits are
+  // placed first; each mapped hit that lands < 1 GRID from an already placed hit of the same beat is
+  // pushed one GRID later (repeatedly); a push past the map's `to` fails E_TIMELINE. Fixed hits are
+  // authored, never moved: two of them < 1 GRID apart in one beat fail E_TIMELINE (no stacked hits).
   const frames = durationS * fps;
   const lastFrameT = (frames - 1) / fps;
   const hits = [];
   beats.forEach((b, i) => {
     const merged = new Map();
-    for (const c of specs[i].defaultCues || []) merged.set(c.name, c);
-    for (const c of b.cues || []) merged.set(c.name, c);
+    for (const c of specs[i].defaultCues || []) merged.set(c.name, { c, map: null });
+    for (const map of specs[i].cueMaps || []) {
+      const N = asList(b.bindings?.[map.per]).length;
+      for (let k = 0; k < N; k++) {
+        const name = `${map.name}.${k}`;
+        const at = map.from + ((map.to - map.from) * k) / Math.max(1, N - 1);
+        merged.set(name, { c: { name, at, kind: map.kind, amp: map.amp }, map, N });
+      }
+    }
+    for (const c of b.cues || []) merged.set(c.name, { c, map: null });
     const { t0, t1 } = outBeats[i];
-    for (const c of merged.values()) {
-      const t = Math.min(lastFrameT, snapFrame(snap(t0 + c.at * (t1 - t0), GRID), fps));
+    const placed = [];
+    const entries = [...merged.values()];
+    for (const { c, map, N } of [...entries.filter((e) => !e.map), ...entries.filter((e) => e.map)]) {
+      let g = snap(t0 + c.at * (t1 - t0), GRID);
+      if (!map) {
+        const clash = placed.find((p) => Math.abs(p.g - g) < GRID - EPS);
+        if (clash) {
+          throw new ShowreelError(
+            'E_TIMELINE',
+            `Beat ${b.id} (${b.archetype}): cues "${clash.name}" (${clash.g.toFixed(3)} s) and "${c.name}" (${g.toFixed(3)} s) land less than one 1/16 note (${GRID} s) apart, so their hits stack.`,
+            `Move the "at" of "${c.name}" or "${clash.name}" on ${b.id} at least ${GRID} s apart, or override one by name.`,
+          );
+        }
+      } else {
+        const limit = t0 + map.to * (t1 - t0);
+        while (placed.some((p) => Math.abs(p.g - g) < GRID - EPS)) {
+          g += GRID;
+          if (g > limit + EPS) {
+            throw new ShowreelError(
+              'E_TIMELINE',
+              `Beat ${b.id} (${b.archetype}): cue-map hit ${c.name} collides with another hit and is pushed past "${map.name}" to=${map.to} (${limit.toFixed(3)} s): ${N} ${map.per} need more than ${(t1 - t0).toFixed(3)} s.`,
+              `Raise the weight of ${b.id} or bind fewer ${map.per} (now ${N}).`,
+            );
+          }
+        }
+      }
+      placed.push({ g, name: c.name });
+      const t = Math.min(lastFrameT, snapFrame(g, fps));
       hits.push({ t, kind: c.kind, amp: c.amp, beatId: b.id, cue: c.name, order: i });
     }
   });

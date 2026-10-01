@@ -29,6 +29,15 @@ export function indexInputs({ archetypes, facts, phrases }) {
 const asList = (v) => (Array.isArray(v) ? v : [v]);
 const charLen = (s) => [...s].length;
 
+/**
+ * The slot rules of an archetype for one variant (C13): `variantSlots[variant][slot]` fields are merged
+ * over `slots[slot]` (e.g. kinetic-text "chapter": lines 0..1, lead required and tagged "chapter").
+ */
+export function slotsFor(arch, variant) {
+  const over = (arch.variantSlots && arch.variantSlots[variant]) || {};
+  return Object.fromEntries(Object.entries(arch.slots).map(([id, slot]) => [id, { ...slot, ...(over[id] || {}) }]));
+}
+
 /** Returns [] or [{path, code, message}] — every error, not just the first. */
 export function validateStoryboard(sb, inputs) {
   const schemaErrors = validate(SCHEMA, sb);
@@ -67,6 +76,7 @@ export function validateStoryboard(sb, inputs) {
     if (!arch.variants.includes(beat.variant)) {
       err(`${at}/variant`, 'E_SCHEMA', `archetype "${beat.archetype}" has no variant "${beat.variant}" (allowed: ${arch.variants.join(', ')})`);
     }
+    const slots = slotsFor(arch, beat.variant);
     if (beat.weight < arch.minWeight) {
       err(`${at}/weight`, 'E_BUDGET', `archetype "${beat.archetype}" needs weight >= ${arch.minWeight} (got ${beat.weight})`);
     }
@@ -76,9 +86,9 @@ export function validateStoryboard(sb, inputs) {
     for (const [group, source] of [['bindings', 'fact'], ['phrases', 'phrase']]) {
       for (const [slotId, ref] of Object.entries(beat[group] || {})) {
         const p = `${at}/${group}/${slotId}`;
-        const slot = arch.slots[slotId];
+        const slot = slots[slotId];
         if (!slot) {
-          err(p, 'E_UNKNOWN_SLOT', `archetype "${beat.archetype}" has no slot "${slotId}" (slots: ${Object.keys(arch.slots).join(', ')})`);
+          err(p, 'E_UNKNOWN_SLOT', `archetype "${beat.archetype}" has no slot "${slotId}" (slots: ${Object.keys(slots).join(', ')})`);
           continue;
         }
         bound.set(slotId, ref);
@@ -98,12 +108,28 @@ export function validateStoryboard(sb, inputs) {
       }
     }
     // Required slots left unbound.
-    for (const [slotId, slot] of Object.entries(arch.slots)) {
+    for (const [slotId, slot] of Object.entries(slots)) {
       if (!bound.has(slotId) && slot.min > 0) {
         const group = slot.source === 'fact' ? 'bindings' : 'phrases';
         err(`${at}/${group}/${slotId}`, 'E_SLOT_COUNT', `slot "${slotId}" is required (${slot.min}-${slot.max} item(s))`);
       }
     }
+
+    // Cue-map overrides (C14): "<map>.<i>" must name a hit the compiler will actually emit.
+    (beat.cues || []).forEach((cue, j) => {
+      const dot = cue.name.indexOf('.');
+      if (dot < 0) return;
+      const mapName = cue.name.slice(0, dot), i = Number(cue.name.slice(dot + 1));
+      const map = (arch.cueMaps || []).find((m) => m.name === mapName);
+      const n = map && bound.has(map.per) ? asList(bound.get(map.per)).length : 0;
+      if (!map || i >= n) {
+        const offered = (arch.cueMaps || []).map((m) => {
+          const k = bound.has(m.per) ? asList(bound.get(m.per)).length : 0;
+          return k ? `${m.name}.0..${m.name}.${k - 1}` : null;
+        }).filter(Boolean);
+        err(`${at}/cues/${j}/name`, 'E_SCHEMA', `cue "${cue.name}" overrides no cue-map hit of beat ${beat.id} (mapped cues: ${offered.join(', ') || 'none'})`);
+      }
+    });
   });
   return errors;
 }

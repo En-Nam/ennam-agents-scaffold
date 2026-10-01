@@ -6,6 +6,7 @@ import { validate } from '../../templates/showreel/.claude/showreel/lib/util/sch
 import { validateStoryboard } from '../../templates/showreel/.claude/showreel/lib/truth/validate.mjs';
 import { resolve } from '../../templates/showreel/.claude/showreel/lib/truth/resolve.mjs';
 import { checkManifest } from '../../templates/showreel/.claude/showreel/lib/truth/manifest.mjs';
+import { offFrame } from '../../templates/showreel/.claude/showreel/lib/truth/safearea.mjs';
 
 // v1.16 showreel — truth layer (D8 / Rule 13, AC2). The LLM writes only ids; every
 // on-screen string must come from code-extracted facts or the fixed phrase library.
@@ -55,8 +56,12 @@ describe('phrases.json (C6) — the only non-fact copy that may reach the film',
     const slotTags = new Set<string>();
     for (const a of Object.values<any>(ARCHETYPES.archetypes)) {
       for (const s of Object.values<any>(a.slots)) if (s.source === 'phrase') s.tags.forEach((t: string) => slotTags.add(t));
+      // C13: per-variant overrides (kinetic-text "chapter") may name tags of their own
+      for (const v of Object.values<any>(a.variantSlots ?? {})) {
+        for (const [slotId, o] of Object.entries<any>(v)) if (a.slots[slotId].source === 'phrase') (o.tags ?? []).forEach((t: string) => slotTags.add(t));
+      }
     }
-    expect([...slotTags].sort()).toEqual(['cta', 'lead', 'metrics', 'open']);
+    expect([...slotTags].sort()).toEqual(['carousel', 'chapter', 'cta', 'flow', 'lead', 'metrics', 'open', 'stack']);
     for (const tag of slotTags) expect(list.filter((p) => p.tags.includes(tag)).length, tag).toBeGreaterThanOrEqual(3);
   });
 
@@ -324,5 +329,107 @@ describe('checkManifest — drawn text ⊆ resolved set', () => {
       { text: '3', source: 'counter:f.feature.1' },
     ], resolved);
     expect(out.map((x: { reason: string }) => x.reason)).toEqual(['unknown-source', 'unknown-source', 'unknown-source']);
+  });
+});
+
+describe('variantSlots (C13) — kinetic-text "chapter" validates against its own slot rules', () => {
+  // A chapter card is a title card: the lead phrase IS the content, so it is required and must be a
+  // chapter phrase; a body line is optional. Other variants keep the base rules, so a chapter
+  // phrase can never leak into a "stack" lead (and vice versa).
+  const chapter = (mut: (b: Beat) => void = () => {}) => sbWith((b) => {
+    b[1] = { id: 'b2', archetype: 'kinetic-text', variant: 'chapter', weight: 1, bindings: {}, phrases: { lead: 'p.chapter.1' }, transitionOut: 'cut' };
+    mut(b[1]);
+  });
+
+  it('0 lines + a chapter lead is valid (base slots would demand >= 1 line)', () => {
+    expect(errs(chapter())).toEqual([]);
+    expect(errs(chapter((b) => { b.bindings.lines = 'f.feature.1'; }))).toEqual([]);
+  });
+
+  it('the lead is REQUIRED in chapter (E_SLOT_COUNT), optional elsewhere', () => {
+    expect(errs(chapter((b) => { delete b.phrases.lead; }))).toEqual([expect.objectContaining({ path: '/beats/1/phrases/lead', code: 'E_SLOT_COUNT' })]);
+    expect(errs(sbWith((b) => { delete b[1]!.phrases.lead; }))).toEqual([]);
+  });
+
+  it('chapter takes at most 1 line (E_SLOT_COUNT at 2)', () => {
+    const e = errs(chapter((b) => { b.bindings.lines = ['f.feature.1', 'f.feature.2']; }));
+    expect(e).toEqual([expect.objectContaining({ path: '/beats/1/bindings/lines', code: 'E_SLOT_COUNT' })]);
+  });
+
+  it('chapter tag is enforced both ways: a lead phrase in chapter and a chapter phrase in stack are E_SLOT_KIND', () => {
+    expect(errs(chapter((b) => { b.phrases.lead = 'p.lead.1'; }))).toEqual([expect.objectContaining({ path: '/beats/1/phrases/lead', code: 'E_SLOT_KIND' })]);
+    expect(errs(sbWith((b) => { b[1]!.phrases.lead = 'p.chapter.1'; }))).toEqual([expect.objectContaining({ path: '/beats/1/phrases/lead', code: 'E_SLOT_KIND' })]);
+  });
+
+  it('the override merges per field over the base slot (kinds/source/maxChars are inherited)', () => {
+    const e = errs(chapter((b) => { b.bindings.lines = 'f.count.1'; }));
+    expect(e).toEqual([expect.objectContaining({ path: '/beats/1/bindings/lines', code: 'E_SLOT_KIND' })]);
+  });
+
+  it('the shipped archetypes.json only overrides slots and variants that exist', () => {
+    for (const [id, a] of Object.entries<any>(ARCHETYPES.archetypes)) {
+      for (const [variant, over] of Object.entries<any>(a.variantSlots ?? {})) {
+        expect(a.variants, `${id}.${variant}`).toContain(variant);
+        for (const slotId of Object.keys(over)) expect(Object.keys(a.slots), `${id}.${variant}.${slotId}`).toContain(slotId);
+      }
+    }
+  });
+});
+
+describe('M2 archetypes (C13) — slot rules and cue-map override names', () => {
+  const extra = [
+    ['f.route.2', 'route', '/cart'], ['f.route.3', 'route', '/account'], ['f.route.4', 'route', '/orders/[id]/receipt-history-x'],
+  ].map(([id, kind, display]) => ({ ...clone(FACTS.facts[5]), id, kind, value: display, display }));
+  const facts = { ...FACTS, facts: [...FACTS.facts, ...extra] };
+  const flow = (mut: (b: Beat) => void = () => {}) => sbWith((b) => {
+    b[1] = { id: 'b2', archetype: 'flow-graph', variant: 'converge', weight: 1, bindings: { steps: ['f.route.1', 'f.route.2', 'f.route.3'] }, phrases: { lead: 'p.flow.1' }, transitionOut: 'column-wipe' };
+    mut(b[1]);
+  });
+  const e = (sb: unknown) => errs(sb, ctx({ facts }));
+
+  it('a valid flow-graph beat passes (column-wipe is a legal transition)', () => {
+    expect(e(flow())).toEqual([]);
+  });
+
+  it('flow-graph needs 3..6 steps and <= 28 chars per step', () => {
+    expect(e(flow((b) => { b.bindings.steps = ['f.route.1', 'f.route.2']; }))).toEqual([expect.objectContaining({ path: '/beats/1/bindings/steps', code: 'E_SLOT_COUNT' })]);
+    expect(e(flow((b) => { b.bindings.steps = ['f.route.1', 'f.route.2', 'f.route.4']; }))).toEqual([expect.objectContaining({ path: '/beats/1/bindings/steps/2', code: 'E_TEXT_LIMIT' })]);
+  });
+
+  it('a storyboard cue may override a mapped cue by full name "<map>.<i>" for i < N', () => {
+    expect(e(flow((b) => { b.cues = [{ name: 'step.2', at: 0.7, kind: 'boom', amp: 1 }]; }))).toEqual([]);
+  });
+
+  it('a mapped-cue name past N, or naming no cue map, is E_SCHEMA (an override that can never fire is a lie)', () => {
+    const past = e(flow((b) => { b.cues = [{ name: 'step.3', at: 0.7, kind: 'boom', amp: 1 }]; }));
+    expect(past).toEqual([expect.objectContaining({ path: '/beats/1/cues/0/name', code: 'E_SCHEMA' })]);
+    expect(past[0]!.message).toMatch(/step\.0.*step\.2/);
+    const noMap = e(flow((b) => { b.cues = [{ name: 'node.0', at: 0.7, kind: 'boom', amp: 1 }]; }));
+    expect(noMap).toEqual([expect.objectContaining({ path: '/beats/1/cues/0/name', code: 'E_SCHEMA' })]);
+  });
+});
+
+describe('offFrame (C16) — drawn text bbox inside the 1920x1080 frame minus a 48 px safe margin', () => {
+  // Every on-screen string must be readable: a word clipped by the frame edge (or hugging it, where
+  // TVs/players overscan) is a failed beat. offFrame is the pure judge the browser tests call.
+  it('flags a bbox at x=1900 and passes one well inside', () => {
+    const inside = { text: 'Saved carts', source: 'f.feature.1', bbox: { x: 200, y: 400, w: 600, h: 80 } };
+    const off = { text: 'Guest checkout', source: 'f.feature.2', bbox: { x: 1900, y: 400, w: 300, h: 80 } };
+    expect(offFrame([inside, off])).toEqual([off]);
+  });
+
+  it('the margin is exclusive of the frame edge on all four sides; exactly on the margin passes', () => {
+    const box = (x: number, y: number, w: number, h: number) => ({ text: 't', source: 'p.lead.1', bbox: { x, y, w, h } });
+    expect(offFrame([box(48, 48, 1824, 984)])).toEqual([]);
+    for (const b of [box(47, 100, 10, 10), box(100, 47, 10, 10), box(1863, 100, 10, 10), box(100, 1023, 10, 10)]) {
+      expect(offFrame([b]), JSON.stringify(b.bbox)).toEqual([b]);
+    }
+  });
+
+  it('entries without a bbox (not drawn in the last frame) are skipped; options override W/H/margin', () => {
+    expect(offFrame([{ text: 't', source: 'p.lead.1', bbox: null }])).toEqual([]);
+    const b = { text: 't', source: 'p.lead.1', bbox: { x: 10, y: 10, w: 10, h: 10 } };
+    expect(offFrame([b], { W: 100, H: 100, margin: 0 })).toEqual([]);
+    expect(offFrame([b], { W: 100, H: 100, margin: 20 })).toEqual([b]);
   });
 });

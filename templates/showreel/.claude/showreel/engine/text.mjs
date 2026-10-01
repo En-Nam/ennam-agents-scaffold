@@ -7,6 +7,10 @@
 //   counter:<factId>      intermediate counter value, /^\d+$/, 0..item.number
 //   unit:<factId>         text === item.unit (C7 lists units in `allowed`)
 // The manifest is a page-lifetime record of what was drawn; it never feeds back into drawing.
+// bbox (C16): each entry also carries the device-space bounds {x, y, w, h} of where it was drawn in the
+// LATEST frame (union of all its draws in that frame; null when not drawn in it). The engine calls
+// beginFrame() once per renderAt, so offFrame(manifest()) judges exactly the frame just rendered.
+// Draws into 'cache' sprites are recorded without a box (sprite space is not frame space).
 
 import { FAMILIES, familyOf } from './fonts.mjs';
 import { clamp } from './math.mjs';
@@ -44,9 +48,43 @@ function rasterize(g, str, x, y, o) {
 }
 
 const recorded = new Map();
+let frameNo = 0;
 function record(text, source) {
   const key = source + '\u0000' + text;
-  if (!recorded.has(key)) recorded.set(key, { text, source });
+  let e = recorded.get(key);
+  if (!e) recorded.set(key, (e = { text, source, bbox: null, frame: -1 }));
+  return e;
+}
+
+/** Starts a new frame for bbox bookkeeping: boxes from earlier frames stop counting. Called by renderAt. */
+export function beginFrame() {
+  frameNo++;
+}
+
+/**
+ * Union the device-space bounds of str drawn at (x, y) under ctx's current transform into entry e.
+ * A stroke paints lineWidth/2 outside the glyph outline, so stroked text pads the box by that much.
+ * Not covered: glow/shadowBlur, and any later transform of the layer the text was drawn on — so
+ * archetypes draw text on the beat ctx, never on a scratch layer that is then blitted moved/scaled
+ * (see the ARCHETYPE CONTRACT in core.mjs).
+ */
+function recordBox(e, ctx, m, x, y, pad) {
+  if (ctx.canvas && roleOf(ctx.canvas) === 'cache') return;
+  if (!(ctx.globalAlpha > 0)) return; // fully transparent: nothing lands on the frame
+  const l = x - (m.actualBoundingBoxLeft ?? 0) - pad, r = x + (m.actualBoundingBoxRight ?? m.width) + pad;
+  const t = y - (m.actualBoundingBoxAscent ?? 0) - pad, b = y + (m.actualBoundingBoxDescent ?? 0) + pad;
+  const T = typeof ctx.getTransform === 'function' ? ctx.getTransform() : { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const [px, py] of [[l, t], [r, t], [l, b], [r, b]]) {
+    const dx = T.a * px + T.c * py + T.e, dy = T.b * px + T.d * py + T.f;
+    x0 = Math.min(x0, dx); y0 = Math.min(y0, dy); x1 = Math.max(x1, dx); y1 = Math.max(y1, dy);
+  }
+  if (e.frame === frameNo && e.bbox) {
+    x0 = Math.min(x0, e.bbox.x); y0 = Math.min(y0, e.bbox.y);
+    x1 = Math.max(x1, e.bbox.x + e.bbox.w); y1 = Math.max(y1, e.bbox.y + e.bbox.h);
+  }
+  e.bbox = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  e.frame = frameNo;
 }
 
 /**
@@ -62,9 +100,11 @@ export function clusters(str) {
   return out;
 }
 
-/** Everything drawn so far in this page, sorted (source, text) for stable output. */
+/** Everything drawn so far in this page, sorted (source, text): [{text, source, bbox}] (bbox: latest frame or null). */
 export function manifest() {
-  return [...recorded.values()].sort((a, b) => (a.source < b.source ? -1 : a.source > b.source ? 1 : a.text < b.text ? -1 : a.text > b.text ? 1 : 0));
+  return [...recorded.values()]
+    .map((e) => ({ text: e.text, source: e.source, bbox: e.frame === frameNo && e.bbox ? { ...e.bbox } : null }))
+    .sort((a, b) => (a.source < b.source ? -1 : a.source > b.source ? 1 : a.text < b.text ? -1 : a.text > b.text ? 1 : 0));
 }
 
 /** CSS font string for a family key ('display'|'mono'). */
@@ -91,17 +131,18 @@ function applyFont(ctx, family, o) {
   ctx.letterSpacing = (o.track ?? 0) + 'px';
 }
 
-function paint(ctx, str, x, y, family, o) {
+function paint(ctx, str, x, y, family, o, entry) {
   ctx.save();
   applyFont(ctx, family, o);
   ctx.textAlign = o.align ?? 'left';
   ctx.textBaseline = o.base ?? 'alphabetic';
   ctx.globalAlpha *= o.alpha ?? 1;
   const m = ctx.measureText(str);
+  const lw = o.mode === 'stroke' || o.mode === 'both' ? (o.lineWidth ?? 2) : 0;
+  recordBox(entry, ctx, m, x, y, lw / 2);
   const k = deviceScale(ctx);
   if ((o.size ?? 48) * k > GPU_TEXT_MAX_PX && ctx.canvas && roleOf(ctx.canvas) !== 'cache' && str.trim()) {
     // CPU sprite path: rasterize in the SAME user space (gradients stay valid), at device resolution
-    const lw = o.mode === 'stroke' || o.mode === 'both' ? (o.lineWidth ?? 2) : 0;
     const pad = Math.ceil((o.size ?? 48) * 0.06 + lw + 2);
     const left = x - m.actualBoundingBoxLeft - pad, top = y - m.actualBoundingBoxAscent - pad;
     const w = m.actualBoundingBoxLeft + m.actualBoundingBoxRight + 2 * pad, h = m.actualBoundingBoxAscent + m.actualBoundingBoxDescent + 2 * pad;
@@ -126,8 +167,8 @@ function paint(ctx, str, x, y, family, o) {
  */
 export function text(ctx, item, x, y, opts = {}) {
   assertItem(item, 'text');
-  record(item.text, item.id);
-  return paint(ctx, sliceCp(item.text, opts.slice), x, y, familyOf(item), opts);
+  const e = record(item.text, item.id);
+  return paint(ctx, sliceCp(item.text, opts.slice), x, y, familyOf(item), opts, e);
 }
 
 /**
@@ -141,16 +182,16 @@ export function counter(ctx, item, progress, x, y, opts = {}) {
   const p = clamp(progress);
   if (p >= 1) return text(ctx, item, x, y, opts);
   const str = String(Math.round(item.number * p));
-  record(str, 'counter:' + item.id);
-  return paint(ctx, str, x, y, familyOf(item), opts);
+  const e = record(str, 'counter:' + item.id);
+  return paint(ctx, str, x, y, familyOf(item), opts, e);
 }
 
 /** unit(ctx, item, x, y, opts) → drawn width. Draws item.unit (e.g. "routes"), source unit:<id>. */
 export function unit(ctx, item, x, y, opts = {}) {
   assertItem(item, 'unit');
   if (typeof item.unit !== 'string') throw new Error(`unit: item ${item.id} has no unit`);
-  record(item.unit, 'unit:' + item.id);
-  return paint(ctx, item.unit, x, y, familyOf(item), opts);
+  const e = record(item.unit, 'unit:' + item.id);
+  return paint(ctx, item.unit, x, y, familyOf(item), opts, e);
 }
 
 /** measure(ctx, item, opts) → {width, ascent, descent} of item.text (or opts.slice / opts.what:'unit'). No record. */

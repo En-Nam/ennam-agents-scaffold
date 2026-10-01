@@ -42,6 +42,9 @@
 //   makeCanvas(role, w, h)       roles 'cache' (build-once, CPU-pinned) | 'frame' (per-frame GPU scratch); layout only
 //   scratch(i)                   pooled, cleared W×H 'frame' layer, i ∈ {0,1}; separate pools for archetypes
 //                                and transitions. Finish with a layer before draw() returns.
+//                                Draw TEXT on the beat ctx, not on a scratch layer that is later blitted
+//                                translated/scaled: the manifest bbox (C16) is taken at draw time, so the
+//                                no-clipping check would judge the pre-blit rectangle.
 //   hitEnergy(globalT, decay)    film-wide impact energy;  cueEnergy(localT, decay) — this beat's hits only
 //   beatId, dur, seed, typing, cues   per-beat values (same as params)
 //
@@ -51,7 +54,7 @@
 import { makeCanvas, gpuRenderer } from './canvas.mjs';
 import { clamp, lerp, ease, prog, map, edge, anticipate, rng, hash, noise, hashStr } from './math.mjs';
 import { palette as getPalette, hexToRgb, rgba } from './palettes.mjs';
-import { text, counter, unit, measure, fitText, font, manifest, clusters } from './text.mjs';
+import { text, counter, unit, measure, fitText, font, manifest, clusters, beginFrame } from './text.mjs';
 import { FAMILIES, familyOf, loadFonts, glyphGaps } from './fonts.mjs';
 import { rr, brand, glow, glass, mix, glowDot, sparks, checkMark, chevron } from './draw.mjs';
 import { ARCHETYPES, TRANSITIONS } from '../archetypes/index.mjs';
@@ -351,6 +354,7 @@ export function createEngine({ timeline, resolved, archetypes = ARCHETYPES, tran
   function renderAt(t, samples = 1) {
     if (!Number.isFinite(t)) throw new Error(`renderAt: t must be a finite number, got ${t}`);
     if (!(Number.isInteger(samples) && samples >= 1)) throw new Error(`renderAt: samples must be an integer ≥ 1, got ${samples}`);
+    beginFrame(); // manifest bboxes (C16) describe THIS frame (all its motion-blur samples), never an earlier one
     if (samples === 1) return renderFrame(t);
     const exposure = SHUTTER / TL.fps;
     resetCtx(actx);

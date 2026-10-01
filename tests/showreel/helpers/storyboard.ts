@@ -3,6 +3,8 @@
 // archetypes.json, so every id it emits is a real fact id and passes `check` on any repo that passed
 // the minimum gate. Beat count = the low end of the duration budget (C4).
 
+import { slotsFor as prodSlotsFor } from '../../../templates/showreel/.claude/showreel/lib/truth/validate.mjs';
+
 export type DigestFact = { id: string; kind: string; display: string; unit: string | null };
 type Beat = Record<string, unknown>;
 
@@ -54,6 +56,61 @@ export function makeStoryboard(digest: DigestFact[], durationS: 15 | 30 | 45 | 6
     id: `b${total}`, archetype: 'lockup-cta', variant: 'center', weight: 1.5,
     bindings: { name: names[0]!.id, ...(taglines.length ? { tagline: taglines[0]!.id } : {}), command: commands[0]!.id },
     phrases: { cta: 'p.cta.1' }, transitionOut: 'cut',
+  });
+  return { version: 1, durationS, seed, palette: 'violet', beats };
+}
+
+// ---------------------------------------------------------------------------------------------
+// M2 (C15): storyboard from a recommended arrangement (archetypes/arrangements.json). Same idea as
+// makeStoryboard — the agent stand-in picks real fact/phrase ids, never writes copy — but the beat
+// sequence comes from the arrangement, and the slot rules (kinds, min/max, maxChars, phrase tags)
+// come from archetypes.json with the variant's `variantSlots` merged over `slots` (C13).
+// `count` picks how many items each fact list slot gets: min | typical (ceil of the midpoint) | max.
+// Fails loud when the digest cannot fill a slot (Rule 12) instead of emitting an invalid storyboard.
+
+export type ArrangementBeat = { archetype: string; variant: string; weight: number; transitionOut: string };
+type SlotSpec = { source: 'fact' | 'phrase'; kinds?: string[]; tags?: string[]; min: number; max: number; maxChars?: number };
+type ArchSpec = { slots: Record<string, SlotSpec>; variantSlots?: Record<string, Record<string, Partial<SlotSpec>>> };
+type Phrase = { id: string; tags: string[]; text: string };
+
+// The variant merge is the PRODUCTION rule (lib/truth/validate.mjs), not a copy: a test-side
+// re-implementation could drift from what `check` enforces (Rule 7).
+const slotsFor = (spec: ArchSpec, variant: string) => prodSlotsFor(spec, variant) as Record<string, SlotSpec>;
+
+export function storyboardFromArrangement(
+  digest: DigestFact[],
+  durationS: 15 | 30 | 45 | 60,
+  arrangement: ArrangementBeat[],
+  archetypes: { archetypes: Record<string, ArchSpec> },
+  phrases: { phrases: Phrase[] },
+  { seed = 7, count = 'typical' }: { seed?: number; count?: 'min' | 'typical' | 'max' } = {},
+) {
+  const cursor = new Map<string, number>();
+  const beats = arrangement.map((a, i) => {
+    const spec = archetypes.archetypes[a.archetype];
+    if (!spec) throw new Error(`storyboardFromArrangement: unknown archetype "${a.archetype}"`);
+    const bindings: Record<string, string | string[]> = {};
+    const phraseIds: Record<string, string> = {};
+    for (const [slotId, s] of Object.entries(slotsFor(spec, a.variant))) {
+      const n = count === 'min' ? s.min : count === 'max' ? s.max : Math.ceil((s.min + s.max) / 2);
+      if (n === 0) continue;
+      if (s.source === 'phrase') {
+        const pool = phrases.phrases.filter((p) => p.tags.some((t) => s.tags!.includes(t)));
+        if (!pool.length) throw new Error(`storyboardFromArrangement: no phrase tagged ${s.tags!.join('/')} for ${a.archetype}.${slotId}`);
+        phraseIds[slotId] = pool[i % pool.length]!.id;
+        continue;
+      }
+      const pool = digest.filter((f) => s.kinds!.includes(f.kind) && (s.maxChars === undefined || len(f.display) <= s.maxChars));
+      if (pool.length < n) {
+        throw new Error(`storyboardFromArrangement: ${a.archetype}.${slotId} needs ${n} distinct ${s.kinds!.join('/')} facts <= ${s.maxChars} chars; digest has ${pool.length}`);
+      }
+      const key = s.kinds!.join('|');
+      const start = cursor.get(key) ?? 0;
+      cursor.set(key, start + n);
+      const ids = Array.from({ length: n }, (_, k) => pool[(start + k) % pool.length]!.id);
+      bindings[slotId] = s.max === 1 ? ids[0]! : ids;
+    }
+    return { id: `b${i + 1}`, archetype: a.archetype, variant: a.variant, weight: a.weight, bindings, phrases: phraseIds, transitionOut: a.transitionOut };
   });
   return { version: 1, durationS, seed, palette: 'violet', beats };
 }

@@ -14,11 +14,17 @@
     },
     "kinetic-text": {
       "role": "body",
-      "variants": ["stack", "punch"],
+      "variants": ["stack", "punch", "chapter"],
       "minWeight": 0.5,
       "slots": {
         "lines": { "source": "fact", "kinds": ["feature", "app.tagline", "stack.item", "problem"], "min": 1, "max": 3, "maxChars": 48 },
         "lead": { "source": "phrase", "tags": ["lead"], "min": 0, "max": 1 }
+      },
+      "variantSlots": {
+        "chapter": {
+          "lines": { "min": 0, "max": 1 },
+          "lead": { "tags": ["chapter"], "min": 1, "max": 1 }
+        }
       },
       "defaultCues": [{ "name": "line", "at": 0.15, "kind": "snap", "amp": 0.3 }]
     },
@@ -46,6 +52,49 @@
         { "name": "slam", "at": 0.12, "kind": "slam", "amp": 1.0 },
         { "name": "sweep", "at": 0.6, "kind": "sweep", "amp": 0.35 }
       ]
+    },
+    "flow-graph": {
+      "role": "body",
+      "variants": ["converge", "chain"],
+      "minWeight": 1.0,
+      "slots": {
+        "steps": { "source": "fact", "kinds": ["route", "command", "feature", "stack.item"], "min": 3, "max": 6, "maxChars": 28 },
+        "lead": { "source": "phrase", "tags": ["flow"], "min": 0, "max": 1 }
+      },
+      "cueMaps": [{ "name": "step", "per": "steps", "kind": "snap", "amp": 0.3, "from": 0.15, "to": 0.6 }],
+      "defaultCues": [{ "name": "converge", "at": 0.85, "kind": "sweep", "amp": 0.6 }]
+    },
+    "layered-stack": {
+      "role": "body",
+      "variants": ["slabs"],
+      "minWeight": 1.0,
+      "slots": {
+        "layers": { "source": "fact", "kinds": ["stack.item", "feature"], "min": 2, "max": 5, "maxChars": 24 },
+        "label": { "source": "phrase", "tags": ["stack"], "min": 0, "max": 1 }
+      },
+      "cueMaps": [{ "name": "layer", "per": "layers", "kind": "thud", "amp": 0.5, "from": 0.15, "to": 0.65 }]
+    },
+    "card-carousel": {
+      "role": "body",
+      "variants": ["row", "fan"],
+      "minWeight": 1.0,
+      "slots": {
+        "cards": { "source": "fact", "kinds": ["feature", "route", "command"], "min": 3, "max": 6, "maxChars": 32 },
+        "lead": { "source": "phrase", "tags": ["carousel"], "min": 0, "max": 1 }
+      },
+      "cueMaps": [{ "name": "card", "per": "cards", "kind": "snap", "amp": 0.25, "from": 0.2, "to": 0.7 }],
+      "defaultCues": [{ "name": "settle", "at": 0.8, "kind": "sweep", "amp": 0.35 }]
+    },
+    "orbit-network": {
+      "role": "body",
+      "variants": ["orbit"],
+      "minWeight": 1.25,
+      "slots": {
+        "hub": { "source": "fact", "kinds": ["app.name"], "min": 1, "max": 1, "maxChars": 24 },
+        "nodes": { "source": "fact", "kinds": ["stack.item", "feature", "route"], "min": 3, "max": 8, "maxChars": 20 }
+      },
+      "cueMaps": [{ "name": "node", "per": "nodes", "kind": "pop", "amp": 0.15, "from": 0.2, "to": 0.45 }],
+      "defaultCues": [{ "name": "ignite", "at": 0.12, "kind": "ignite", "amp": 0.8 }]
     }
   }
 }

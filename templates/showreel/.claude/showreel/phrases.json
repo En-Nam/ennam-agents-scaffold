@@ -14,6 +14,18 @@
     { "id": "p.metrics.3", "tags": ["metrics"], "text": "At a glance" },
     { "id": "p.cta.1", "tags": ["cta"], "text": "Get started" },
     { "id": "p.cta.2", "tags": ["cta"], "text": "Try it now" },
-    { "id": "p.cta.3", "tags": ["cta"], "text": "Start building" }
+    { "id": "p.cta.3", "tags": ["cta"], "text": "Start building" },
+    { "id": "p.flow.1", "tags": ["flow"], "text": "Step by step" },
+    { "id": "p.flow.2", "tags": ["flow"], "text": "How it flows" },
+    { "id": "p.flow.3", "tags": ["flow"], "text": "From start to finish" },
+    { "id": "p.stack.1", "tags": ["stack"], "text": "The stack" },
+    { "id": "p.stack.2", "tags": ["stack"], "text": "Built on" },
+    { "id": "p.stack.3", "tags": ["stack"], "text": "Layer by layer" },
+    { "id": "p.carousel.1", "tags": ["carousel"], "text": "Take a look" },
+    { "id": "p.carousel.2", "tags": ["carousel"], "text": "What you get" },
+    { "id": "p.carousel.3", "tags": ["carousel"], "text": "A closer look" },
+    { "id": "p.chapter.1", "tags": ["chapter"], "text": "How it works" },
+    { "id": "p.chapter.2", "tags": ["chapter"], "text": "The building blocks" },
+    { "id": "p.chapter.3", "tags": ["chapter"], "text": "The big picture" }
   ]
 }

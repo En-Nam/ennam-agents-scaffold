@@ -35,13 +35,13 @@
       "required": ["id", "archetype", "variant", "t0", "t1", "overlapIn", "overlapOut", "transitionOut"],
       "properties": {
         "id": { "$ref": "#/$defs/beatId" },
-        "archetype": { "enum": ["cold-open-command", "kinetic-text", "metrics-counter-lock", "lockup-cta"] },
-        "variant": { "enum": ["terminal", "stack", "punch", "row", "grid", "center"] },
+        "archetype": { "enum": ["cold-open-command", "kinetic-text", "metrics-counter-lock", "lockup-cta", "flow-graph", "layered-stack", "card-carousel", "orbit-network"] },
+        "variant": { "enum": ["terminal", "stack", "punch", "row", "grid", "center", "converge", "chain", "slabs", "fan", "orbit", "chapter"] },
         "t0": { "$ref": "#/$defs/seconds" },
         "t1": { "$ref": "#/$defs/seconds" },
         "overlapIn": { "$ref": "#/$defs/seconds" },
         "overlapOut": { "$ref": "#/$defs/seconds" },
-        "transitionOut": { "enum": ["cut", "zoom-through"] }
+        "transitionOut": { "enum": ["cut", "zoom-through", "column-wipe"] }
       }
     },
     "hit": {
@@ -53,7 +53,7 @@
         "kind": { "enum": ["boom", "snap", "sweep", "thud", "lock", "ignite", "pop", "slam"] },
         "amp": { "type": "number", "minimum": 0, "maximum": 1 },
         "beatId": { "$ref": "#/$defs/beatId" },
-        "cue": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,23}$" }
+        "cue": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,23}(\\.(0|[1-9][0-9]?))?$" }
       }
     },
     "typing": {

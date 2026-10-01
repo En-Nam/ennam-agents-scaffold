@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { compileTimeline } from '../../templates/showreel/.claude/showreel/lib/compile/timeline.mjs';
+import { compileTimeline, assertOverlapsFit } from '../../templates/showreel/.claude/showreel/lib/compile/timeline.mjs';
 import { validate } from '../../templates/showreel/.claude/showreel/lib/util/schema.mjs';
 import { stableStringify } from '../../templates/showreel/.claude/showreel/lib/util/json.mjs';
 
@@ -338,6 +338,144 @@ describe('compileTimeline — rules that encode WHY', () => {
       { name: 'peak', t0: 18.75, t1: 22.5 },
       { name: 'outro', t0: 22.5, t1: 30 },
     ]);
+  });
+});
+
+describe('cue maps (C14) — one hit per bound item, spread from..to, never stacked within a GRID', () => {
+  // A cue map turns "N steps light up in turn" into N audible hits the score can sync to. Two hits
+  // closer than one 1/16 note smear into one transient (and double the peak), so collisions are
+  // pushed one GRID later; a push past the map's `to` means the beat is too short for N items.
+  const frame60 = (g: number) => Math.ceil(g * 60 - 0.5 - 1e-9) / 60; // C8 frame snap, ties down
+  const withBody = (archetype: string, variant: string, slot: string, n: number, mut: (s: any) => void = () => {}) => {
+    const story = sb(15); // Σw = 5 → 3 s per unit weight; all cuts → b2 window = core [3, 6]
+    story.beats.forEach((b: any) => { b.transitionOut = 'cut'; });
+    story.beats[1] = { id: 'b2', archetype, variant, weight: 1, bindings: { [slot]: Array.from({ length: n }, (_, i) => `f.feature.${i + 1}`) }, phrases: {}, transitionOut: 'cut' };
+    mut(story);
+    return story;
+  };
+  const hitsOf = (tl: any, beatId: string, prefix: string) => tl.hits.filter((h: Hit) => h.beatId === beatId && h.cue.startsWith(prefix + '.'));
+
+  it('expands N items to <name>.<i> at t0 + (from + (to−from)·i/(N−1))·(t1−t0), snapped to GRID', () => {
+    const tl = compileTimeline(withBody('flow-graph', 'converge', 'steps', 4), rs(15), ARCH, { fps: 60 });
+    const steps = hitsOf(tl, 'b2', 'step');
+    // raw 3.45, 3.9, 4.35, 4.8 → grid 3.5, 3.875, 4.375, 4.75
+    expect(steps.map((h: Hit) => h.cue)).toEqual(['step.0', 'step.1', 'step.2', 'step.3']);
+    expect(steps.map((h: Hit) => h.t)).toEqual([3.5, 3.875, 4.375, 4.75].map(frame60));
+    expect(steps.every((h: Hit) => h.kind === 'snap' && h.amp === 0.3)).toBe(true);
+    // the archetype's own defaults still fire alongside the map
+    expect(tl.hits.filter((h: Hit) => h.beatId === 'b2').map((h: Hit) => h.cue).sort()).toEqual(['converge', 'step.0', 'step.1', 'step.2', 'step.3']);
+    expect(validate(TIMELINE_SCHEMA, tl)).toEqual([]);
+  });
+
+  it('N = 1 sits at `from` (no division by zero); N = 0 emits nothing', () => {
+    const one = compileTimeline(withBody('flow-graph', 'converge', 'steps', 1), rs(15), ARCH, { fps: 60 });
+    expect(hitsOf(one, 'b2', 'step').map((h: Hit) => [h.cue, h.t])).toEqual([['step.0', 3.5]]);
+    const none = compileTimeline(withBody('flow-graph', 'converge', 'steps', 1, (s) => { s.beats[1].bindings = {}; }), rs(15), ARCH, { fps: 60 });
+    expect(hitsOf(none, 'b2', 'step')).toEqual([]);
+  });
+
+  it('a hit that snaps onto another hit of the same beat is pushed one GRID later', () => {
+    // An extra storyboard cue lands exactly on step.1 (3.875): step.1 moves to 4.0, step.2 (4.375) stays.
+    const story = withBody('flow-graph', 'converge', 'steps', 4, (s) => { s.beats[1].cues = [{ name: 'whoosh', at: 0.875 / 3, kind: 'sweep', amp: 0.2 }]; });
+    const tl = compileTimeline(story, rs(15), ARCH, { fps: 60 });
+    const t = (cue: string) => tl.hits.find((h: Hit) => h.beatId === 'b2' && h.cue === cue)!.t;
+    expect(t('whoosh')).toBe(frame60(3.875));
+    expect(t('step.1')).toBe(frame60(4.0));
+    expect(t('step.2')).toBe(frame60(4.375));
+  });
+
+  it('two FIXED hits (default/storyboard) closer than 1 GRID fail E_TIMELINE naming the beat and both cues', () => {
+    // Fixed hits are never pushed (their `at` is authored), so a storyboard cue at 0.85 on a flow-graph
+    // beat lands on the same GRID as the default `converge` (5.5 s): two stacked transients, refused.
+    const story = withBody('flow-graph', 'converge', 'steps', 2, (s) => { s.beats[1].cues = [{ name: 'whoosh', at: 0.85, kind: 'pop', amp: 0.2 }]; });
+    let err: any;
+    try { compileTimeline(story, rs(15), ARCH, { fps: 60 }); } catch (e) { err = e; }
+    expect(err).toMatchObject({ code: 'E_TIMELINE' });
+    expect(err.message).toContain('b2');
+    expect(err.message).toContain('whoosh');
+    expect(err.message).toContain('converge');
+    // Exactly 1 GRID apart (5.375 vs 5.5) is allowed: the boundary is inclusive.
+    story.beats[1].cues = [{ name: 'whoosh', at: 2.375 / 3, kind: 'pop', amp: 0.2 }];
+    const tl = compileTimeline(story, rs(15), ARCH, { fps: 60 });
+    expect(tl.hits.find((h: Hit) => h.cue === 'whoosh')!.t).toBe(frame60(5.375));
+  });
+
+  it('dense maps never stack: every pair of b2 hits is >= 1 GRID apart (up to the ½-frame snap)', () => {
+    for (const fps of [30, 60]) {
+      const tl = compileTimeline(withBody('orbit-network', 'orbit', 'nodes', 8, (s) => { s.beats[1].weight = 1.5; }), rs(15), ARCH, { fps });
+      const ts = tl.hits.filter((h: Hit) => h.beatId === 'b2').map((h: Hit) => h.t).sort((a: number, b: number) => a - b);
+      expect(ts.length).toBe(9); // ignite + node.0..7
+      for (let i = 1; i < ts.length; i++) expect(ts[i]! - ts[i - 1]!, `fps ${fps} gap ${i}`).toBeGreaterThanOrEqual(GRID - 1 / fps - 1e-9);
+    }
+  });
+
+  it('fails E_TIMELINE naming the beat when pushes run past the map `to` (beat too short for N items)', () => {
+    // b2 = orbit-network with 8 nodes squeezed into ~2.9 s: 0.25·2.9/7 ≈ 0.10 s apart < 1 GRID.
+    const story = withBody('orbit-network', 'orbit', 'nodes', 8, (s) => { s.beats[1].weight = 1.25; s.beats[4].weight = 3; });
+    let err: any;
+    try { compileTimeline(story, rs(15), ARCH, { fps: 60 }); } catch (e) { err = e; }
+    expect(err).toMatchObject({ code: 'E_TIMELINE' });
+    expect(err.message).toContain('b2');
+    expect(err.message).toContain('node.');
+    expect(err.fix).toMatch(/weight|fewer/);
+    // the same beat with 3 nodes fits — the failure is about N, not the archetype
+    story.beats[1].bindings.nodes = story.beats[1].bindings.nodes.slice(0, 3);
+    expect(() => compileTimeline(story, rs(15), ARCH, { fps: 60 })).not.toThrow();
+  });
+
+  it('a storyboard cue overrides a mapped cue by full name ("step.2"): replaced, not duplicated', () => {
+    const story = withBody('flow-graph', 'converge', 'steps', 4, (s) => { s.beats[1].cues = [{ name: 'step.2', at: 0.75, kind: 'boom', amp: 0.9 }]; });
+    const tl = compileTimeline(story, rs(15), ARCH, { fps: 60 });
+    const steps = hitsOf(tl, 'b2', 'step');
+    expect(steps.map((h: Hit) => h.cue).sort()).toEqual(['step.0', 'step.1', 'step.2', 'step.3']);
+    const s2 = steps.find((h: Hit) => h.cue === 'step.2')!;
+    expect([s2.t, s2.kind, s2.amp]).toEqual([frame60(3 + 0.75 * 3), 'boom', 0.9]); // 5.25
+  });
+});
+
+describe('column-wipe (C13/C15) overlap geometry and the overlap-vs-beat guard', () => {
+  it('column-wipe overlap = 2 GRID (0.25 s), boundary −1 … +1 GRID; zoom-through stays −2 … +1', () => {
+    const story = sb(15); // b1 core [0,3], b2 core [3,6]
+    story.beats[0].transitionOut = 'column-wipe';
+    story.beats[1].transitionOut = 'zoom-through';
+    const tl = compileTimeline(story, rs(15), ARCH, { fps: 60 });
+    const [b1, b2, b3] = tl.beats;
+    expect([b1.t1, b2.t0, b1.overlapOut, b2.overlapIn]).toEqual([3.125, 2.875, 0.25, 0.25]);
+    expect([b2.t1, b3.t0, b2.overlapOut, b3.overlapIn]).toEqual([6.125, 5.75, 0.375, 0.375]);
+    expect(validate(TIMELINE_SCHEMA, tl)).toEqual([]);
+  });
+
+  it('back-to-back transitions around the SHORTEST legal beat still leave it a fully-on hold', () => {
+    // min beat = 1.0 s core; worst case in = +1 GRID into the core, out = zoom-through −2 GRID → 0.625 s hold.
+    for (const into of ['zoom-through', 'column-wipe']) {
+      const story = sb(15);
+      const ws = [1, 1, 0.5, 2, 3];
+      story.beats.forEach((b: any, i: number) => { b.weight = ws[i]; b.transitionOut = 'cut'; });
+      story.beats[2].archetype = 'kinetic-text'; story.beats[2].variant = 'punch'; // minWeight 0.5 → 1.0 s floor
+      story.beats[1].transitionOut = into;
+      story.beats[2].transitionOut = 'zoom-through';
+      const tl = compileTimeline(story, rs(15), ARCH, { fps: 60 });
+      const b3 = tl.beats[2];
+      expect(b3.t1 - b3.overlapOut - (b3.t0 + b3.overlapIn), into).toBeGreaterThanOrEqual(1.0 - 3 * GRID - 1e-9);
+    }
+  });
+
+  it('assertOverlapsFit: overlaps that eat the whole beat fail E_TIMELINE naming the beat', () => {
+    // Unreachable through compileTimeline today (the 1.0 s beat floor > 3 GRID); the guard keeps it that
+    // way if MIN_BEAT_S or a transition length ever changes — three beats on screen crashes the engine.
+    const beats = [
+      { id: 'b1', t0: 0, t1: 3.125, overlapIn: 0, overlapOut: 0.375 },
+      { id: 'b2', t0: 2.75, t1: 3.375, overlapIn: 0.375, overlapOut: 0.375 },
+      { id: 'b3', t0: 3, t1: 6, overlapIn: 0.375, overlapOut: 0 },
+    ];
+    let err: any;
+    try { assertOverlapsFit(beats); } catch (e) { err = e; }
+    expect(err).toMatchObject({ code: 'E_TIMELINE' });
+    expect(err.message).toContain('b2');
+    beats[1]!.t1 = 3.5; beats[2]!.t0 = 3.125; // 0.75 s window, 0.75 s of overlaps: never alone on screen
+    expect(() => assertOverlapsFit(beats)).toThrow(/b2/);
+    beats[1]!.t1 = 3.625; beats[2]!.t0 = 3.25;
+    expect(() => assertOverlapsFit(beats)).not.toThrow();
   });
 });
 

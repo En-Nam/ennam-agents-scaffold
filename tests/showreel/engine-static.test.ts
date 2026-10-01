@@ -1,12 +1,13 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import { request } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import fg from 'fast-glob';
 import { validate } from '../../templates/showreel/.claude/showreel/lib/util/schema.mjs';
-import { fitText, text, counter, unit, manifest, clusters } from '../../templates/showreel/.claude/showreel/engine/text.mjs';
+import { fitText, text, counter, unit, manifest, clusters, beginFrame } from '../../templates/showreel/.claude/showreel/engine/text.mjs';
+import { offFrame } from '../../templates/showreel/.claude/showreel/lib/truth/safearea.mjs';
 import { parseFontsourceCss, parseUnicodeRange, glyphGapsFor, familyOf } from '../../templates/showreel/.claude/showreel/engine/fonts.mjs';
 import { rng, hash, ease } from '../../templates/showreel/.claude/showreel/engine/math.mjs';
 import { PALETTES, palette } from '../../templates/showreel/.claude/showreel/engine/palettes.mjs';
@@ -36,7 +37,8 @@ function offenders(files: string[], re: RegExp) {
 // A fake 2D context: every glyph is 0.6 em wide (+ letterSpacing). Lets text/fit logic run in Node.
 function fakeCtx() {
   const calls: { op: string; str: string; x: number; y: number; font: string }[] = [];
-  const st: Record<string, unknown> = { font: '10px x', letterSpacing: '0px', globalAlpha: 1 };
+  // m = [a, b, c, d, e, f] current transform (translate/scale/setTransform only), like DOMMatrix 2D
+  const st: Record<string, unknown> = { font: '10px x', letterSpacing: '0px', globalAlpha: 1, textAlign: 'left', m: [1, 0, 0, 1, 0, 0] };
   const stack: Record<string, unknown>[] = [];
   const px = () => Number(/(\d+(?:\.\d+)?)px/.exec(String(st.font))![1]);
   const ctx = new Proxy(st, {
@@ -45,8 +47,14 @@ function fakeCtx() {
       if (k === 'restore') return () => Object.assign(t, stack.pop());
       if (k === 'measureText') return (s: string) => {
         const n = Array.from(s).length;
-        return { width: n * 0.6 * px() + n * parseFloat(String(t.letterSpacing)), actualBoundingBoxAscent: px() * 0.7, actualBoundingBoxDescent: px() * 0.2 };
+        const width = n * 0.6 * px() + n * parseFloat(String(t.letterSpacing));
+        const left = t.textAlign === 'center' ? width / 2 : t.textAlign === 'right' ? width : 0;
+        return { width, actualBoundingBoxLeft: left, actualBoundingBoxRight: width - left, actualBoundingBoxAscent: px() * 0.7, actualBoundingBoxDescent: px() * 0.2 };
       };
+      if (k === 'getTransform') return () => { const [a, b, c, d, e, f] = t.m as number[]; return { a, b, c, d, e, f }; };
+      if (k === 'setTransform') return (...v: number[]) => { t.m = v; };
+      if (k === 'translate') return (x: number, y: number) => { const [a, b, c, d, e, f] = t.m as number[]; t.m = [a, b, c, d, e! + a! * x + c! * y, f! + b! * x + d! * y]; };
+      if (k === 'scale') return (x: number, y: number) => { const [a, b, c, d, e, f] = t.m as number[]; t.m = [a! * x, b! * x, c! * y, d! * y, e, f]; };
       if (k === 'fillText' || k === 'strokeText') return (s: string, x: number, y: number) => calls.push({ op: String(k), str: s, x, y, font: String(t.font) });
       return t[k as string];
     },
@@ -119,8 +127,20 @@ describe('archetype registry (C9)', () => {
     }
   });
 
-  it('ARCHETYPES keys EQUAL archetypes.json keys (a storyboard can never name an archetype the engine cannot draw)', () => {
-    expect(Object.keys(ARCHETYPES).sort()).toEqual([...ids].sort());
+  // M2 interim (plan Tasks 1 → 7): archetypes.json declares the 4 M2 archetypes before their modules exist;
+  // the orchestrator registers them in Task 7, which MUST empty this list. Until then the engine rejects a
+  // timeline naming one at boot (checkTimeline: "not registered"), so nothing renders blank.
+  const PENDING_M2 = ['card-carousel', 'flow-graph', 'layered-stack', 'orbit-network'];
+
+  it('ARCHETYPES keys EQUAL archetypes.json keys minus the pending M2 ids (a storyboard can never name an archetype the engine cannot draw)', () => {
+    expect(Object.keys(ARCHETYPES).sort()).toEqual(ids.filter((id) => !PENDING_M2.includes(id)).sort());
+  });
+
+  it('a pending M2 id stays pending only while its module does not exist (registration cannot be forgotten)', () => {
+    for (const id of PENDING_M2) {
+      expect(ids, id).toContain(id);
+      expect(existsSync(path.join(TOOLKIT, 'archetypes', `${id}.mjs`)), `${id}.mjs exists: register it in archetypes/index.mjs and drop it from PENDING_M2`).toBe(false);
+    }
   });
 
   it('zoom-through transition is registered with id + apply(ctx, k, drawOut, drawIn, api)', () => {
@@ -168,7 +188,7 @@ describe('text API (D8 / Rule 13)', () => {
     text(ctx, { id: 'f.command.1', text: 'npm run dev', number: null, unit: null }, 10, 20, { size: 40 });
     expect(calls).toEqual([expect.objectContaining({ op: 'fillText', str: 'npm run dev' })]);
     expect(calls[0].font).toContain('"Showreel Mono"'); // command facts render (and are glyph-checked) in mono
-    expect(manifest()).toContainEqual({ text: 'npm run dev', source: 'f.command.1' });
+    expect(manifest()).toContainEqual(expect.objectContaining({ text: 'npm run dev', source: 'f.command.1' }));
     expect(() => text(ctx, 'npm run deploy' as never, 0, 0)).toThrow(/resolved item/);
   });
 
@@ -176,7 +196,7 @@ describe('text API (D8 / Rule 13)', () => {
     const { ctx, calls } = fakeCtx();
     text(ctx, { id: 'p.open.9', text: 'Én Nam', number: null, unit: null }, 0, 0, { slice: [0, 2] });
     expect(calls[0].str).toBe('Én');
-    expect(manifest()).toContainEqual({ text: 'Én Nam', source: 'p.open.9' });
+    expect(manifest()).toContainEqual(expect.objectContaining({ text: 'Én Nam', source: 'p.open.9' }));
     expect(manifest().some((m) => m.text === 'Én')).toBe(false);
   });
 
@@ -188,9 +208,9 @@ describe('text API (D8 / Rule 13)', () => {
     unit(ctx, item, 0, 0);
     expect(calls.map((c) => c.str)).toEqual(['21', '42', 'routes']);
     const m = manifest();
-    expect(m).toContainEqual({ text: '21', source: 'counter:f.count.7' });
-    expect(m).toContainEqual({ text: '42', source: 'f.count.7' });
-    expect(m).toContainEqual({ text: 'routes', source: 'unit:f.count.7' });
+    expect(m).toContainEqual(expect.objectContaining({ text: '21', source: 'counter:f.count.7' }));
+    expect(m).toContainEqual(expect.objectContaining({ text: '42', source: 'f.count.7' }));
+    expect(m).toContainEqual(expect.objectContaining({ text: 'routes', source: 'unit:f.count.7' }));
   });
 
   it('fitText: shrinks to fit, returns null below the minimum (a 90-char command is never clipped silently)', () => {
@@ -205,6 +225,68 @@ describe('text API (D8 / Rule 13)', () => {
     const px = fitText(ctx, 'x'.repeat(20), 600, 72, 22, { track: 6 })!;
     expect(20 * 0.6 * px + 20 * 6).toBeLessThanOrEqual(600);
     expect(20 * 0.6 * (px + 1) + 20 * 6).toBeGreaterThan(600);
+  });
+});
+
+describe('manifest bbox (C16) — device-space bounds of every drawn text, for the no-clipping check', () => {
+  // The clipping guarantee (M2: every text inside the frame minus a 48 px margin) is only testable if
+  // the manifest knows WHERE each string landed after the archetype's and camera's transforms.
+  const entry = (source: string) => manifest().find((m: { source: string }) => m.source === source) as { bbox: { x: number; y: number; w: number; h: number } | null };
+
+  it('records the bbox of an api.text call under translate + scale (device space, not user space)', () => {
+    beginFrame();
+    const { ctx } = fakeCtx();
+    ctx.translate(100, 50);
+    ctx.scale(2, 2);
+    // 10 chars × 0.6 em × 40 px = 240 user px wide; ascent 28, descent 8; left-aligned at (10, 100)
+    text(ctx, { id: 'f.feature.77', text: 'abcdefghij', number: null, unit: null }, 10, 100, { size: 40 });
+    const { bbox } = entry('f.feature.77');
+    // user rect x 10..250, y 72..108 → device x 120..600, y 194..266
+    expect(bbox).toEqual({ x: 120, y: 194, w: 480, h: 72 });
+  });
+
+  it('stroked text pads the bbox by lineWidth/2 (the outline paints outside the glyph box), fill-only does not', () => {
+    beginFrame();
+    const { ctx } = fakeCtx();
+    ctx.scale(2, 2);
+    // 5 × 0.6 × 20 = 60 user px; ascent 14, descent 4 → glyph box x 10..70, y 86..104; lineWidth 6 → pad 3
+    text(ctx, { id: 'f.feature.81', text: 'abcde', number: null, unit: null }, 10, 100, { size: 20, mode: 'stroke', lineWidth: 6 });
+    expect(entry('f.feature.81').bbox).toEqual({ x: 14, y: 166, w: 132, h: 48 });
+    text(ctx, { id: 'f.feature.82', text: 'abcde', number: null, unit: null }, 10, 100, { size: 20, mode: 'both' }); // default lineWidth 2 → pad 1
+    expect(entry('f.feature.82').bbox).toEqual({ x: 18, y: 170, w: 124, h: 40 });
+    text(ctx, { id: 'f.feature.83', text: 'abcde', number: null, unit: null }, 10, 100, { size: 20, lineWidth: 6 }); // fill: lineWidth unused
+    expect(entry('f.feature.83').bbox).toEqual({ x: 20, y: 172, w: 120, h: 36 });
+  });
+
+  it('honours textAlign (centre) and unions repeated draws of the same item within one frame', () => {
+    beginFrame();
+    const { ctx } = fakeCtx();
+    const item = { id: 'f.feature.78', text: 'abcde', number: null, unit: null }; // 5 × 0.6 × 20 = 60 px
+    text(ctx, item, 500, 100, { size: 20, align: 'center' }); // x 470..530, y 86..104
+    text(ctx, item, 500, 300, { size: 20, align: 'center' }); // y 286..304
+    expect(entry('f.feature.78').bbox).toEqual({ x: 470, y: 86, w: 60, h: 218 });
+  });
+
+  it('a new frame resets bboxes: items not drawn in the latest frame carry bbox null (never a stale box)', () => {
+    beginFrame();
+    const { ctx } = fakeCtx();
+    text(ctx, { id: 'f.feature.79', text: 'gone', number: null, unit: null }, 0, 100, { size: 20 });
+    expect(entry('f.feature.79').bbox).not.toBeNull();
+    beginFrame();
+    text(ctx, { id: 'f.feature.80', text: 'kept', number: null, unit: null }, 0, 100, { size: 20 });
+    expect(entry('f.feature.79').bbox).toBeNull();
+    expect(entry('f.feature.80').bbox).not.toBeNull();
+  });
+
+  it('the bbox feeds offFrame: text pushed past the right edge by the transform is flagged', () => {
+    beginFrame();
+    const { ctx } = fakeCtx();
+    ctx.translate(1700, 0);
+    text(ctx, { id: 'f.feature.81', text: 'abcdefghij', number: null, unit: null }, 0, 500, { size: 40 }); // 240 px → x 1700..1940
+    text(ctx, { id: 'f.feature.82', text: 'ab', number: null, unit: null }, -800, 500, { size: 40 });
+    const flagged = offFrame(manifest()).map((m: { source: string }) => m.source);
+    expect(flagged).toContain('f.feature.81');
+    expect(flagged).not.toContain('f.feature.82');
   });
 });
 
