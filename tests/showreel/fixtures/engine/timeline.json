@@ -1,0 +1,190 @@
+{
+  "beats": [
+    {
+      "archetype": "cold-open-command",
+      "id": "b1",
+      "overlapIn": 0,
+      "overlapOut": 0.375,
+      "t0": 0,
+      "t1": 3.5,
+      "transitionOut": "zoom-through",
+      "variant": "terminal"
+    },
+    {
+      "archetype": "kinetic-text",
+      "id": "b2",
+      "overlapIn": 0.375,
+      "overlapOut": 0,
+      "t0": 3.125,
+      "t1": 7,
+      "transitionOut": "cut",
+      "variant": "stack"
+    },
+    {
+      "archetype": "metrics-counter-lock",
+      "id": "b3",
+      "overlapIn": 0,
+      "overlapOut": 0.375,
+      "t0": 7,
+      "t1": 10.5,
+      "transitionOut": "zoom-through",
+      "variant": "row"
+    },
+    {
+      "archetype": "kinetic-text",
+      "id": "b4",
+      "overlapIn": 0.375,
+      "overlapOut": 0,
+      "t0": 10.125,
+      "t1": 13.5,
+      "transitionOut": "cut",
+      "variant": "punch"
+    },
+    {
+      "archetype": "metrics-counter-lock",
+      "id": "b5",
+      "overlapIn": 0,
+      "overlapOut": 0,
+      "t0": 13.5,
+      "t1": 17,
+      "transitionOut": "cut",
+      "variant": "grid"
+    },
+    {
+      "archetype": "kinetic-text",
+      "id": "b6",
+      "overlapIn": 0,
+      "overlapOut": 0,
+      "t0": 17,
+      "t1": 20.5,
+      "transitionOut": "cut",
+      "variant": "stack"
+    },
+    {
+      "archetype": "kinetic-text",
+      "id": "b7",
+      "overlapIn": 0,
+      "overlapOut": 0,
+      "t0": 20.5,
+      "t1": 24,
+      "transitionOut": "cut",
+      "variant": "punch"
+    },
+    {
+      "archetype": "lockup-cta",
+      "id": "b8",
+      "overlapIn": 0,
+      "overlapOut": 0,
+      "t0": 24,
+      "t1": 30,
+      "transitionOut": "cut",
+      "variant": "center"
+    }
+  ],
+  "durationS": 30,
+  "fps": 60,
+  "frames": 1800,
+  "hits": [
+    {
+      "amp": 1,
+      "beatId": "b1",
+      "cue": "enter",
+      "kind": "boom",
+      "t": 2.5
+    },
+    {
+      "amp": 0.3,
+      "beatId": "b2",
+      "cue": "line",
+      "kind": "snap",
+      "t": 3.75
+    },
+    {
+      "amp": 0.4,
+      "beatId": "b3",
+      "cue": "lock",
+      "kind": "lock",
+      "t": 9
+    },
+    {
+      "amp": 0.3,
+      "beatId": "b4",
+      "cue": "line",
+      "kind": "snap",
+      "t": 10.625
+    },
+    {
+      "amp": 0.4,
+      "beatId": "b5",
+      "cue": "lock",
+      "kind": "lock",
+      "t": 15.5
+    },
+    {
+      "amp": 0.3,
+      "beatId": "b6",
+      "cue": "line",
+      "kind": "snap",
+      "t": 17.5
+    },
+    {
+      "amp": 0.3,
+      "beatId": "b7",
+      "cue": "line",
+      "kind": "snap",
+      "t": 21
+    },
+    {
+      "amp": 1,
+      "beatId": "b8",
+      "cue": "slam",
+      "kind": "slam",
+      "t": 24.75
+    },
+    {
+      "amp": 0.35,
+      "beatId": "b8",
+      "cue": "sweep",
+      "kind": "sweep",
+      "t": 27.5
+    }
+  ],
+  "music": {
+    "bpm": 120,
+    "key": "F#m"
+  },
+  "palette": "violet",
+  "sections": [
+    {
+      "name": "intro",
+      "t0": 0,
+      "t1": 3.5
+    },
+    {
+      "name": "build",
+      "t0": 3.5,
+      "t1": 17
+    },
+    {
+      "name": "peak",
+      "t0": 17,
+      "t1": 24
+    },
+    {
+      "name": "outro",
+      "t0": 24,
+      "t1": 30
+    }
+  ],
+  "seed": 7,
+  "typing": [
+    {
+      "beatId": "b1",
+      "chars": 11,
+      "enterAt": 2.5,
+      "interval": 0.052,
+      "t0": 0.45
+    }
+  ],
+  "version": 1
+}
