@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>showreel archetype fixture: orbit-network</title>
+<style>html, body { margin: 0; background: black; overflow: hidden; }</style>
+</head>
+<body>
+<!-- Test-local engine page (M2 Tasks 2-5): the shipped engine (/engine/core.mjs createEngine) with the
+     production registry PLUS archetypes/orbit-network.mjs injected, so the archetype is testable before the
+     orchestrator registers it in archetypes/index.mjs. Same window.SHOWREEL surface as engine/page.html (C10). -->
+<script type="module">
+  import { createEngine } from '/engine/core.mjs';
+  import { gpuRenderer } from '/engine/canvas.mjs';
+  import { loadFonts } from '/engine/fonts.mjs';
+  import { manifest } from '/engine/text.mjs';
+  import { ARCHETYPES, TRANSITIONS } from '/archetypes/index.mjs';
+  import orbitNetwork from '/archetypes/orbit-network.mjs';
+
+  const getJson = async (url) => {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`fixture page: ${url} -> HTTP ${res.status}`);
+    return res.json();
+  };
+  const S = { ready: null, renderer: gpuRenderer(), manifest };
+  window.SHOWREEL = S;
+  S.ready = (async () => {
+    const [timeline, resolved] = await Promise.all([getJson('/build/timeline.json'), getJson('/build/resolved.json')]);
+    await loadFonts('/fonts');
+    const eng = createEngine({ timeline, resolved, archetypes: { ...ARCHETYPES, [orbitNetwork.id]: orbitNetwork }, transitions: TRANSITIONS });
+    S.renderAt = eng.renderAt;
+    S.fit = eng.fit;
+    return true;
+  })();
+</script>
+</body>
+</html>
