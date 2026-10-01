@@ -67,7 +67,7 @@ for (let n = 1; n <= MAX_CHECKS; n++) {
     `\`${check}\` fails with ${run.failureCount} failure(s):\n${run.failures.join('\n')}\n\nFix the root causes in the code under test. Do not skip, delete or weaken tests to make them pass (AGENTS.md Rule 12); if a test itself is wrong, fix it and say why. Run the command yourself before reporting.`,
     { label: `fix:${n}`, phase: 'Fix', agentType: 'implementer' },
   )
-  if (!fixed) {
+  if (fixed === null) {
     log(`fix:${n} agent failed - stopping`)
     return { check, status: 'error', rounds, failures: run.failures }
   }

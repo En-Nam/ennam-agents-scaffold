@@ -65,7 +65,7 @@ const LENSES = [
   { key: 'tests', focus: 'missing or weak tests - tests that would still pass if the business logic broke (AGENTS.md Rule 9)' },
 ]
 
-const SCOPE = `Get the change set with \`git diff ${base}...HEAD\` plus \`git diff\` and \`git diff --staged\` for uncommitted work. Review ONLY changed lines and code they directly affect. Do not modify any file.`
+const SCOPE = `Get the change set with \`git diff ${base}...HEAD\` plus \`git diff\` and \`git diff --staged\` for uncommitted work. If \`${base}\` does not resolve (e.g. a clone with only remote branches), use \`origin/${base}\`. If no diff command works, do NOT return an empty list - return one blocker finding titled "Could not compute the diff" with the error, so an unreviewed change never reads as clean. Review ONLY changed lines and code they directly affect. Do not modify any file.`
 
 const SEVERITY = { blocker: 0, major: 1, minor: 2, nit: 3 }
 

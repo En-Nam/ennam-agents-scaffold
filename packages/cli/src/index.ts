@@ -174,6 +174,7 @@ cli
     }
     const ctx = buildContext({ profile: displayProfile.name, cwd, version: PKG.version });
     const byRel = new Map(entries.map(e => [e.relPath, e]));
+    let blockedHooks: BlockedHook[] = [];  // filled by the json-merge provider for .claude/settings.json
     const provider = async (rel: string) => {
       const entry = byRel.get(rel);
       if (!entry) return null;
@@ -211,6 +212,9 @@ cli
           }
         }
         const scaffoldObj = await renderJsonContent(entry, ctx);
+        // v1.14 — name scaffold hooks that user-wins merging will drop (e.g. agent-org's
+        // SubagentStop), from the same parsed objects the merge uses.
+        if (rel === '.claude/settings.json') blockedHooks = findBlockedHooks(existingObj, scaffoldObj);
         const merged = mergeJson(
           existingObj as Parameters<typeof mergeJson>[0],
           scaffoldObj as Parameters<typeof mergeJson>[0],
@@ -244,10 +248,6 @@ cli
     const plan: OperationPlan = { cwd, profile: displayProfile, ops, hasGit };
 
     printPlan(plan);
-
-    // v1.14 — read the user's settings BEFORE writing so we can name scaffold hooks
-    // that user-wins merging will drop (e.g. agent-org's SubagentStop).
-    const blockedHooks = await computeBlockedHooks(cwd, byRel.get('.claude/settings.json'), ctx);
 
     if (flags.dryRun) {
       printBlockedHooks(blockedHooks);
@@ -309,23 +309,6 @@ const isMain = (() => {
 })();
 if (isMain) {
   cli.parse();
-}
-
-async function computeBlockedHooks(
-  cwd: string,
-  entry: Parameters<typeof renderJsonContent>[0] | undefined,
-  ctx: Parameters<typeof renderJsonContent>[1],
-): Promise<BlockedHook[]> {
-  if (!entry) return [];
-  let user: Record<string, unknown>;
-  try {
-    const txt = await readFile(path.join(cwd, '.claude', 'settings.json'), 'utf8');
-    if (!txt.trim()) return [];
-    user = JSON.parse(txt) as Record<string, unknown>;
-  } catch {
-    return [];  // absent — the merge writes our hooks. (Invalid JSON aborts at plan time.)
-  }
-  return findBlockedHooks(user, await renderJsonContent(entry, ctx));
 }
 
 function printBlockedHooks(blocked: BlockedHook[]): void {

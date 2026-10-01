@@ -13,6 +13,11 @@ import { resolveWorkflowSrc, recommendWorkflow } from './workflow.js';
  * `.gitignore.append`     → `.gitignore`
  * `settings.json.hbs`     → `settings.json`
  */
+/** A profile root README.md documents the profile: install it under docs/, never over the user README (v1.14). */
+function profileTargetRelPath(srcRel: string, profileName: string): string {
+  return srcRel === 'README.md' ? `docs/agents-scaffold/${profileName}.md` : targetRelPath(srcRel);
+}
+
 function targetRelPath(srcRel: string): string {
   return srcRel
     .replace(/\.partial\.hbs$/, '')
@@ -71,7 +76,7 @@ export async function enumerateFiles(profile: ProfileDef, opts: EnumerateOptions
     if (collectMarker(src, rel, false)) continue;
     if (src.endsWith('.partial.hbs')) continue;
     // A profile's root README.md documents the profile — never target the user's own README.
-    const target = rel === 'README.md' ? `docs/agents-scaffold/${profile.name}.md` : targetRelPath(rel);
+    const target = profileTargetRelPath(rel, profile.name);
     map.set(target, {
       srcAbs: src,
       relPath: target,
@@ -198,7 +203,7 @@ export async function enumerateProfiles(profiles: ProfileDef[], opts: EnumerateO
       if (rel === '.mcp.json.partial.hbs') continue;    // json — handled below
       if (src.endsWith('.partial.hbs')) continue;
       // Profile README → its own docs path (never the user's README; never a compose collision).
-      const target = rel === 'README.md' ? `docs/agents-scaffold/${profile.name}.md` : targetRelPath(rel);
+      const target = profileTargetRelPath(rel, profile.name);
       const content = await readFile(src, 'utf8');
       const prev = owner.get(target);
       if (prev && prev.content !== content) {

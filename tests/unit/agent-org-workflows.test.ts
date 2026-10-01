@@ -279,3 +279,32 @@ describe('review-changes — unverified + ordering', () => {
       .toEqual(['v-blocker', 't-major', 'c-minor', 'v-nit']);
   });
 });
+
+describe('second-review follow-ups', () => {
+  const proposal = (approach: string) => ({ approach, rationale: 'r', tradeoffs: 't', steps: ['s'] });
+
+  it('judge-panel re-letters survivors: with risk failed, "B" means fit (not risk, not none)', async () => {
+    const { result } = await run('judge-panel.js', 'q', async (_p, o) => {
+      if (o.label === 'advocate:simplicity') return proposal('simple');
+      if (o.label === 'advocate:risk') return null;
+      if (o.label === 'advocate:fit') return proposal('fits');
+      return { winner: 'B', tie: false, verdict: 'v', scores: [] };
+    });
+    expect(result.tie).toBe(false);
+    expect((result.winner as { advocate: string }).advocate).toBe('fit');
+  });
+
+  it('object-form args: review-changes {base}, judge-panel {question}', async () => {
+    const r = await run('review-changes.js', { base: 'develop' }, async () => ({ findings: [] }));
+    expect(r.result.base).toBe('develop');
+    const j = await run('judge-panel.js', { question: 'Which DB?' }, async () => null);
+    expect(j.result.question).toBe('Which DB?');
+  });
+
+  it('fix-loop: a fix agent that returns empty text is not mistaken for a dead agent', async () => {
+    const checks = [{ passed: false, failureCount: 1, failures: ['x'] }, { passed: true, failureCount: 0, failures: [] }];
+    const { result } = await run('fix-loop.js', 'npm test', async (_p, o) =>
+      o.label?.startsWith('check') ? checks.shift() : '');
+    expect(result.status).toBe('green');
+  });
+});

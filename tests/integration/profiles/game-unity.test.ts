@@ -48,6 +48,7 @@ describe('install game-unity profile into empty cwd', () => {
 
     // Profile README lands under docs/agents-scaffold/ — never the user's root README (v1.14)
     expect((await stat(path.join(cwd, 'docs/agents-scaffold/game-unity.md'))).isFile()).toBe(true);
+    await expect(stat(path.join(cwd, 'README.md'))).rejects.toThrow();  // user README never written
 
     // CLAUDE.md has both game-specific marker blocks
     const claude = await readFile(path.join(cwd, 'CLAUDE.md'), 'utf8');

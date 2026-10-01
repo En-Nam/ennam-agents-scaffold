@@ -49,7 +49,7 @@ export async function printNextSteps(profile: ProfileDef, result: ExecuteResult,
   // agent-org: SubagentStop hook + isolatePeerMachines merge via the profile settings
   // partial (#25). If the user's own SubagentStop blocks ours, index.ts prints a warning.
   if (profile.name === 'agent-org') {
-    steps.push('The SubagentStop hook is now installed automatically in .claude/settings.json (merged from the profile; the OS-correct .ps1/.sh command is already selected) — no manual paste needed.');
+    steps.push('The SubagentStop hook is merged into .claude/settings.json automatically (OS-correct .ps1/.sh command already selected) — unless you already define SubagentStop yourself; then see the warning at the end.');
     steps.push('Claude Code dynamic workflows installed (.claude/workflows/): /review-changes [base-ref], /judge-panel <question>, /fix-loop <check command>. Watch runs with /workflows. (Not the same thing as the CLAUDE.md --workflow preset.)');
     steps.push('COST DISCLOSURE: agent-org runs multi-agent dispatch on your Anthropic account — 5-10x tokens vs solo (/review-changes ~6 agents, /fix-loop up to 9). Only dispatch when task decomposition genuinely helps.');
     steps.push('Requires Claude Code >= 2.1.248 (dynamic workflows + agentType roles). The wizard preflight will WARN if you are behind.');

@@ -72,5 +72,29 @@ describe('install agent-org profile', () => {
     expect(r.stderr).toMatch(/\.claude\/settings\.json is not valid JSON/);
     expect(await readFile(path.join(cwd, '.claude', 'settings.json'), 'utf8')).toBe(broken);
   });
+
+  it("upgrade from a v1.9 paste for the OTHER OS: prints REPLACE + the new entry (never a duplicate add)", async () => {
+    const { path: cwd } = await tmpDir({ unsafeCleanup: true });
+    await mkdir(path.join(cwd, ".claude"), { recursive: true });
+    const other = process.platform === "win32" ? "bash .claude/hooks/subagent-log.sh"
+      : "powershell -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/subagent-log.ps1";
+    await writeFile(path.join(cwd, ".claude", "settings.json"),
+      JSON.stringify({ hooks: { SubagentStop: [{ hooks: [{ type: "command", command: other }] }] } }));
+    const { stdout } = await install(cwd);
+    expect(stdout).toContain(`REPLACE the outdated scaffold command "${other}"`);
+    expect(stdout).toMatch(/\n\s+with \{ "hooks": \[ \{ "type": "command", "command": "[^"]*subagent-log\.(ps1|sh)" \} \] \}/);
+    expect(stdout).not.toMatch(/Append to the hooks\.SubagentStop array/);
+  });
+
+  it("--dry-run prints the blocked-hook warning and writes nothing", async () => {
+    const { path: cwd } = await tmpDir({ unsafeCleanup: true });
+    await mkdir(path.join(cwd, ".claude"), { recursive: true });
+    const mine = JSON.stringify({ hooks: { SubagentStop: [{ hooks: [{ type: "command", command: "node my-hook.js" }] }] } });
+    await writeFile(path.join(cwd, ".claude", "settings.json"), mine);
+    await execa("git", ["init", "-q"], { cwd });
+    const { stdout } = await execa("node", [CLI_ENTRY, "agent-org", "--dry-run", "--no-prompts"], { cwd });
+    expect(stdout).toMatch(/did NOT add its own entry/);
+    expect(await readFile(path.join(cwd, ".claude", "settings.json"), "utf8")).toBe(mine);
+  });
 });
 
