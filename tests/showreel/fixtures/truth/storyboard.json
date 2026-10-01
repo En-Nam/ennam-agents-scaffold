@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "durationS": 30,
+  "seed": 7,
+  "palette": "violet",
+  "beats": [
+    { "id": "b1", "archetype": "cold-open-command", "variant": "terminal", "weight": 1.0,
+      "bindings": { "command": "f.command.1" }, "phrases": { "caption": "p.open.1" }, "transitionOut": "zoom-through",
+      "cues": [ { "name": "enter", "at": 0.75, "kind": "boom", "amp": 1.0 } ] },
+    { "id": "b2", "archetype": "kinetic-text", "variant": "stack", "weight": 1,
+      "bindings": { "lines": ["f.feature.1", "f.feature.2"] }, "phrases": { "lead": "p.lead.1" }, "transitionOut": "cut" },
+    { "id": "b3", "archetype": "metrics-counter-lock", "variant": "row", "weight": 1.5,
+      "bindings": { "counters": ["f.count.1", "f.count.2"] }, "phrases": { "label": "p.metrics.1" }, "transitionOut": "zoom-through" },
+    { "id": "b4", "archetype": "kinetic-text", "variant": "punch", "weight": 0.5,
+      "bindings": { "lines": "f.app.tagline.1" }, "transitionOut": "cut" },
+    { "id": "b5", "archetype": "kinetic-text", "variant": "stack", "weight": 1,
+      "bindings": { "lines": ["f.stack.item.1"] }, "transitionOut": "cut" },
+    { "id": "b6", "archetype": "metrics-counter-lock", "variant": "grid", "weight": 1,
+      "bindings": { "counters": "f.count.1" }, "transitionOut": "cut" },
+    { "id": "b7", "archetype": "lockup-cta", "variant": "center", "weight": 2,
+      "bindings": { "name": "f.app.name.1", "tagline": "f.app.tagline.1" }, "phrases": { "cta": "p.cta.1" }, "transitionOut": "cut" }
+  ]
+}

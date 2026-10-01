@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "phrases": [
+    { "id": "p.open.1", "tags": ["open"], "text": "One command." },
+    { "id": "p.open.2", "tags": ["open"], "text": "Start here." },
+    { "id": "p.open.3", "tags": ["open"], "text": "Watch this." },
+    { "id": "p.open.4", "tags": ["open"], "text": "Ready when you are." },
+    { "id": "p.lead.1", "tags": ["lead"], "text": "What's inside" },
+    { "id": "p.lead.2", "tags": ["lead"], "text": "Under the hood" },
+    { "id": "p.lead.3", "tags": ["lead"], "text": "The essentials" },
+    { "id": "p.lead.4", "tags": ["lead"], "text": "Built in" },
+    { "id": "p.metrics.1", "tags": ["metrics"], "text": "By the numbers" },
+    { "id": "p.metrics.2", "tags": ["metrics"], "text": "Counted from the code" },
+    { "id": "p.metrics.3", "tags": ["metrics"], "text": "At a glance" },
+    { "id": "p.cta.1", "tags": ["cta"], "text": "Get started" },
+    { "id": "p.cta.2", "tags": ["cta"], "text": "Try it now" },
+    { "id": "p.cta.3", "tags": ["cta"], "text": "Start building" }
+  ]
+}

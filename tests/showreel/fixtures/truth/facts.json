@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "minimumGate": { "passed": true, "missing": [] },
+  "brand": { "name": "Acme Shop", "palette": "violet", "wordmark": "f.app.name.1" },
+  "facts": [
+    { "id": "f.app.name.1", "kind": "app.name", "value": "Acme Shop", "display": "Acme Shop", "unit": null,
+      "source": { "file": "package.json", "locator": "name", "extractor": "package-json", "rule": "package.json name" }, "hash": "sha256:1111111111111111" },
+    { "id": "f.app.tagline.1", "kind": "app.tagline", "value": "Checkout in one click", "display": "Checkout in one click", "unit": null,
+      "source": { "file": "package.json", "locator": "description", "extractor": "package-json", "rule": "package.json description" }, "hash": "sha256:2222222222222222" },
+    { "id": "f.feature.1", "kind": "feature", "value": "Saved carts", "display": "Saved carts", "unit": null,
+      "source": { "file": "README.md", "locator": "features/1", "extractor": "readme-features", "rule": "README Features list item" }, "hash": "sha256:3333333333333333" },
+    { "id": "f.feature.2", "kind": "feature", "value": "Guest checkout", "display": "Guest checkout", "unit": null,
+      "source": { "file": "README.md", "locator": "features/2", "extractor": "readme-features", "rule": "README Features list item" }, "hash": "sha256:4444444444444444" },
+    { "id": "f.stack.item.1", "kind": "stack.item", "value": "next", "display": "Next.js", "unit": null,
+      "source": { "file": "package.json", "locator": "dependencies/next", "extractor": "package-json", "rule": "known framework dependency" }, "hash": "sha256:5555555555555555" },
+    { "id": "f.route.1", "kind": "route", "value": "/checkout", "display": "/checkout", "unit": null,
+      "source": { "file": "app/checkout/page.tsx", "locator": "path", "extractor": "next-app-routes", "rule": "app/**/page.(tsx|jsx|ts|js) -> route path" },
+      "collection": "routes", "order": 1, "hash": "sha256:6666666666666666" },
+    { "id": "f.command.1", "kind": "command", "value": "npm run dev", "display": "npm run dev", "unit": null,
+      "source": { "file": "package.json", "locator": "scripts/dev", "extractor": "package-json", "rule": "package.json scripts key" }, "hash": "sha256:7777777777777777" },
+    { "id": "f.command.2", "kind": "command", "value": "npm run build:all -- --filter=@acme/web --filter=@acme/api --concurrency=8 --cache-dir=.cache",
+      "display": "npm run build:all -- --filter=@acme/web --filter=@acme/api --concurrency=8 --cache-dir=.cache", "unit": null,
+      "source": { "file": "package.json", "locator": "scripts/build:all", "extractor": "package-json", "rule": "package.json scripts key" }, "hash": "sha256:8888888888888888" },
+    { "id": "f.count.1", "kind": "count", "value": 42, "display": "42", "unit": "routes",
+      "source": { "file": "app", "locator": "glob", "extractor": "count", "rule": "count of route facts" }, "hash": "sha256:9999999999999999" },
+    { "id": "f.count.2", "kind": "count", "value": 7, "display": "7", "unit": "commands",
+      "source": { "file": "package.json", "locator": "scripts", "extractor": "count", "rule": "count of package.json scripts" }, "hash": "sha256:aaaaaaaaaaaaaaaa" }
+  ]
+}
