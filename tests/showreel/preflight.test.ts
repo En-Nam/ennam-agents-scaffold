@@ -483,6 +483,21 @@ describe('render/browser.mjs import graph', () => {
     expect(rel).not.toContain('cli.mjs');
     expect(rel).not.toContain('lib/preflight/probe.mjs');
   });
+
+  it('lib/preflight/probe.mjs does not (transitively) import cli.mjs (no cli -> cmd -> probe -> cli cycle)', () => {
+    const root = join(REPO_ROOT, 'templates/showreel/.claude/showreel');
+    const seen = new Set<string>();
+    const walk = (file: string) => {
+      if (seen.has(file)) return;
+      seen.add(file);
+      const src = readFileSync(file, 'utf8');
+      for (const m of src.matchAll(/^\s*(?:import|export)[^'"]*from\s+['"](\.[^'"]+)['"]/gm)) walk(path.resolve(path.dirname(file), m[1]));
+    };
+    walk(join(root, 'lib/preflight/probe.mjs'));
+    const rel = [...seen].map((f) => path.relative(root, f).replace(/\\/g, '/'));
+    expect(rel).toContain('lib/util/version.mjs'); // VERSION comes from the dependency-free module
+    expect(rel).not.toContain('cli.mjs');
+  });
 });
 
 describe('runGpuProbe — child process hygiene (fake browser module)', () => {

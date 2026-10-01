@@ -327,6 +327,10 @@ describe.skipIf(!E2E)('showreel engine in the browser (SHOWREEL_E2E=1)', () => {
   }, 180_000);
 });
 
-describe.skipIf(E2E)('showreel engine in the browser (skipped)', () => {
-  it.skip('SKIPPED: set SHOWREEL_E2E=1 (+ SHOWREEL_TOOL_DIR) to run AC3 determinism, manifest, textfit, glyphs, GPU-less', () => {});
-});
+// Registered only when E2E is off: a full E2E run must report 0 skipped (Rule 12), so a
+// skipped real case can never hide behind this placeholder.
+if (!E2E) {
+  describe('showreel engine in the browser (skipped)', () => {
+    it.skip('SKIPPED: set SHOWREEL_E2E=1 (+ SHOWREEL_TOOL_DIR) to run AC3 determinism, manifest, textfit, glyphs, GPU-less', () => {});
+  });
+}

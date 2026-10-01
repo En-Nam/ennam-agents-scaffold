@@ -5,6 +5,7 @@ const SR = 48000;
 const CEILING = 0.891; // -1 dBFS sample peak
 const CLIP = 0.99997;
 const AFTER = 0.04, BEFORE = 0.08, MIN_JUMP_DB = 3;
+const SEARCH = 0.05;
 
 const db = (x) => 20 * Math.log10(Math.max(x, 1e-9));
 const lpCoef = (fc) => 1 - Math.exp(-2 * Math.PI * fc / SR);
@@ -45,7 +46,10 @@ export function analyzeScore(score, timeline) {
   const jumpAt = (s) => Math.max(...bands.map((c) => db(rms(c, s, s + nA)) - db(rms(c, s - nB, s))));
 
   const frame = 1 / timeline.fps;
-  const span = Math.round(3 * frame * SR), step = 24; // search ±3 frames at 0.5 ms
+  // Search a fixed ±SEARCH window (= ±3 frames at 60 fps) at 0.5 ms steps. It must NOT scale with the
+  // frame: at 30 fps a ±3-frame (±100 ms) window reached louder neighbouring bed onsets and failed
+  // in-sync hits (found by the Task 8 e2e). The sync tolerance below stays ±1 frame of timeline.fps.
+  const span = Math.round(SEARCH * SR), step = 24;
   const hits = [...timeline.hits].sort((a, b) => a.t - b.t).map((h) => {
     const c = Math.round(h.t * SR);
     let best = -Infinity, bestS = c;

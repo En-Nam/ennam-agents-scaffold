@@ -77,13 +77,14 @@ describe('facts — fixture extraction (exact ids/kinds/displays)', () => {
       // ids follow Knowledge Source Priority order within a kind.
       ['f.app.tagline.1', 'app.tagline', 'Acme Shop is a storefront for tiny teams.'],
       ['f.app.tagline.2', 'app.tagline', 'Checkout in one tap.'],
-      // Serena first; services/decisions H1s dedupe against INDEX titles.
+      // Serena first: INDEX "## Services" bullets + services/*.md H1s only (decisions are not
+      // features), deduped against each other.
       ['f.feature.1', 'feature', 'Cart service'],
-      ['f.feature.2', 'feature', 'Stripe payments'],
       // README bullets under "Features" only: bold title / text before ":" kept, nested
-      // bullets and fenced code ignored, "`Stripe payments`" deduped against Serena.
-      ['f.feature.3', 'feature', 'One-tap checkout'],
-      ['f.feature.4', 'feature', 'Order tracking'],
+      // bullets and fenced code ignored; "`Stripe payments`" is a README claim, so it stays.
+      ['f.feature.2', 'feature', 'One-tap checkout'],
+      ['f.feature.3', 'feature', 'Order tracking'],
+      ['f.feature.4', 'feature', 'Stripe payments'],
       // Whitelisted deps only (zod is not), dependencies + devDependencies, whitelist order.
       ['f.stack.item.1', 'stack.item', 'Next.js'],
       ['f.stack.item.2', 'stack.item', 'React'],
@@ -128,10 +129,12 @@ describe('facts — fixture extraction (exact ids/kinds/displays)', () => {
       ['f.stack.item.4', 'stack.item', 'pytest'],
       ['f.stack.item.5', 'stack.item', 'Uvicorn'],
       ['f.command.1', 'command', 'inventory'],
-      ['f.route.1', 'route', 'GET /health'],
-      ['f.route.2', 'route', 'POST /items'],
-      ['f.route.3', 'route', 'GET /items/{item_id}'],
-      ['f.count.1', 'count', '3'],
+      // inventory/items.py: APIRouter(prefix="/items") + @router.get("/{id}") → the served path.
+      ['f.route.1', 'route', 'GET /items/{id}'],
+      ['f.route.2', 'route', 'GET /health'],
+      ['f.route.3', 'route', 'POST /items'],
+      ['f.route.4', 'route', 'GET /items/{item_id}'],
+      ['f.count.1', 'count', '4'],
       ['f.count.2', 'count', '5'],
       ['f.count.3', 'count', '1'],
       // tests/test_items.py + tests/unit/test_stock.py; conftest and .venv excluded.
@@ -187,8 +190,12 @@ describe('facts — fixture extraction (exact ids/kinds/displays)', () => {
 
   // Raw extractor output (before extract.mjs dedupes by display), so a second invented
   // "GET /api/Customers" cannot hide behind the dedupe.
-  const dotnetCollect = (file: string, text: string) =>
-    routesSource.collect({ files: [file], has: () => true, read: () => text }) as Fact[];
+  // A web .csproj is part of every probe repo: dotnet routes are only read in ASP.NET projects.
+  const WEB_CSPROJ = '<Project Sdk="Microsoft.NET.Sdk.Web"></Project>';
+  const dotnetCollect = (file: string, text: string, more: Record<string, string> = {}) => {
+    const files: Record<string, string> = { 'Web/Web.csproj': WEB_CSPROJ, [file]: text, ...more };
+    return routesSource.collect({ files: Object.keys(files).sort(), has: (f: string) => f in files, read: (f: string) => files[f] }) as Fact[];
+  };
 
   it('dotnet: an action-level [Route("t")] is the template of a template-less [HttpGet] — never the bare class base', () => {
     // Rule 13 / D8: [HttpGet][Route("featured")] under [Route("api/[controller]")] is served at
@@ -239,16 +246,171 @@ describe('facts — fixture extraction (exact ids/kinds/displays)', () => {
     await runFacts(root);
     const displays = readFacts(root).facts.filter((x) => x.kind === 'route').map((x) => x.display);
     // The fixture conftest.py also declares "/boom" on a throwaway app.
-    expect(displays).toEqual(['GET /health', 'POST /items', 'GET /items/{item_id}']);
+    expect(displays).toEqual(['GET /items/{id}', 'GET /health', 'POST /items', 'GET /items/{item_id}']);
   });
 
-  it('serena: INDEX bullets under Backlog / Active Comms are not features (pending work is not a shipped feature)', async () => {
+  // Orchestrator ruling (M1): only Services describe what the product does. Decisions are design
+  // choices ("Stripe payments" = why Stripe), Backlog is unbuilt work, Comms is bookkeeping.
+  it('serena: only INDEX Services bullets + services/*.md titles are features (decisions/backlog/comms are not shipped features)', async () => {
     const root = tempRepo('js-next');
     await runFacts(root);
     const features = readFacts(root).facts.filter((x) => x.kind === 'feature').map((x) => x.display);
     expect(features).not.toContain('Refund flow rework');
     expect(features).not.toContain('dev-to-qa checkout question');
-    expect(features).toEqual(['Cart service', 'Stripe payments', 'One-tap checkout', 'Order tracking']);
+    // "Stripe payments" is still a feature — but only because the README's Features list claims it,
+    // never because a decision memory exists.
+    expect(features).toEqual(['Cart service', 'One-tap checkout', 'Order tracking', 'Stripe payments']);
+    const sources = readFacts(root).facts.filter((x) => x.kind === 'feature').map((x) => x.source.file);
+    expect(sources.filter((f) => f.includes('/decisions/'))).toEqual([]);
+    expect(readFacts(root).facts.find((x) => x.display === 'Stripe payments')!.source.file).toBe('README.md');
+  });
+
+  // ---- Route truth (Rule 13 / D8): a route on screen must be one the product really serves. ----
+  const memCollect = (files: Record<string, string>) =>
+    (routesSource.collect({ files: Object.keys(files).sort(), has: (f: string) => f in files, read: (f: string) => files[f] }) as Fact[])
+      .map((r) => r.display);
+
+  it('fastapi: APIRouter(prefix="…") is prepended — "GET /items/{id}", never the rootless "GET /{id}"', async () => {
+    const root = tempRepo('python-fastapi');
+    await runFacts(root);
+    const displays = readFacts(root).facts.filter((x) => x.kind === 'route').map((x) => x.display);
+    expect(displays).toContain('GET /items/{id}');
+    expect(displays).not.toContain('GET /{id}');
+  });
+
+  it('fastapi: a router mounted with include_router(prefix=…) or a non-literal prefix is not emitted (real path unknowable)', () => {
+    const included = memCollect({
+      'app/main.py': 'from fastapi import FastAPI\nfrom app import auth\napp = FastAPI()\napp.include_router(auth.router, prefix="/api")\n\n@app.get("/health")\ndef h(): ...\n',
+      'app/auth.py': 'from fastapi import APIRouter\nrouter = APIRouter()\n\n@router.post("/login")\ndef login(): ...\n',
+    });
+    // The real route is POST /api/login; "POST /login" does not exist. App routes are unaffected.
+    expect(included).toEqual(['GET /health']);
+
+    const nonLiteral = memCollect({
+      'app/users.py': 'from fastapi import APIRouter\nPREFIX = "/users"\nrouter = APIRouter(prefix=PREFIX)\n\n@router.get("/{id}")\ndef u(): ...\n',
+      // A "router" imported from elsewhere: its prefix is not visible in this file.
+      'app/orders.py': 'from app.deps import router\n\n@router.get("/{id}")\ndef o(): ...\n',
+    });
+    expect(nonLiteral).toEqual([]);
+  });
+
+  it('python: decorators in comments and docstrings are not routes', () => {
+    const routes = memCollect({
+      'app/main.py': [
+        'from fastapi import FastAPI',
+        'app = FastAPI()',
+        '# @app.get("/legacy")',
+        'def helper():',
+        '    """Example:',
+        '    @app.get("/doc-example")',
+        '    """',
+        '',
+        '@app.get("/live")',
+        'def live(): ...',
+      ].join('\n'),
+    });
+    expect(routes).toEqual(['GET /live']);
+  });
+
+  it('routes: tests/, fixtures/, samples/ … and *.Tests projects are not product code (no route from them)', async () => {
+    const root = tempRepo('js-next');
+    const own = ['/', '/products/[id]', '/checkout'];
+    // A whole FastAPI and ASP.NET fixture copied under tests/fixtures/ (as in this scaffold repo).
+    cpSync(path.join(FIXTURES, 'python-fastapi'), path.join(root, 'tests', 'fixtures', 'py'), { recursive: true });
+    cpSync(path.join(FIXTURES, 'dotnet-mvc'), path.join(root, 'tests', 'fixtures', 'dotnet'), { recursive: true });
+    write(root, 'tests/fake_app.py', 'from fastapi import FastAPI\napp = FastAPI()\n\n@app.get("/boom")\ndef b(): ...\n');
+    write(root, 'samples/demo/server.py', 'from fastapi import FastAPI\napp = FastAPI()\n\n@app.get("/sample")\ndef s(): ...\n');
+    write(root, 'src/Api.Tests/FakeController.cs', '[Route("fake")]\npublic class FakeController : ControllerBase { }\n');
+    await runFacts(root);
+    const routes = readFacts(root).facts.filter((x) => x.kind === 'route');
+    expect(routes.map((x) => x.display).sort()).toEqual([...own].sort());
+    expect(routes.every((x) => x.source.extractor === 'next-app-routes')).toBe(true);
+  });
+
+  it('dotnet: a class [Route] inherited from an in-repo base controller roots the actions; an unseen base drops relative templates', () => {
+    const inherited = dotnetCollect('Controllers/OrdersController.cs', [
+      'public class OrdersController : ApiBaseController {',
+      '    [HttpGet("{id}")]',
+      '    public IActionResult Get(int id) => Ok();',
+      '}',
+    ].join('\n'), {
+      'Controllers/ApiBaseController.cs': '[ApiController]\n[Route("api/[controller]")]\npublic abstract class ApiBaseController : ControllerBase {}\n',
+    }).map((r) => r.display);
+    // RouteAttribute is inherited and [controller] is the DERIVED controller's name.
+    expect(inherited).toEqual(['GET /api/Orders/{id}']);
+
+    const unseen = dotnetCollect('Controllers/OrdersController.cs', [
+      '[ApiController]',
+      'public class OrdersController : Acme.Shared.ApiBaseController {',
+      '    [HttpGet("{id}")]',
+      '    public IActionResult Get(int id) => Ok();',
+      '    [HttpGet("~/status")]',
+      '    public IActionResult Status() => Ok();',
+      '}',
+    ].join('\n')).map((r) => r.display);
+    expect(unseen).not.toContain('GET /{id}');
+    expect(unseen).toEqual(['GET /status']); // absolute templates do not depend on the base
+  });
+
+  it('dotnet: non-MVC "*Controller" classes and projects without ASP.NET are not routes; a verb-less action [Route] is attribute-routed', () => {
+    // Unity: a MonoBehaviour named PlayerController is not served at /Player.
+    expect(dotnetCollect('Assets/PlayerController.cs', 'public class PlayerController : MonoBehaviour { void Update() {} }')).toEqual([]);
+    // No web .csproj in the repo: even a Controller subclass is not an ASP.NET route.
+    expect(routesSource.collect({ files: ['Lib/HomeController.cs', 'Lib/Lib.csproj'], has: () => true,
+      read: (f: string) => (f.endsWith('.csproj') ? '<Project Sdk="Microsoft.NET.Sdk"></Project>' : 'public class HomeController : Controller { }') })).toEqual([]);
+    // [Route("bar/list")] with no Http verb: reachable at /bar/list, NOT at the conventional /Bar.
+    const bar = dotnetCollect('BarController.cs', [
+      'public class BarController : Controller {',
+      '    [Route("bar/list")]',
+      '    public IActionResult List() => View();',
+      '}',
+    ].join('\n')).map((r) => r.display);
+    expect(bar).toEqual(['/bar/list']);
+  });
+
+  it('dotnet: [action] is the action name, [area] needs [Area("…")], and a class [Route] with {params} keeps its base', () => {
+    const routes = dotnetCollect('C.cs', [
+      '[Route("api/[controller]/[action]")]',
+      'public class FooController : ControllerBase {',
+      '    [HttpGet]',
+      '    public async Task<IActionResult> BarAsync() => Ok();',
+      '    [HttpPost]',
+      '    [ActionName("renamed")]',
+      '    public IActionResult Baz() => Ok();',
+      '}',
+      '[Route("[area]/[controller]")]',
+      'public class NoAreaController : ControllerBase {',
+      '    [HttpGet("x")]',
+      '    public IActionResult X() => Ok();',
+      '}',
+      '[Area("admin")]',
+      '[Route("[area]/[controller]")]',
+      'public class UsersController : ControllerBase {',
+      '    [HttpGet("x")]',
+      '    public IActionResult X() => Ok();',
+      '}',
+      '[Route("api/tenants/{tenantId}/[controller]")]',
+      'public class MembersController : ControllerBase {',
+      '    [HttpGet("{id}")]',
+      '    public IActionResult Get(int id) => Ok();',
+      '}',
+    ].join('\n')).map((r) => r.display);
+    expect(routes).toEqual(['GET /api/Foo/Bar', 'POST /api/Foo/renamed', 'GET /admin/Users/x', 'GET /api/tenants/{tenantId}/Members/{id}']);
+    expect(routes.some((r) => /\[(action|area|controller)\]/i.test(r))).toBe(false);
+  });
+
+  it('readme: bullets under "Planned features" / "Roadmap / features" / "Feature flags" are not shipped features', async () => {
+    const root = tempRepo('doc-only');
+    write(root, 'README.md', [
+      '# App', '', 'Does things.', '',
+      '## Features', '', '- Live sync', '',
+      '## Planned features', '', '- Offline sync', '- SSO', '',
+      '## Roadmap / features', '', '- Dark mode', '',
+      '## Feature flags', '', '- NEW_UI', '',
+    ].join('\n'));
+    await runFacts(root);
+    const features = readFacts(root).facts.filter((x) => x.kind === 'feature' && x.source.file === 'README.md').map((x) => x.display);
+    expect(features).toEqual(['Live sync']);
   });
 
   it('every fixture produces schema-valid facts with a recorded rule and a content hash', async () => {
@@ -493,6 +655,15 @@ describe('facts — fail loud', () => {
     expect(code).toBe(1);
     expect(out.error.code).toBe('E_TOML');
     expect(out.error.message).toContain('description');
+  });
+
+  it('pyproject multi-line basic string: an escaped \\" right before """ does not end the string early', async () => {
+    const root = tempRepo('python-fastapi');
+    write(root, 'pyproject.toml', '[project]\nname = "inv"\ndescription = """Say \\""" hi"""\n\n[project.scripts]\ninventory = "x"\n');
+    expect((await runFacts(root)).code).toBe(0);
+    // TOML: \" is a quote, then "" — the string is `Say """ hi`, not the truncated `Say \`.
+    expect(readFacts(root).facts.find((x) => x.kind === 'app.tagline' && x.source.file === 'pyproject.toml')!.display)
+      .toBe('Say """ hi');
   });
 
   it('unknown arguments are rejected', async () => {

@@ -8,8 +8,8 @@
 // and removes the profile. Chrome/Chromium use puppeteer.launch and fall back to the same
 // connect path only if launch fails.
 //
-// Deliberately does NOT import lib/preflight/probe.mjs: that module pulls in cli.mjs for
-// VERSION, and every render-path consumer would then evaluate cli.mjs (circular, fragile).
+// Deliberately does NOT import lib/preflight/probe.mjs: probe imports this file, so that
+// would be an import cycle on every render path (and neither may import cli.mjs).
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';

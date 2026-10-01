@@ -86,6 +86,19 @@ function strings(raw) {
 }
 
 /**
+ * Index of the closing delimiter in text. In a """basic""" string a backslash escapes the next
+ * character, so `\"` never starts the closing """ (an even run of backslashes escapes itself).
+ */
+function findClose(text, delim) {
+  if (delim !== '"""') return text.indexOf(delim);
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '\\') i++;
+    else if (text.startsWith(delim, i)) return i;
+  }
+  return -1;
+}
+
+/**
  * Multi-line """basic""" / '''literal''' string starting after the opening delimiter on
  * lines[i]. Stores { str } (decoded) under key; returns the index of the closing line.
  * Unterminated → E_TOML (never a silently empty name/description).
@@ -93,7 +106,7 @@ function strings(raw) {
 function readMultiline(lines, i, first, delim, rawKey, table) {
   const key = rawKey.replace(/^["']|["']$/g, '');
   let text = first;
-  let end = text.indexOf(delim);
+  let end = findClose(text, delim);
   while (end < 0) {
     if (i + 1 >= lines.length) {
       throw new ShowreelError(
@@ -103,7 +116,7 @@ function readMultiline(lines, i, first, delim, rawKey, table) {
       );
     }
     text += '\n' + lines[++i];
-    end = text.indexOf(delim);
+    end = findClose(text, delim);
   }
   // TOML allows one or two quote characters right before the closing delimiter.
   const firstEnd = end;

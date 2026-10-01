@@ -9,10 +9,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { toolDir } from '../util/tooldeps.mjs';
 import { killProfileSync, whichSync } from '../../render/browser.mjs';
-// TODO(orchestrator): VERSION should live in a tiny module both cli.mjs and this file import;
-// importing cli.mjs here is a dynamic-import cycle (cli -> cmd -> probe -> cli) that only works
-// because cli is fully evaluated first. render/browser.mjs no longer depends on this file.
-import { VERSION } from '../../cli.mjs';
+import { VERSION } from '../util/version.mjs';
 
 const TOOLKIT_DIR = fileURLToPath(new URL('../../', import.meta.url));
 const BROWSER_MJS = pathToFileURL(join(TOOLKIT_DIR, 'render/browser.mjs')).href;

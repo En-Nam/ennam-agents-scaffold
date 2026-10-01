@@ -2,6 +2,8 @@
 import { mdLines, heading, bullet, itemTitle, stripInline } from '../md.mjs';
 
 const TAGLINE_MAX = 120;
+/** "Features"-ish headings whose bullets are NOT shipped features (unbuilt work, config flags). */
+const NOT_SHIPPED = /planned|upcoming|roadmap|todo|coming|future|wishlist|non-?goals|flags?/i;
 
 /** A line that can be part of a prose paragraph (not markup-only). */
 function isProse(text) {
@@ -21,6 +23,7 @@ export function collect(ctx) {
   let seenH1 = false;
   let taglineDone = false;
   let featureLevel = 0; // >0 while inside a "Features" section of that heading level
+  let skipLevel = 0; // >0 while inside a NOT_SHIPPED section (e.g. "Planned features") of that level
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i];
     if (l.code) continue;
@@ -34,15 +37,17 @@ export function collect(ctx) {
         }
       }
       if (featureLevel && h.level <= featureLevel) featureLevel = 0;
-      if (/features?/i.test(h.text)) featureLevel = h.level;
+      if (skipLevel && h.level <= skipLevel) skipLevel = 0;
+      if (NOT_SHIPPED.test(h.text)) skipLevel ||= h.level;
+      else if (/features?/i.test(h.text)) featureLevel = h.level;
       continue;
     }
-    if (featureLevel) {
+    if (featureLevel && !skipLevel) {
       const item = bullet(l.text);
       const title = item === null ? '' : itemTitle(item);
       if (title) {
         out.push({ kind: 'feature', value: title, display: title,
-          source: { file, locator: `line:${l.n}`, extractor: 'readme-features', rule: 'README bullets under a /features?/i heading → feature' } });
+          source: { file, locator: `line:${l.n}`, extractor: 'readme-features', rule: `README bullets under a /features?/i heading → feature (not under a heading matching ${NOT_SHIPPED}: unbuilt work and flags are not shipped features)` } });
       }
     }
     // Tagline: the first prose paragraph after the first H1 (or anywhere, without an H1).

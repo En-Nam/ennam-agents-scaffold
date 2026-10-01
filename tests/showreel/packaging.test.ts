@@ -83,7 +83,9 @@ describe('showreel packaging', () => {
   });
 
   it('cli.mjs VERSION matches the toolkit README "Toolkit version:" line (B4 handshake source)', () => {
-    const cliVersion = /export const VERSION = '([^']+)'/.exec(readFileSync(CLI, 'utf8'))?.[1];
+    // VERSION lives in the dependency-free lib/util/version.mjs; cli.mjs re-exports it.
+    expect(readFileSync(CLI, 'utf8')).toMatch(/^import \{ VERSION \} from '\.\/lib\/util\/version\.mjs';$[\s\S]*^export \{ VERSION \};$/m);
+    const cliVersion = /export const VERSION = '([^']+)'/.exec(readFileSync(path.join(TOOLKIT, 'lib/util/version.mjs'), 'utf8'))?.[1];
     const readmeVersion = /^Toolkit version: (\S+)$/m.exec(readFileSync(path.join(ADDON, 'README.md'), 'utf8'))?.[1];
     expect(cliVersion).toBe('1.0.0');
     expect(readmeVersion).toBe(cliVersion);
