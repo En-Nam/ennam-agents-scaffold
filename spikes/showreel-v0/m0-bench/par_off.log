@@ -1,0 +1,5 @@
+{"mode":"par","exe":"chrome","gpu":"off","kind":"par","S":6,"how":"pages","P":1,"frames":300,"wallS":215.53,"fps":1.39,"msPerFrame":718.43}
+{"mode":"par","exe":"chrome","gpu":"off","kind":"par","S":6,"how":"pages","P":4,"frames":300,"wallS":70.21,"fps":4.27,"msPerFrame":234.02}
+{"mode":"par","exe":"chrome","gpu":"off","kind":"par","S":6,"how":"browsers","P":2,"frames":300,"wallS":112.88,"fps":2.66,"msPerFrame":376.26}
+{"mode":"par","exe":"chrome","gpu":"off","kind":"par","S":6,"how":"browsers","P":4,"frames":300,"wallS":61.56,"fps":4.87,"msPerFrame":205.21}
+{"mode":"par","exe":"chrome","gpu":"off","kind":"par","S":6,"how":"browsers","P":8,"frames":300,"wallS":29.6,"fps":10.14,"msPerFrame":98.66}

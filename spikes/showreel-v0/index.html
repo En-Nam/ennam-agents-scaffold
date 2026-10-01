@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Én Nam Scaffold — 15s Motion Showreel</title>
+<style>
+  html, body { margin: 0; background: #000; height: 100%; overflow: hidden; }
+  #stage { width: 100vw; height: 100vh; object-fit: contain; display: block; }
+</style>
+</head>
+<body>
+<canvas id="stage" width="1920" height="1080"></canvas>
+<script src="timeline.js"></script>
+<script src="core.js"></script>
+<script src="scenes/s1.js"></script>
+<script src="scenes/s2.js"></script>
+<script src="scenes/s3.js"></script>
+<script src="scenes/s4.js"></script>
+<script src="scenes/s5.js"></script>
+<script>
+  // ?t=3.2        -> render a single still at t
+  // ?only=s2      -> render only that scene (debug)
+  // ?play         -> realtime preview loop
+  const q = new URLSearchParams(location.search);
+  const only = q.get('only') || undefined;
+  window.renderOnly = only;
+  const draw = (t) => window.renderAt(t, window.renderOnly);
+  window.draw = draw;
+  if (q.has('play')) {
+    const d = TIMELINE.duration; let t0 = performance.now();
+    (function loop(now) { draw(((now - t0) / 1000) % d); requestAnimationFrame(loop); })(t0);
+  } else draw(parseFloat(q.get('t') || '0'));
+  window.READY = true;
+</script>
+</body>
+</html>
