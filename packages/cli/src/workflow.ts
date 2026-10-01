@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { existsSync } from 'node:fs';
-import { getSharedDir } from './profiles.js';
+import { getSharedDir, roleVoters } from './profiles.js';
 import type { ProfileDef, WorkflowPresetId } from './types.js';
 
 // v1.12 (#23/#26) — workflow presets live as phase-list markdown files under
@@ -58,7 +58,8 @@ export function assertWorkflowId(id: string): void {
  * any engineering profile → engineering-full (a code repo); else data-analytics present →
  * data-insight; else doc-first-signoff. Never recommends an override-only preset.
  */
-export function recommendWorkflow(profiles: ProfileDef[]): WorkflowPresetId {
+export function recommendWorkflow(selected: ProfileDef[]): WorkflowPresetId {
+  const profiles = roleVoters(selected);  // v1.15 — add-ons (automation) never change the role's preset
   if (profiles.length === 1) {
     const p = profiles[0]!;
     if (p.recommendedWorkflow) return p.recommendedWorkflow;

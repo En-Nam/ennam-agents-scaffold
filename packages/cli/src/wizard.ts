@@ -1,4 +1,4 @@
-import { select, multiselect, isCancel, cancel, log } from '@clack/prompts';
+import { select, multiselect, confirm, isCancel, cancel, log } from '@clack/prompts';
 import path from 'node:path';
 import { listProfiles } from './profiles.js';
 import { WORKFLOW_PRESETS, recommendWorkflow } from './workflow.js';
@@ -155,7 +155,14 @@ export async function runWizard(cwd: string = process.cwd()): Promise<string[]> 
     return picked as string[];
   }
 
-  return [await chooseSingleProfile()];
+  const profile = await chooseSingleProfile();
+  // v1.15 — opt-in add-on after any guided role. Compose mode already lists it.
+  const addAutomation = await confirm({
+    message: 'Add Claude Code automation guidance? (/goal, /loop, schedules, headless runs — guidance only, no settings changes)',
+    initialValue: false,
+  });
+  if (isCancel(addAutomation)) { cancel('Aborted.'); process.exit(1); }
+  return addAutomation === true ? [profile, 'automation'] : [profile];
 }
 
 /** The original guided single-role flow. Returns exactly one profile name. */

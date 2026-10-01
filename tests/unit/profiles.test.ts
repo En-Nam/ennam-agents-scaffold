@@ -4,6 +4,7 @@ import { getProfile, listProfiles } from '../../packages/cli/src/profiles.js';
 const ALL_PROFILES = [
   'accounting',
   'agent-org',
+  'automation',
   'ba',
   'ceo',
   'ciso',
@@ -70,9 +71,9 @@ describe('profiles', () => {
     expect(p.minClaudeCodeVersion).toBe('2.1.248');
   });
 
-  it('no other profile in v1.9.0 declares minClaudeCodeVersion (infra is opt-in per profile)', () => {
+  it('no other profile declares minClaudeCodeVersion (infra is opt-in per profile; automation pinned in automation-profile.test)', () => {
     for (const name of ALL_PROFILES) {
-      if (name === 'agent-org') continue;
+      if (name === 'agent-org' || name === 'automation') continue;
       expect(getProfile(name).minClaudeCodeVersion).toBeUndefined();
     }
   });

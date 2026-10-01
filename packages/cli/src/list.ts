@@ -35,6 +35,8 @@ const PROFILE_ROLE: Record<string, string> = {
   'devops-docker': 'DevOps',
   'game-unity': 'Game-Dev',
   'agent-org': 'Agent-Org',
+  // v1.15 — offered by the wizard after any role (and in compose), not as a role itself.
+  automation: 'Add-on',
 };
 
 export interface CatalogEntry {

@@ -3,6 +3,7 @@ import { intro, outro, log, confirm, isCancel, cancel } from '@clack/prompts';
 import type { OperationPlan, ProfileDef } from './types.js';
 import type { ExecuteResult } from './execute.js';
 import { buildKeyReport, formatKeyReportStep } from './env-scan.js';
+import { getProfile } from './profiles.js';
 
 export function printIntro(version: string): void {
   intro(pc.cyan(`Ennam Agents Scaffold v${version}`));
@@ -26,7 +27,7 @@ export async function confirmProceed(): Promise<boolean> {
   return yes === true;
 }
 
-export async function printNextSteps(profile: ProfileDef, result: ExecuteResult, hasGit: boolean, cwd: string, workflow?: string): Promise<void> {
+export async function printNextSteps(profile: ProfileDef, result: ExecuteResult, hasGit: boolean, cwd: string, workflow?: string, selected: string[] = [profile.name]): Promise<void> {
   const steps: string[] = [];
   if (hasGit) {
     steps.push('Review changes: git diff');
@@ -53,6 +54,12 @@ export async function printNextSteps(profile: ProfileDef, result: ExecuteResult,
     steps.push('Claude Code dynamic workflows installed (.claude/workflows/): /review-changes [base-ref], /judge-panel <question>, /fix-loop <check command>. Watch runs with /workflows. (Not the same thing as the CLAUDE.md --workflow preset.)');
     steps.push('COST DISCLOSURE: agent-org runs multi-agent dispatch on your Anthropic account — 5-10x tokens vs solo (/review-changes ~6 agents, /fix-loop up to 9). Only dispatch when task decomposition genuinely helps.');
     steps.push('Requires Claude Code >= 2.1.248 (dynamic workflows + agentType roles). The wizard preflight will WARN if you are behind.');
+  }
+
+  // v1.15 — automation is usually an add-on, so check the selected names, not the display profile.
+  if (selected.includes('automation')) {
+    steps.push('Automation guidance installed: skill `ennam-automation` (loads when you use /goal, /loop, schedules or `claude -p`), `.claude/loop.md` (report-only default for a bare /loop — edit freely, never overwritten), runbook docs/agents-scaffold/automation.md.');
+    steps.push(`Goals and loops run on your Anthropic account until they stop — always bound a goal ("… or stop after 20 turns"). Requires Claude Code >= ${getProfile('automation').minClaudeCodeVersion} (preflight warns if behind).`);
   }
 
   // Profile-specific prereq + post-install reminders (game-unity has the heaviest setup —

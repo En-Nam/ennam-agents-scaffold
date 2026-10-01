@@ -37,6 +37,10 @@ export interface ProfileDef {
   // (the original 7-phase Superpowers text, byte-identical). Doc-first roles will point
   // this at people-lifecycle / exec-decision / etc. as those presets ship (#26, #31).
   recommendedWorkflow?: WorkflowPresetId;
+  // v1.15 — stack-agnostic add-on (automation). When composed with other profiles it
+  // does not vote on the AGENTS.md family or the workflow preset, so `hr automation`
+  // stays an HR install. Alone, the defaults apply. See roleVoters() in profiles.ts.
+  augmentation?: boolean;
 }
 
 /** v1.11 (#10) — options threaded into enumeration (multi-profile + opt-in packs). */

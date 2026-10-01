@@ -3,7 +3,7 @@ import { readFile, access } from 'node:fs/promises';
 import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { resolveProfiles } from './profiles.js';
+import { resolveProfiles, roleVoters } from './profiles.js';
 import { enumerateProfiles } from './enumerate.js';
 import { scanConflicts } from './conflict.js';
 import { buildPlan } from './plan.js';
@@ -117,11 +117,14 @@ cli
 
     // Composed display profile — the union of extra MCPs, a joined name. For a
     // single profile this IS the profile, so single-profile UX is unchanged.
-    const displayProfile: ProfileDef = profileDefs.length === 1 ? profileDefs[0]! : {
-      name: profileDefs.map(p => p.name).join(' + '),
-      description: `composed: ${profileDefs.map(p => p.name).join(', ')}`,
+    // v1.15 — display/render identity comes from the ROLES only (add-ons excluded), so
+    // `game-unity automation` behaves as game-unity and `ba pm automation` renders as `ba pm`.
+    const voters = roleVoters(profileDefs);
+    const displayProfile: ProfileDef = voters.length === 1 ? voters[0]! : {
+      name: voters.map(p => p.name).join(' + '),
+      description: `composed: ${voters.map(p => p.name).join(', ')}`,
       templateDir: '',
-      extraMcp: [...new Set(profileDefs.flatMap(p => p.extraMcp))],
+      extraMcp: [...new Set(voters.flatMap(p => p.extraMcp))],
     };
 
     // v1.9.0 — preflight: warn if user's local Claude Code is older than any
@@ -261,7 +264,7 @@ cli
     }
 
     const result = await executeOps({ cwd, ops, ctx, interactive });
-    await printNextSteps(displayProfile, result, hasGit, cwd, workflow);
+    await printNextSteps(displayProfile, result, hasGit, cwd, workflow, profileDefs.map(p => p.name));
     printBlockedHooks(blockedHooks);
 
     // Migration hint: v1.1 users may still have a stale chrome-devtools entry

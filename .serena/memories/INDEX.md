@@ -15,6 +15,7 @@
 - [v1.12 enterprise-expansion](decisions/v1.12-enterprise-expansion.md) — team round on CTO's 4 asks (C-level profiles, plugin research, workflow-picker, doctor). → issues #22-#30 in 4 waves. Critique collapsed a 17-profile vision to a 3-profile proof wave (ceo/ciso/design).
 - [v1.12 role-workflows](decisions/v1.12-role-workflows.md) — round 2: position-specific workflows for kế toán/HR/CEO/CFO/CISO. → 4 role-family presets (people-lifecycle/exec-decision/security-incident/finance-close) + issues #31-#33 + updates to #23/#26/#29/#30.
 - [v1.14 dynamic workflows + messaging](decisions/v1.14-dynamic-workflows-messaging.md) — `agent-org` Claude Code dynamic workflows (roles via `agentType`, min CC 2.1.248) + cross-session messaging convention (Serena = mailbox, SendMessage = doorbell) + 5 hardening fixes; claims verified vs live docs; renumbered from a stale-base "v1.10"
+- [automation add-on v1.15](decisions/automation-profile-v1.15.md) — composable `automation` add-on profile (not a `--with-automation` flag; Rule 7 vs v1.11 composition); `augmentation` flag + overlay keeps the role byte-identical; guidance-only skill + report-only loop.md + runbook; wizard offers it (default No)
 
 ## Active Comms
 (empty)
