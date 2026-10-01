@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import fg from 'fast-glob';
 import { validate } from '../../templates/showreel/.claude/showreel/lib/util/schema.mjs';
-import { fitText, text, counter, unit, manifest } from '../../templates/showreel/.claude/showreel/engine/text.mjs';
+import { fitText, text, counter, unit, manifest, clusters } from '../../templates/showreel/.claude/showreel/engine/text.mjs';
 import { parseFontsourceCss, parseUnicodeRange, glyphGapsFor, familyOf } from '../../templates/showreel/.claude/showreel/engine/fonts.mjs';
 import { rng, hash, ease } from '../../templates/showreel/.claude/showreel/engine/math.mjs';
 import { PALETTES, palette } from '../../templates/showreel/.claude/showreel/engine/palettes.mjs';
@@ -79,6 +79,21 @@ describe('engine static guards (D9 canvas roles, D8 text API)', () => {
       for (const m of src.matchAll(/\bat\s*:\s*\d/g)) hits.push(`${rel(f)}: ${m[0]}`);
     }
     expect(hits).toEqual([]);
+  });
+
+  it('grapheme clusters have ONE implementation (engine/text.mjs, api.clusters): no archetype keeps its own copy', async () => {
+    // A fix to combining-mark handling (Vietnamese glyphs) must land once, not per archetype in different shapes.
+    expect(offenders(await engineSources(), /function\s+clusters\s*\(/)).toEqual(['engine/text.mjs']);
+  });
+
+  it('clusters(): combining marks stay with their base (decomposed Vietnamese), ranges are code points', () => {
+    const viet = 'Vie\u0302\u0323t a'; // "Việt a" with circumflex + dot below as two combining marks
+    expect(clusters(viet)).toEqual([
+      { s: 0, e: 1, ch: 'V' }, { s: 1, e: 2, ch: 'i' }, { s: 2, e: 5, ch: 'e' }, { s: 5, e: 6, ch: 't' },
+      { s: 6, e: 7, ch: ' ' }, { s: 7, e: 8, ch: 'a' },
+    ]);
+    expect(clusters('a😀b').map((c) => [c.s, c.e])).toEqual([[0, 1], [1, 2], [2, 3]]); // code points, not UTF-16 units
+    expect(clusters('')).toEqual([]);
   });
 });
 

@@ -15,16 +15,6 @@ const TAG_MAX = 56, CTA_MAX = 40, CMD_MAX = 34;
 const PILL_TEXT_W = 1100;   // a 64-char command (C5 maxChars) fits at the 22 px mono floor; longer fails `check`
 const PAD = 130;   // sprite padding (outer glow blur radius)
 
-/** clusters of a string: [start, end) code-point ranges, combining marks kept with their base; spaces flagged */
-function clusters(str) {
-  const cps = Array.from(str), out = [];
-  for (let i = 0; i < cps.length; i++) {
-    if (out.length && /\p{M}/u.test(cps[i])) out[out.length - 1].e = i + 1;
-    else out.push({ s: i, e: i + 1, space: cps[i] === ' ' });
-  }
-  return out;
-}
-
 export default {
   id: 'lockup-cta',
 
@@ -59,8 +49,8 @@ export default {
     const left = CX - full / 2;
     const baseLocal = PAD + Math.ceil(asc) + 10, sh = baseLocal + Math.ceil(desc) + 30 + PAD;
     const letters = [];
-    for (const cl of clusters(name.text)) {
-      if (cl.space) continue;
+    for (const cl of api.clusters(name.text)) {
+      if (cl.ch === ' ') continue;
       const x = api.measure(m, name, { size: tPx, weight: 700, track: TITLE_TRACK, slice: [0, cl.s] }).width;
       const adv = api.measure(m, name, { size: tPx, weight: 700, slice: [cl.s, cl.e] }).width;
       const sw = Math.ceil(adv) + PAD * 2;
@@ -91,7 +81,7 @@ export default {
     const tagW = tagline ? api.measure(m, tagline, { size: tagPx, weight: 600 }).width : 0;
     const ctaW = cta ? api.measure(m, cta, { size: ctaPx, weight: 700, track: 1 }).width : 0;
     const cmdW = command ? api.measure(m, command, { size: cmdPx, weight: 500 }).width : 0;
-    const cmdCl = command ? clusters(command.text) : [];
+    const cmdCl = command ? api.clusters(command.text) : [];
     const cmdXs = command ? cmdCl.map((c) => api.measure(m, command, { size: cmdPx, weight: 500, slice: [0, c.s] }).width).concat([cmdW]) : [];
     const promptW = cmdPx * 1.1;
     const pillW = command ? promptW + cmdW + 2 * 46 + 22 : 0;

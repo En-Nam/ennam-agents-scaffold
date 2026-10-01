@@ -49,6 +49,19 @@ function record(text, source) {
   if (!recorded.has(key)) recorded.set(key, { text, source });
 }
 
+/**
+ * clusters(str) → [{s, e, ch}]: code-point ranges [s, e) of str, combining marks (\p{M}) kept with their
+ * base so a Vietnamese glyph never splits; ch = the base code point. For per-glyph layout (typing, slams).
+ */
+export function clusters(str) {
+  const cps = Array.from(str), out = [];
+  for (let i = 0; i < cps.length; i++) {
+    if (out.length && /\p{M}/u.test(cps[i])) out[out.length - 1].e = i + 1;
+    else out.push({ s: i, e: i + 1, ch: cps[i] });
+  }
+  return out;
+}
+
 /** Everything drawn so far in this page, sorted (source, text) for stable output. */
 export function manifest() {
   return [...recorded.values()].sort((a, b) => (a.source < b.source ? -1 : a.source > b.source ? 1 : a.text < b.text ? -1 : a.text > b.text ? 1 : 0));

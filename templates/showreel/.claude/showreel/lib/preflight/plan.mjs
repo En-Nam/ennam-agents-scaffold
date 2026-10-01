@@ -4,12 +4,23 @@
 // in `steps`; a step that cannot run because an earlier one failed is 'skipped', never 'ok'.
 import { join, basename } from 'node:path';
 import { ShowreelError } from '../util/out.mjs';
+import { NODE_FLOOR, nodeTooOld } from '../util/version.mjs';
 
-export const NODE_FLOOR = [22, 12];
+export { NODE_FLOOR, nodeTooOld };
 export const GPU_NOTICE = 'no GPU detected — motion blur reduced (S=1)';
+
+/**
+ * True when the WebGL renderer string is not a real GPU: SwiftShader (software), or no WebGL at
+ * all — 'none' (engine/canvas.mjs), 'no-webgl' (the preflight probe) or empty. Used by both
+ * preflightPlan and renderPolicy, so preflight's notice and the render's S=1 fallback agree.
+ */
+export function isGpuLess(renderer) {
+  const r = String(renderer ?? '').trim();
+  return r === '' || r === 'none' || r === 'no-webgl' || /swiftshader/i.test(r);
+}
 export const BROWSER_FIX = 'Install Google Chrome or set SHOWREEL_BROWSER=/path/to/chrome';
 const RERUN = 'node .claude/showreel/cli.mjs preflight';
-const NODE_FIX = `Install Node 22.12+ (e.g. nvm install 22) and re-run: ${RERUN}`;
+const NODE_FIX = `Install Node ${NODE_FLOOR.join('.')}+ (e.g. nvm install ${NODE_FLOOR[0]}) and re-run: ${RERUN}`;
 const VERSION_FIX =
   'Re-run the scaffolder to upgrade the toolkit: npx @ennamjsc/agents-scaffold@latest <your-roles> showreel --merge-strategy=overwrite';
 const DEPS_FIX = `Check access to the npm registry (behind a proxy? set HTTPS_PROXY=http://<proxy>:<port>), then re-run: ${RERUN}`;
@@ -22,12 +33,6 @@ const GITIGNORES = [
   ['showreel/.gitignore', 'build/\n*.mp4\n'],
   ['.claude/showreel/.gitignore', '.tool/\n'],
 ];
-
-export function nodeTooOld(version) {
-  const [major, minor] = String(version).split('.').map(Number);
-  if (major !== NODE_FLOOR[0]) return major < NODE_FLOOR[0];
-  return minor < NODE_FLOOR[1];
-}
 
 /** C11 launch args. `--no-sandbox` only when SHOWREEL_NO_SANDBOX=1 or running as root. */
 export function launchArgs({ env = process.env, uid = typeof process.getuid === 'function' ? process.getuid() : null } = {}) {
@@ -213,7 +218,7 @@ export function preflightPlan(probe) {
       failStep('gpu', 'E_BROWSER', `${b.kind} at ${b.path} was found but failed to launch: ${r.error}`, BROWSER_FIX);
     } else {
       renderer = r.renderer;
-      if (/swiftshader/i.test(renderer)) gpuNotice = GPU_NOTICE;
+      if (isGpuLess(renderer)) gpuNotice = GPU_NOTICE;
       step('gpu', 'ok', renderer);
     }
   }

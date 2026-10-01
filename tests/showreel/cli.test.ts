@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,7 +11,12 @@ import { parseFrameCount, parseStreams, decodeWav } from '../../templates/showre
 import { sheetTimes, sheetArgs } from '../../templates/showreel/.claude/showreel/render/sheet.mjs';
 import { encodeWav } from '../../templates/showreel/.claude/showreel/lib/score/wav.mjs';
 import { GPU_NOTICE } from '../../templates/showreel/.claude/showreel/lib/preflight/plan.mjs';
-import { undrawn, inputHashes } from '../../templates/showreel/.claude/showreel/lib/verify/run.mjs';
+import { undrawn, inputHashes, streamsOk } from '../../templates/showreel/.claude/showreel/lib/verify/run.mjs';
+import { paths as showreelPaths } from '../../templates/showreel/.claude/showreel/lib/util/paths.mjs';
+import { useSession, bootEngine, ENGINE_BOOT_MS } from '../../templates/showreel/.claude/showreel/lib/render/session.mjs';
+import { verifyAndPublish, unverifiedPath } from '../../templates/showreel/.claude/showreel/lib/render/cmd.mjs';
+import { ShowreelError } from '../../templates/showreel/.claude/showreel/lib/util/out.mjs';
+import fg from 'fast-glob';
 
 // v1.16 showreel — check / render / verify, hermetic half (no browser, no ffmpeg).
 // Why these matter (mem:decisions/showreel-addon-v1.16, M0 RULINGS + D8/D13):
@@ -160,6 +165,13 @@ describe('showreel render policy (M0 RULINGS — binding)', () => {
     expect(p).toMatchObject({ fps: 60, samples: 1, gpu: false });
     expect(p.notice).toBe('no GPU detected — motion blur reduced (S=1)');
     expect(p.notice).toBe(GPU_NOTICE);
+  });
+
+  it('no WebGL ("none" from the engine, "no-webgl" from preflight, empty) --final: GPU-less, S=1 + the notice', () => {
+    // A host without WebGL has no GPU path; S=6 there is a very slow CPU render with no warning.
+    for (const renderer of ['none', 'no-webgl', '', undefined]) {
+      expect(renderPolicy({ mode: 'final', master: false, renderer }), String(renderer)).toMatchObject({ samples: 1, gpu: false, notice: GPU_NOTICE });
+    }
   });
 
   it('parseRenderArgs: default is --final; --master only with --final', () => {
@@ -337,6 +349,21 @@ describe('showreel render/verify helpers', () => {
     expect(s).toEqual({ video: { codec: 'h264', profile: 'High', pixFmt: 'yuv420p', width: 1920, height: 1080, fps: 60 }, audio: { codec: 'aac', rate: 48000, layout: 'stereo' } });
   });
 
+  it('streamsOk (D13 format gate) rejects each wrong field: profile, pix_fmt, size, fps, audio rate/layout, missing stream', () => {
+    // verify is the only gate on the delivered format; a predicate that is always true would pass every e2e.
+    const banner = (v: string, a: string) => parseStreams(`  Stream #0:0[0x1](und): Video: ${v}\n  Stream #0:1[0x2](und): Audio: ${a}\n`);
+    const V = 'h264 (High) (avc1 / 0x31637661), yuv420p(tv, progressive), 1920x1080, 9000 kb/s, 60 fps, 60 tbr';
+    const A = 'aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 256 kb/s';
+    expect(streamsOk(banner(V, A), 60)).toBe(true);
+    expect(streamsOk(banner(V, A), 30)).toBe(false); // fps differs from the render record
+    expect(streamsOk(banner(V.replace('(High)', '(Main)'), A), 60)).toBe(false);
+    expect(streamsOk(banner(V.replace('yuv420p(', 'yuv444p('), A), 60)).toBe(false);
+    expect(streamsOk(banner(V.replace('1920x1080', '1280x720'), A), 60)).toBe(false);
+    expect(streamsOk(banner(V, A.replace('48000 Hz', '44100 Hz')), 60)).toBe(false);
+    expect(streamsOk(banner(V, A.replace('stereo', 'mono')), 60)).toBe(false);
+    expect(streamsOk({ video: parseStreams(`  Stream #0:0[0x1](und): Video: ${V}\n`).video, audio: null }, 60)).toBe(false);
+  });
+
   it('a --draft (30 fps) timeline passes AC4 analyze: the onset search must not widen with the frame (found by e2e)', async () => {
     // Python fixture, 15 s, the e2e helper storyboard, compiled at the DRAFT fps. With a ±3-frame search
     // (±100 ms at 30 fps) the analyzer picked a louder bed onset 81 ms before the `snap` hit and failed a
@@ -375,11 +402,142 @@ describe('showreel render/verify helpers', () => {
 });
 
 // Orchestrator ruling (M1): a quick --draft must never overwrite a verified --final film.
-import { paths as showreelPaths } from '../../templates/showreel/.claude/showreel/lib/util/paths.mjs';
 describe('output names', () => {
   it('draft and final of the same duration write different files', () => {
     const p = showreelPaths('/host');
     expect(p.out('acme-shop', 30)).toBe('showreel/acme-shop-30s.mp4');
     expect(p.out('acme-shop', 30, { draft: true })).toBe('showreel/acme-shop-30s-draft.mp4');
+  });
+});
+
+// Review fixes (M1 PR review): the browser session and the deliverable must fail loud and safe.
+describe('browser session: a close() failure never hides the real error (Rule 12)', () => {
+  const closing = (err: Error | null) => ({ closed: 0, async close() { this.closed++; if (err) throw err; } });
+  const leak = () => new ShowreelError('E_BROWSER', 'Browser processes still hold C:/tmp/profile after close: msedge.exe#42.', 'fix');
+
+  it('work failed AND close failed → the work error is thrown, with the close failure appended', async () => {
+    const s = closing(leak());
+    const err = await useSession(s, async () => { throw new ShowreelError('E_TEXT_FIT', 'beat b2 slot command does not fit at 22 px', 'shorten'); }).catch((e) => e);
+    expect(s.closed).toBe(1);
+    expect(err.code).toBe('E_TEXT_FIT');
+    expect(err.message).toContain('beat b2 slot command does not fit');
+    expect(err.message).toContain('closing the browser also failed: Browser processes still hold');
+  });
+
+  it('work succeeded, close failed → the close error is thrown (a leaked browser is never silent)', async () => {
+    const err = await useSession(closing(leak()), async () => 'done').catch((e) => e);
+    expect(err.code).toBe('E_BROWSER');
+  });
+
+  it('close ok → the work result / the untouched work error', async () => {
+    expect(await useSession(closing(null), async () => 7)).toBe(7);
+    const boom = new ShowreelError('E_GLYPH', 'no glyph for "ệ"', 'fix');
+    await expect(useSession(closing(null), async () => { throw boom; })).rejects.toBe(boom);
+    expect(boom.message).toBe('no glyph for "ệ"');
+  });
+
+  it('check, render and verify all close their session through useSession (no bare close() in finally)', async () => {
+    const toolkit = path.resolve(HERE, '..', '..', 'templates', 'showreel', '.claude', 'showreel');
+    const users = (await fg('lib/**/*.mjs', { cwd: toolkit })).filter((f) => /await openSession\(hostRoot\)/.test(readFileSync(path.join(toolkit, f), 'utf8'))).sort();
+    expect(users).toEqual(['lib/check/cmd.mjs', 'lib/render/cmd.mjs', 'lib/verify/run.mjs']);
+    for (const f of users) {
+      const src = readFileSync(path.join(toolkit, f), 'utf8');
+      expect(src, f).toMatch(/useSession\(await openSession\(hostRoot\)/);
+      expect(src, f).not.toMatch(/session\.close\(\)/);
+    }
+  });
+});
+
+describe('engine boot: a module that never sets window.SHOWREEL is E_ENGINE with the page errors, not a bare timeout', () => {
+  const page = (o: { wait?: () => Promise<unknown>; ready?: () => Promise<unknown> }) => {
+    const calls: unknown[] = [];
+    return {
+      calls,
+      async goto(url: string) { calls.push(['goto', url]); },
+      async waitForFunction(fn: string, opts: unknown) { calls.push(['wait', fn, opts]); return o.wait ? o.wait() : true; },
+      async evaluate() { return o.ready ? o.ready() : true; },
+    };
+  };
+  const timeout = () => Promise.reject(Object.assign(new Error('Waiting failed: 30000ms exceeded'), { name: 'TimeoutError' }));
+
+  it('boot timeout → E_ENGINE naming the timeout and every page/console error collected', async () => {
+    const p = page({ wait: timeout });
+    const err = await bootEngine(p, 'http://x/engine/page.html', ["SyntaxError: Unexpected token '}' (archetypes/lockup-cta.mjs)"], ['Failed to load resource: 404 /archetypes/kinetic-text.mjs']).catch((e) => e);
+    expect(err).toBeInstanceOf(ShowreelError);
+    expect(err.code).toBe('E_ENGINE');
+    expect(err.message).toContain(`never appeared within ${ENGINE_BOOT_MS} ms`);
+    expect(err.message).toContain('archetypes/lockup-cta.mjs');
+    expect(err.message).toContain('kinetic-text.mjs');
+    expect(p.calls[1]).toEqual(['wait', 'window.SHOWREEL && window.SHOWREEL.ready', { timeout: ENGINE_BOOT_MS }]);
+  });
+
+  it('SHOWREEL.ready rejected → E_ENGINE with the rejection and page errors', async () => {
+    const err = await bootEngine(page({ ready: () => Promise.reject(new Error('fonts failed')) }), 'u', ['TypeError: x']).catch((e) => e);
+    expect(err.code).toBe('E_ENGINE');
+    expect(err.message).toContain('fonts failed');
+    expect(err.message).toContain('TypeError: x');
+  });
+});
+
+describe('render publishes the film only after verify passes (a failed verify never replaces a verified final)', () => {
+  const OUT = 'showreel/acme-shop-15s.mp4';
+  const RECORD = { version: 1, out: OUT, mode: 'final', fps: 60 };
+  const readRecord = (root: string) => JSON.parse(readFileSync(path.join(root, 'showreel', 'build', 'render.json'), 'utf8'));
+
+  it('the unverified film lives in build/', () => {
+    expect(unverifiedPath('/host', OUT)).toBe('showreel/build/acme-shop-15s.unverified.mp4');
+    expect(unverifiedPath('/host', 'showreel/acme-shop-15s-draft.mp4')).toBe('showreel/build/acme-shop-15s-draft.unverified.mp4');
+  });
+
+  it('verify fails → previous final untouched, failed film kept in build/, record points at the failed film', async () => {
+    const tmp = unverifiedPath('/host', OUT);
+    const root = host({ [OUT]: 'OLD VERIFIED FILM', [tmp]: 'NEW TRUNCATED FILM' });
+    try {
+      let seen: string | undefined;
+      const res = await verifyAndPublish(root, { tmp, out: OUT, record: RECORD }, async (r: string) => {
+        seen = readRecord(r).out;
+        return { data: {}, failed: ['videoFrames 840 != 900'] };
+      });
+      expect(seen).toBe(tmp); // verify checked the NEW film, not the old deliverable
+      expect(res.failed).toEqual(['videoFrames 840 != 900']);
+      expect(readFileSync(path.join(root, OUT), 'utf8')).toBe('OLD VERIFIED FILM');
+      expect(readFileSync(path.join(root, tmp), 'utf8')).toBe('NEW TRUNCATED FILM');
+      expect(readRecord(root).out).toBe(tmp); // a later `verify` re-checks the failed film, never the old one
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('verify passes → the film is moved onto the deliverable and the record points at it', async () => {
+    const tmp = unverifiedPath('/host', OUT);
+    const root = host({ [OUT]: 'OLD VERIFIED FILM', [tmp]: 'NEW GOOD FILM' });
+    try {
+      const res = await verifyAndPublish(root, { tmp, out: OUT, record: RECORD }, async () => ({ data: {}, failed: [] }));
+      expect(res.failed).toEqual([]);
+      expect(readFileSync(path.join(root, OUT), 'utf8')).toBe('NEW GOOD FILM');
+      expect(existsSync(path.join(root, tmp))).toBe(false);
+      expect(readRecord(root)).toEqual(RECORD);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  // A verified film that cannot be published (old film locked by a player on Windows) must say where
+  // the verified film is — not surface as a raw fs error. A non-empty directory at `out` makes the
+  // rename fail portably.
+  it('verify passes but the move fails → E_PUBLISH naming both paths; the verified film is kept', async () => {
+    const tmp = unverifiedPath('/host', OUT);
+    const root = host({ [`${OUT}/locked`]: 'x', [tmp]: 'NEW GOOD FILM' });
+    try {
+      const err = await verifyAndPublish(root, { tmp, out: OUT, record: RECORD }, async () => ({ data: {}, failed: [] }))
+        .then(() => null, (e: unknown) => e as ShowreelError);
+      expect(err).toBeInstanceOf(ShowreelError);
+      expect(err!.code).toBe('E_PUBLISH');
+      expect(err!.message).toContain(OUT);
+      expect(err!.message).toContain(tmp);
+      expect(readFileSync(path.join(root, tmp), 'utf8')).toBe('NEW GOOD FILM');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

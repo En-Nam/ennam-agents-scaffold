@@ -13,16 +13,6 @@ const CMD_X = X0 + 58;                         // command starts after the promp
 const HORIZON = 792;                           // floor horizon (screen y)
 const FS_MAX = 52, CAP_MAX = 40;
 
-/** code-point clusters: a base char plus any combining marks, so a Vietnamese glyph never splits */
-function clusters(str) {
-  const cps = Array.from(str), out = [];
-  for (let i = 0; i < cps.length; i++) {
-    if (out.length && /\p{M}/u.test(cps[i])) out[out.length - 1][1] = i + 1;
-    else out.push([i, i + 1, cps[i]]);
-  }
-  return out;
-}
-
 export default {
   id: 'cold-open-command',
 
@@ -33,26 +23,26 @@ export default {
     const capPx = cap ? api.fitSlot('caption', { maxW: PW - 2 * X0 - 60, maxPx: CAP_MAX, weight: 500 }) : 0;
     const m = api.makeCanvas('cache', 8, 8).ctx;
     // per-glyph x offsets from prefix widths (exact for any font, not only mono)
-    const cl = clusters(cmd.text);
-    const xs = cl.map(([s]) => api.measure(m, cmd, { size: fs, weight: 500, slice: [0, s] }).width);
+    const cl = api.clusters(cmd.text);
+    const xs = cl.map(({ s }) => api.measure(m, cmd, { size: fs, weight: 500, slice: [0, s] }).width);
     const total = api.measure(m, cmd, { size: fs, weight: 500 }).width;
     xs.push(total);
     const cw = cl.length ? total / cl.length : fs * 0.6;
     // token colouring: program → text, 2nd token → primary tint, flags → dim, rest → secondary
     const tok = [];
     let ti = 0, prevSpace = true;
-    for (const [, , ch] of cl) {
+    for (const { ch } of cl) {
       if (ch === ' ') { tok.push(-1); prevSpace = true; continue; }
       if (prevSpace && tok.length) ti++;
       prevSpace = false; tok.push(ti);
     }
-    const flag = cl.map(([, , ch], i) => {
-      let j = i; while (j > 0 && cl[j - 1][2] !== ' ') j--;
-      return cl[j][2] === '-';
+    const flag = cl.map((_, i) => {
+      let j = i; while (j > 0 && cl[j - 1].ch !== ' ') j--;
+      return cl[j].ch === '-';
     });
     const P = api.palette;
     const colors = tok.map((t, i) => (t <= 0 ? P.text : flag[i] ? P.dim : t === 1 ? api.mix(P.primary, '#ffffff', 0.2) : P.secondary));
-    const glyphs = cl.map(([s, e, ch], i) => ({ s, e, space: ch === ' ', x: xs[i], color: colors[i] }));
+    const glyphs = cl.map(({ s, e, ch }, i) => ({ s, e, space: ch === ' ', x: xs[i], color: colors[i] }));
     const capW = cap ? api.measure(m, cap, { size: capPx, weight: 500 }).width : 0;
     const perim = 2 * (PW - 2 * R) + 2 * (PH - 2 * R) + 2 * Math.PI * R;
     // bokeh table (constant, seeded by index)

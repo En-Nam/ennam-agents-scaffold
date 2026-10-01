@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { dir as tmpDir } from 'tmp-promise';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { execa } from 'execa';
 import { fileURLToPath } from 'node:url';
 import fg from 'fast-glob';
+import { getProfile } from '../../../packages/cli/src/profiles.js';
 
 // v1.16 — `showreel` is an add-on: one role + showreel must install the role EXACTLY as if
 // alone (no CLAUDE.md / AGENTS.md / settings change — no core change, AC6), plus the
@@ -84,7 +85,40 @@ describe('install showreel add-on', () => {
     const { stdout } = await install(await fresh(), ['next', 'showreel']);
     expect(stdout).toMatch(/Showreel toolkit installed at \.claude\/showreel\//);
     expect(stdout).toMatch(/node \.claude\/showreel\/cli\.mjs preflight/);
+    // Same wording as the README THIRD-PARTY table: puppeteer-core drives the installed browser, nothing Chrome-ish is downloaded.
+    expect(stdout).toContain('~200 MB (puppeteer-core, ffmpeg, fonts)');
+    expect(stdout).not.toMatch(/Chrome driver/i);
   });
+
+  // The /showreel skill is M3 (plan). Until a skill/command ships, user-facing text (--list / wizard
+  // description, next steps, README) must point at the entry point that IS installed.
+  it('user-facing text names node .claude/showreel/cli.mjs, never a /showreel command that is not installed', async () => {
+    const shipsSlash = (await fg(['.claude/skills/showreel/**', '.claude/commands/showreel*'], { cwd: path.join(REPO_ROOT, 'templates', 'showreel'), dot: true })).length > 0;
+    const SLASH = /(^|[\s(`'"—])\/showreel\b/;
+    const description = getProfile('showreel').description;
+    const readme = await readFile(path.join(REPO_ROOT, 'templates', 'showreel', 'README.md'), 'utf8');
+    const { stdout } = await install(await fresh(), ['next', 'showreel']);
+    expect(description).toContain('node .claude/showreel/cli.mjs');
+    if (!shipsSlash) {
+      expect(description).not.toMatch(SLASH);
+      expect(readme).not.toMatch(SLASH);
+      expect(stdout).not.toMatch(SLASH);
+    }
+  });
+
+  // B4: the toolkit upgrades as one unit — a locally modified toolkit file is replaced by
+  // --merge-strategy=overwrite. (classify.ts has an explicit `.claude/showreel/` → write-or-ask rule;
+  // the default also yields write-or-ask, so this end-to-end case is what proves the contract —
+  // a skip-if-exists classification would keep the stale file and fail here.)
+  it('a modified .claude/showreel/*.mjs is restored to the template by a re-run with --merge-strategy=overwrite', async () => {
+    const cwd = await fresh();
+    expect((await install(cwd, ['next', 'showreel'])).exitCode).toBe(0);
+    const rel = '.claude/showreel/lib/render/policy.mjs';
+    const template = await readFile(path.join(REPO_ROOT, 'templates', 'showreel', rel), 'utf8');
+    await writeFile(path.join(cwd, rel), template + '\n// local edit from an older toolkit\n');
+    expect((await install(cwd, ['next', 'showreel'])).exitCode).toBe(0);
+    expect(await read(cwd, rel)).toBe(template);
+  }, 60_000);
 
   it('the shared CLAUDE.md block stays byte-identical to the golden (no core change)', async () => {
     const cwd = await fresh();

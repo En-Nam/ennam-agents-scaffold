@@ -64,7 +64,7 @@ export async function printNextSteps(profile: ProfileDef, result: ExecuteResult,
 
   // v1.16 — showreel is an add-on, so check the selected names, not the display profile.
   if (selected.includes('showreel')) {
-    steps.push('Showreel toolkit installed at .claude/showreel/ (runbook docs/agents-scaffold/showreel.md). First run downloads ~200 MB (Chrome driver libs, ffmpeg, fonts) into .claude/showreel/.tool — run: node .claude/showreel/cli.mjs preflight (needs Node >= 22.12 and Chrome or Edge).');
+    steps.push('Showreel toolkit installed at .claude/showreel/ (runbook docs/agents-scaffold/showreel.md). First run downloads ~200 MB (puppeteer-core, ffmpeg, fonts) into .claude/showreel/.tool — run: node .claude/showreel/cli.mjs preflight (needs Node >= 22.12 and Chrome or Edge).');
   }
 
   // Profile-specific prereq + post-install reminders (game-unity has the heaviest setup —

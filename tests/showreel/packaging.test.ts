@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import fg from 'fast-glob';
 
 // v1.16 showreel — packaging guards. The installer copies templates as UTF-8 text and the
@@ -56,8 +56,8 @@ describe('showreel packaging', () => {
   });
 
   // B1 (`npm pack` keeps every templates/showreel file) lives in
-  // tests/integration/profiles/showreel.test.ts, after that file's own build: a pack here
-  // would race the integration tests' tsup rebuild when vitest runs files in parallel.
+  // tests/integration/profiles/showreel.test.ts: the pack needs that file's fresh build
+  // (packages/cli/templates is the tsup copy).
 
   it('cli.mjs `version` prints one JSON line; an unknown command fails loud with exit 1', () => {
     const v = runCli(['version']);
@@ -82,9 +82,32 @@ describe('showreel packaging', () => {
     expect(out.error.fix).toContain('node .claude/showreel/cli.mjs preflight');
   });
 
+  it('the Node floor has ONE definition (lib/util/version.mjs) — cli.mjs and preflight cannot drift (Rule 7)', async () => {
+    const version = await import(pathToFileURL(path.join(TOOLKIT, 'lib/util/version.mjs')).href);
+    const plan = await import(pathToFileURL(path.join(TOOLKIT, 'lib/preflight/plan.mjs')).href);
+    expect(version.NODE_FLOOR).toEqual([22, 12]);
+    expect(plan.NODE_FLOOR).toBe(version.NODE_FLOOR);
+    expect(plan.nodeTooOld).toBe(version.nodeTooOld);
+    for (const rel of ['cli.mjs', 'lib/preflight/plan.mjs']) {
+      const src = readFileSync(path.join(TOOLKIT, rel), 'utf8');
+      expect(src, rel).not.toMatch(/NODE_FLOOR\s*=|function nodeTooOld|22\.12/);
+    }
+  });
+
+  it('every dispatched command is implemented — no speculative E_NOT_IMPLEMENTED path (Rule 2)', async () => {
+    const src = readFileSync(CLI, 'utf8');
+    expect(src).not.toContain('E_NOT_IMPLEMENTED');
+    const loaders = [...src.matchAll(/^\s*(\w+): \(\) => import\('\.\/(lib\/[^']+)'\)/gm)];
+    expect(loaders.map((m) => m[1]).sort()).toEqual(['check', 'facts', 'preflight', 'render', 'verify']);
+    for (const m of loaders) {
+      const mod = await import(pathToFileURL(path.join(TOOLKIT, m[2]!)).href);
+      expect(typeof mod.run, m[1]).toBe('function');
+    }
+  });
+
   it('cli.mjs VERSION matches the toolkit README "Toolkit version:" line (B4 handshake source)', () => {
     // VERSION lives in the dependency-free lib/util/version.mjs; cli.mjs re-exports it.
-    expect(readFileSync(CLI, 'utf8')).toMatch(/^import \{ VERSION \} from '\.\/lib\/util\/version\.mjs';$[\s\S]*^export \{ VERSION \};$/m);
+    expect(readFileSync(CLI, 'utf8')).toMatch(/^import \{ VERSION(?:, \w+)* \} from '\.\/lib\/util\/version\.mjs';$[\s\S]*^export \{ VERSION \};$/m);
     const cliVersion = /export const VERSION = '([^']+)'/.exec(readFileSync(path.join(TOOLKIT, 'lib/util/version.mjs'), 'utf8'))?.[1];
     const readmeVersion = /^Toolkit version: (\S+)$/m.exec(readFileSync(path.join(ADDON, 'README.md'), 'utf8'))?.[1];
     expect(cliVersion).toBe('1.0.0');

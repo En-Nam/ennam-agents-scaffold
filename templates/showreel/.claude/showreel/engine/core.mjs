@@ -27,6 +27,7 @@
 //   unit(ctx, item, x, y, o)     draw item.unit ("routes")
 //   measure(ctx, item, o)        {width, ascent, descent} without drawing
 //   fitText(ctx, str, maxW, maxPx, minPx, o)  raw fit helper (prefer fitSlot)
+//   clusters(str)                [{s, e, ch}] code-point ranges, combining marks kept with their base (use as o.slice)
 //   fitSlot(slot, {maxW, maxPx, minPx?, weight?, track?}) → px   largest px ≤ maxPx at which EVERY item of the
 //                                slot fits maxW; records fit()[beatId][slot] (null when below the family
 //                                minimum: display 28, mono 22 — then returns the minimum so drawing continues
@@ -50,7 +51,7 @@
 import { makeCanvas, gpuRenderer } from './canvas.mjs';
 import { clamp, lerp, ease, prog, map, edge, anticipate, rng, hash, noise, hashStr } from './math.mjs';
 import { palette as getPalette, hexToRgb, rgba } from './palettes.mjs';
-import { text, counter, unit, measure, fitText, font, manifest } from './text.mjs';
+import { text, counter, unit, measure, fitText, font, manifest, clusters } from './text.mjs';
 import { FAMILIES, familyOf, loadFonts, glyphGaps } from './fonts.mjs';
 import { rr, brand, glow, glass, mix, glowDot, sparks, checkMark, chevron } from './draw.mjs';
 import { ARCHETYPES, TRANSITIONS } from '../archetypes/index.mjs';
@@ -142,7 +143,7 @@ export function createEngine({ timeline, resolved, archetypes = ARCHETYPES, tran
   const base = Object.freeze({
     W, H, clamp, lerp, ease, prog, map, edge, anticipate, rng, hash, noise, hashStr,
     palette: pal, rgba, hexToRgb, font, families: FAMILIES,
-    text, counter, unit, measure, fitText, rr, brand, glow, glass, mix, glowDot, sparks, checkMark, chevron,
+    text, counter, unit, measure, fitText, clusters, rr, brand, glow, glass, mix, glowDot, sparks, checkMark, chevron,
     grid: 15 / TL.music.bpm, makeCanvas: archMakeCanvas, scratch: makeScratch(0), hitEnergy,
   });
   const archScratch = makeScratch(2);

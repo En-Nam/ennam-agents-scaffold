@@ -371,6 +371,15 @@ describe('preflight plan — sandbox flag (C11) and GPU probe', () => {
     expect(preflightPlan(makeProbe().probe).gpuNotice).toBeNull();
   });
 
+  it('no WebGL at all ("no-webgl" / "none" / empty) is GPU-less too → the notice, never "gpu ok" silently', () => {
+    // Without WebGL there is no GPU path: --final would otherwise run S=6 on the CPU with no warning.
+    for (const r of ['no-webgl', 'none', '']) {
+      const plan = preflightPlan(makeProbe({ renderer: r }).probe);
+      expect(plan.ok, r).toBe(true);
+      expect(plan.gpuNotice, r).toBe(GPU_NOTICE);
+    }
+  });
+
   it('a detected browser that cannot launch → E_BROWSER with the launch error (found ≠ usable)', () => {
     const plan = preflightPlan(makeProbe({ renderer: { error: 'Failed to launch the browser process: Code: 0' } }).probe);
     expect(codes(plan)).toEqual(['E_BROWSER']);
@@ -551,9 +560,21 @@ const CHROME_PATH = process.platform === 'win32'
   ? 'C:/Program Files/Google/Chrome/Application/chrome.exe'
   : process.platform === 'darwin' ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : '/usr/bin/google-chrome';
 if (E2E && !process.env.SHOWREEL_TOOL_DIR) process.env.SHOWREEL_TOOL_DIR = join(REPO_ROOT, '.showreel-dev/.tool');
+// With SHOWREEL_E2E=1 a missing Edge or Chrome FAILS its tests: a silent per-host skip would leave the
+// Edge-only connect path unverified in an "E2E green" run (Rule 12). Opt out explicitly, per browser:
+// SHOWREEL_E2E_ALLOW_MISSING_BROWSER=edge|chrome (comma-separated for both) — those tests then report as skipped.
+const ALLOW_MISSING = new Set((process.env.SHOWREEL_E2E_ALLOW_MISSING_BROWSER ?? '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean));
+const BROWSER_NAMES = { edge: 'Microsoft Edge', chrome: 'Google Chrome' } as const;
+const allowedMissing = (kind: keyof typeof BROWSER_NAMES, exe: string) => ALLOW_MISSING.has(kind) && !existsSync(exe);
+function requireBrowser(kind: keyof typeof BROWSER_NAMES, exe: string) {
+  if (!existsSync(exe)) {
+    throw new Error(`SHOWREEL_E2E=1 but ${BROWSER_NAMES[kind]} is not installed at ${exe}. Install it, or opt out explicitly with SHOWREEL_E2E_ALLOW_MISSING_BROWSER=${kind}.`);
+  }
+}
 
 describe.skipIf(!E2E)('preflight E2E (SHOWREEL_E2E=1)', () => {
-  it.skipIf(!existsSync(EDGE_PATH))('launchBrowser(Edge) → Edg version, and close() leaves zero processes on the temp profile', async () => {
+  it.skipIf(allowedMissing('edge', EDGE_PATH))('launchBrowser(Edge) → Edg version, and close() leaves zero processes on the temp profile', async () => {
+    requireBrowser('edge', EDGE_PATH);
     const b = await launchBrowser({ hostRoot: REPO_ROOT, executablePath: EDGE_PATH });
     expect(b.kind).toBe('edge');
     expect(b.profileDir).toBeTruthy();
@@ -565,7 +586,8 @@ describe.skipIf(!E2E)('preflight E2E (SHOWREEL_E2E=1)', () => {
     expect(existsSync(b.profileDir)).toBe(false);
   }, 60_000);
 
-  it.skipIf(!existsSync(CHROME_PATH))('launchBrowser(Chrome) → Chrome version', async () => {
+  it.skipIf(allowedMissing('chrome', CHROME_PATH))('launchBrowser(Chrome) → Chrome version', async () => {
+    requireBrowser('chrome', CHROME_PATH);
     const b = await launchBrowser({ hostRoot: REPO_ROOT, executablePath: CHROME_PATH });
     expect(b.kind).toBe('chrome');
     expect(await b.browser.version()).toMatch(/Chrome\//);
@@ -582,7 +604,8 @@ describe.skipIf(!E2E)('preflight E2E (SHOWREEL_E2E=1)', () => {
     expect(r.renderer.length).toBeGreaterThan(0);
   }, 90_000);
 
-  it.skipIf(!existsSync(EDGE_PATH))('realProbe gpuRenderer with Edge → renderer string (preflight works on an Edge-only host)', () => {
+  it.skipIf(allowedMissing('edge', EDGE_PATH))('realProbe gpuRenderer with Edge → renderer string (preflight works on an Edge-only host)', () => {
+    requireBrowser('edge', EDGE_PATH);
     const probe = realProbe(REPO_ROOT, {});
     const r = probe.gpuRenderer({ kind: 'edge', path: EDGE_PATH, source: 'test', args: launchArgs() });
     expect(r.error).toBeUndefined();

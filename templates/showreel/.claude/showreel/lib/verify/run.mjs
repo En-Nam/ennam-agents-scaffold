@@ -14,7 +14,7 @@ import { paths } from '../util/paths.mjs';
 import { checkManifest } from '../truth/manifest.mjs';
 import { analyzeScore } from '../score/analyze.mjs';
 import { resolveFfmpeg } from '../render/ffmpeg.mjs';
-import { openSession } from '../render/session.mjs';
+import { openSession, useSession } from '../render/session.mjs';
 import { probeVideo, countAudioSamples, decodeWav } from '../../render/verify.mjs';
 import { hashAt } from '../../render/frames.mjs';
 
@@ -36,6 +36,14 @@ export function inputHashes(hostRoot) {
   const p = paths(hostRoot);
   const h = (rel) => (existsSync(join(hostRoot, rel)) ? createHash('sha256').update(readFileSync(join(hostRoot, rel))).digest('hex') : null);
   return { timeline: h(p.timeline), resolved: h(p.resolved) };
+}
+
+/** D13 stream format: H.264 High yuv420p 1920x1080 @ fps + AAC 48 kHz stereo (streams = parseStreams output). */
+export function streamsOk(streams, fps) {
+  const v = streams.video;
+  const a = streams.audio;
+  return !!v && !!a && v.codec === 'h264' && v.profile === 'High' && v.pixFmt === 'yuv420p' && v.width === 1920 && v.height === 1080
+    && v.fps === fps && a.codec === 'aac' && a.rate === SR && a.layout === 'stereo';
 }
 
 /** Coverage half of D8: an engine that draws nothing would pass manifest ⊆ resolved trivially. */
@@ -90,11 +98,8 @@ export async function runVerify(hostRoot) {
   const audioSamples = await countAudioSamples(ffmpeg, out);
   if (videoFrames !== expected.frames) failed.push(`videoFrames ${videoFrames} != ${expected.frames}`);
   if (Math.abs(audioSamples - expected.samples) > AAC_FRAME) failed.push(`audioSamples ${audioSamples} not within ±${AAC_FRAME} of ${expected.samples}`);
-  const v = streams.video;
-  const a = streams.audio;
-  const streamsOk = !!v && !!a && v.codec === 'h264' && v.profile === 'High' && v.pixFmt === 'yuv420p' && v.width === 1920 && v.height === 1080
-    && v.fps === rec.fps && a.codec === 'aac' && a.rate === SR && a.layout === 'stereo';
-  if (!streamsOk) failed.push(`streams ${JSON.stringify(streams)} are not H.264 High yuv420p 1920x1080@${rec.fps} + AAC 48000 Hz stereo`);
+  const formatOk = streamsOk(streams, rec.fps);
+  if (!formatOk) failed.push(`streams ${JSON.stringify(streams)} are not H.264 High yuv420p 1920x1080@${rec.fps} + AAC 48000 Hz stereo`);
 
   // AC4 on the exact WAV that was muxed
   const score = decodeWav(readFileSync(join(hostRoot, p.scoreWav)));
@@ -114,19 +119,16 @@ export async function runVerify(hostRoot) {
   if (!manifest.length) failed.push('manifest is empty (the engine recorded no text)');
 
   // D9 spot check — fresh page, same browser build + machine (AC3 scope)
-  const session = await openSession(hostRoot);
   const mismatched = [];
   let renderer;
-  try {
+  await useSession(await openSession(hostRoot), async (session) => {
     const fresh = await session.page();
     renderer = fresh.renderer;
     for (const pt of det.points) {
       const h = await hashAt(fresh.page, pt.t, det.samples);
       if (h !== pt.sha256) mismatched.push(`${pt.label} t=${pt.t}`);
     }
-  } finally {
-    await session.close();
-  }
+  });
   const determinismOk = mismatched.length === 0 && det.points.length === 3;
   if (!determinismOk) {
     failed.push(`determinism: ${mismatched.join(', ') || 'no points recorded'} re-rendered differently at S=${det.samples}`
@@ -140,7 +142,7 @@ export async function runVerify(hostRoot) {
       videoFrames,
       audioSamples,
       expected,
-      streamsOk,
+      streamsOk: formatOk,
       peakDbfs: Math.round(an.peakDbfs * 100) / 100,
       scoreOk: an.ok,
       hitsOk,

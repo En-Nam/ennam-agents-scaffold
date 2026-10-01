@@ -5,7 +5,7 @@ import { performance } from 'node:perf_hooks';
 import { ok, ShowreelError } from '../util/out.mjs';
 import { paths } from '../util/paths.mjs';
 import { prepare, fitInPage } from './prepare.mjs';
-import { openSession } from '../render/session.mjs';
+import { openSession, useSession } from '../render/session.mjs';
 import { resolveFfmpeg } from '../render/ffmpeg.mjs';
 import { renderSheet } from '../../render/sheet.mjs';
 
@@ -22,15 +22,12 @@ export async function run(args, hostRoot) {
   const p = paths(hostRoot);
   const { resolved, timeline } = prepare(hostRoot, { fps: 60 });
   const ffmpeg = sheet ? resolveFfmpeg(hostRoot) : null; // fail before launching a browser
-  const session = await openSession(hostRoot);
-  try {
+  await useSession(await openSession(hostRoot), async (session) => {
     const { page, errors } = await session.page();
     await fitInPage(hostRoot, page, resolved);
     if (sheet) await renderSheet({ page, ffmpeg, timeline, out: join(hostRoot, p.sheet) });
     if (errors.length) throw new ShowreelError('E_ENGINE', `Engine page errors: ${errors.join(' | ')}`, 'This is a toolkit bug — report it with the storyboard.');
-  } finally {
-    await session.close();
-  }
+  });
   return ok(CMD, {
     beats: timeline.beats.length,
     hits: timeline.hits.length,

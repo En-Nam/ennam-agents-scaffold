@@ -1,17 +1,19 @@
 // `cli.mjs render [--draft|--final] [--master]` (Task 8). One call, sequential, one browser:
 //   check (no sheet, at the render fps) → score WAV → frames piped to ffmpeg → determinism hashes +
 //   text manifest → encode → mux (no -shortest) → verify.
+// The film is muxed to showreel/build/<name>.unverified.mp4 and moved onto showreel/<name>.mp4 only
+// after verify passes, so a failed or partial film never replaces a previously verified deliverable.
 // Prints ok('render', {out, mode, samples, fps, frames, crf, timings:{check, score, frames, encode, mux,
 // verify, total}, gpu, renderer, verify, notice?}). Timings are ms. Frames are encoded while they are
 // captured, so `frames` includes ffmpeg back-pressure and `encode` is only the flush after the last frame.
-import { mkdirSync, rmSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { mkdirSync, renameSync, rmSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { ok, fail, ShowreelError } from '../util/out.mjs';
 import { paths } from '../util/paths.mjs';
 import { prepare, fitInPage, writeJson } from '../check/prepare.mjs';
 import { renderPolicy, parseRenderArgs, fpsFor, slugify, determinismPoints } from './policy.mjs';
-import { openSession } from './session.mjs';
+import { openSession, useSession } from './session.mjs';
 import { resolveFfmpeg } from './ffmpeg.mjs';
 import { renderScore, writeWav } from '../score/make.mjs';
 import { captureFrames, hashAt } from '../../render/frames.mjs';
@@ -27,6 +29,36 @@ function appName(facts) {
   return f ? f.display : (facts.brand && facts.brand.name) || 'showreel';
 }
 
+/** Build-dir path (relative to hostRoot) where the film for deliverable `out` is muxed and verified. */
+export function unverifiedPath(hostRoot, out) {
+  return `${paths(hostRoot).build}/${basename(out, '.mp4')}.unverified.mp4`;
+}
+
+/**
+ * Verify the film muxed at `tmp`, then move it onto the deliverable `out` — only on pass.
+ * The render record points at whichever file holds this render: `tmp` until verify passes (so a later
+ * `verify` re-checks the failed film, not an older deliverable), `out` after the move.
+ * On failure the film stays at `tmp` and any previous verified `out` is left untouched.
+ * → {data, failed} from `verify` (default runVerify).
+ */
+export async function verifyAndPublish(hostRoot, { tmp, out, record }, verify = runVerify) {
+  const bp = buildPaths(hostRoot);
+  writeJson(bp.record, { ...record, out: tmp });
+  const res = await verify(hostRoot);
+  if (res.failed.length) return res;
+  mkdirSync(dirname(join(hostRoot, out)), { recursive: true });
+  try {
+    renameSync(join(hostRoot, tmp), join(hostRoot, out));
+  } catch (err) {
+    // Typically Windows EBUSY/EPERM: the previous film is open in a player. Say where the verified film is.
+    throw new ShowreelError('E_PUBLISH',
+      `The film passed verify but could not be moved onto ${out} (${err.code || err.message}). The verified film is kept at ${tmp}.`,
+      `Close any program that has ${out} open, then re-run: node .claude/showreel/cli.mjs render`);
+  }
+  writeJson(bp.record, { ...record, out });
+  return res;
+}
+
 export async function run(args, hostRoot) {
   const t0 = performance.now();
   const lap = (() => { let last = t0; return () => { const now = performance.now(); const ms = Math.round(now - last); last = now; return ms; }; })();
@@ -39,58 +71,62 @@ export async function run(args, hostRoot) {
   const { facts, resolved, timeline } = prepare(hostRoot, { fps: fpsFor(mode) });
   const ffmpeg = resolveFfmpeg(hostRoot);
   const out = p.out(slugify(appName(facts)), timeline.durationS, { draft: mode === 'draft' });
+  const tmp = unverifiedPath(hostRoot, out);
   rmSync(bp.record, { force: true }); // a failed render must not leave the previous record for verify
-  const session = await openSession(hostRoot);
   let policy;
   let encoder = null;
   try {
-    const { page, renderer, errors } = await session.page();
-    await fitInPage(hostRoot, page, resolved);
-    policy = { ...renderPolicy({ mode, master, renderer }), renderer };
-    timings.check = lap();
+    await useSession(await openSession(hostRoot), async (session) => {
+      const { page, renderer, errors } = await session.page();
+      await fitInPage(hostRoot, page, resolved);
+      policy = { ...renderPolicy({ mode, master, renderer }), renderer };
+      timings.check = lap();
 
-    // score — exactly durationS × 48000 samples (renderScore guarantees the length; verify re-checks)
-    writeWav(join(hostRoot, p.scoreWav), renderScore(timeline));
-    timings.score = lap();
+      // score — exactly durationS × 48000 samples (renderScore guarantees the length; verify re-checks)
+      writeWav(join(hostRoot, p.scoreWav), renderScore(timeline));
+      timings.score = lap();
 
-    // frames → ffmpeg
-    mkdirSync(dirname(bp.video), { recursive: true });
-    encoder = startEncoder({ ffmpeg, out: bp.video, fps: policy.fps, crf: policy.crf });
-    await captureFrames({ page, fps: policy.fps, frames: timeline.frames, samples: policy.samples, onFrame: (buf) => encoder.write(buf) });
+      // frames → ffmpeg
+      mkdirSync(dirname(bp.video), { recursive: true });
+      encoder = startEncoder({ ffmpeg, out: bp.video, fps: policy.fps, crf: policy.crf });
+      await captureFrames({ page, fps: policy.fps, frames: timeline.frames, samples: policy.samples, onFrame: (buf) => encoder.write(buf) });
 
-    // determinism fingerprints (same page, after the full film) + the text manifest
-    const points = [];
-    for (const pt of determinismPoints(timeline)) points.push({ ...pt, sha256: await hashAt(page, pt.t, policy.samples) });
-    writeJson(bp.determinism, { version: 1, samples: policy.samples, fps: policy.fps, renderer, points });
-    writeJson(join(hostRoot, p.manifest), await page.evaluate(() => window.SHOWREEL.manifest()));
-    if (errors.length) throw new ShowreelError('E_ENGINE', `Engine page errors during render: ${errors.join(' | ')}`, 'This is a toolkit bug — report it with the storyboard.');
-    timings.frames = lap();
+      // determinism fingerprints (same page, after the full film) + the text manifest
+      const points = [];
+      for (const pt of determinismPoints(timeline)) points.push({ ...pt, sha256: await hashAt(page, pt.t, policy.samples) });
+      writeJson(bp.determinism, { version: 1, samples: policy.samples, fps: policy.fps, renderer, points });
+      writeJson(join(hostRoot, p.manifest), await page.evaluate(() => window.SHOWREEL.manifest()));
+      if (errors.length) throw new ShowreelError('E_ENGINE', `Engine page errors during render: ${errors.join(' | ')}`, 'This is a toolkit bug — report it with the storyboard.');
+      timings.frames = lap();
+    });
   } catch (err) {
+    // Also covers a close() failure after a clean capture: ffmpeg must not wait on stdin EOF forever
+    // (that hangs the CLI instead of printing the JSON error).
     if (encoder) encoder.abort();
     throw err;
-  } finally {
-    // A close() failure (browser still holding the temp profile) must not leave ffmpeg waiting on stdin
-    // EOF forever — that hangs the CLI instead of printing the JSON error.
-    try { await session.close(); } catch (e) { if (encoder) encoder.abort(); throw e; }
   }
 
   await encoder.end();
   timings.encode = lap();
 
-  mkdirSync(dirname(join(hostRoot, out)), { recursive: true });
-  await mux({ ffmpeg, video: bp.video, wav: join(hostRoot, p.scoreWav), out: join(hostRoot, out) });
+  await mux({ ffmpeg, video: bp.video, wav: join(hostRoot, p.scoreWav), out: join(hostRoot, tmp) });
   timings.mux = lap();
-  writeJson(bp.record, {
+
+  const record = {
     version: 1, out, mode, fps: policy.fps, samples: policy.samples, crf: policy.crf,
     frames: timeline.frames, durationS: timeline.durationS, renderer: policy.renderer,
     inputs: inputHashes(hostRoot),
-  });
-
-  const { data: verify, failed } = await runVerify(hostRoot);
+  };
+  const { data: verify, failed } = await verifyAndPublish(hostRoot, { tmp, out, record });
   timings.verify = lap();
   timings.total = Math.round(performance.now() - t0);
   if (failed.length) {
-    return fail(CMD, 'E_VERIFY', `${out} was rendered but ${failed.length} verify check(s) failed: ${failed.join(' | ')}`, 'Re-run render; if it fails again, report a toolkit bug with this output.');
+    return fail(
+      CMD,
+      'E_VERIFY',
+      `The film was rendered but ${failed.length} verify check(s) failed: ${failed.join(' | ')}. The unverified film is kept at ${tmp}; ${out} was not replaced.`,
+      'Re-run render; if it fails again, report a toolkit bug with this output.',
+    );
   }
   return ok(CMD, {
     out, mode, samples: policy.samples, fps: policy.fps, frames: timeline.frames, crf: policy.crf,

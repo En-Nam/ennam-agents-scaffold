@@ -20,6 +20,9 @@ describe('classifyFile', () => {
     ['.claude/workflows/review-changes.js', 'skip-if-exists'],
     ['.claude/skills/aws-iam-least-priv/SKILL.md', 'skip-if-exists'],
     // v1.16 (showreel) — the toolkit upgrades as one unit (B4): write-or-ask, never skip-if-exists.
+    // NOTE: the default fallback is also write-or-ask, so this row alone would pass without the explicit
+    // rule — it documents B4 and guards a future default change. The behaviour is proven end to end by
+    // tests/integration/profiles/showreel.test.ts (modified toolkit file restored by --merge-strategy=overwrite).
     ['.claude/showreel/engine/core.mjs', 'write-or-ask'],
     ['.serena/memories/INDEX.md',       'skip-if-exists'],
     ['.serena/checkpoint/.gitkeep',     'skip-if-exists'],

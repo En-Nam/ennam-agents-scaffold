@@ -2,7 +2,7 @@
 
 Toolkit version: 1.0.0
 
-Ennam Agents Scaffold — `/showreel` toolkit (v1.16.0). Installs into your project as `docs/agents-scaffold/showreel.md`.
+Ennam Agents Scaffold — showreel toolkit, run as `node .claude/showreel/cli.mjs <command>` (v1.16.0). Installs into your project as `docs/agents-scaffold/showreel.md`.
 
 Scope: render a 15–60 s promo film of **this** repo (1920x1080@60, H.264 + AAC) from facts extracted by code. Every on-screen string comes from a code-extracted fact or a fixed phrase library — the storyboard holds only enums, numbers, fact ids and phrase ids. **Opt-in**: nothing in your role's setup changes (same CLAUDE.md, AGENTS.md, workflow preset and settings); the add-on only adds the files below.
 
@@ -23,14 +23,14 @@ Upgrades: the whole `.claude/showreel/` tree is upgraded together (the scaffold 
 
 - **Node >= 22.12** for the toolkit (the scaffold itself needs Node >= 20). Older Node gets an `E_NODE` error with the fix.
 - **Google Chrome or Microsoft Edge** installed, or `SHOWREEL_BROWSER=/path/to/chrome`.
-- **First run downloads ~200 MB** (puppeteer-core driver libs, an ffmpeg build, two fonts) into `.claude/showreel/.tool/` with `npm ci`. Behind a proxy set `HTTPS_PROXY`. Your own `package.json` and `node_modules` are never touched.
+- **First run downloads ~200 MB** (puppeteer-core, an ffmpeg build, two fonts) into `.claude/showreel/.tool/` with `npm ci`. Behind a proxy set `HTTPS_PROXY`. Your own `package.json` and `node_modules` are never touched.
 
 ```bash
 node .claude/showreel/cli.mjs preflight    # installs .tool, finds the browser + ffmpeg
 node .claude/showreel/cli.mjs version
 ```
 
-Work files go to `showreel/` (`facts.json`, `storyboard.json`, `build/`, `<slug>-<N>s.mp4`). Preflight writes `showreel/.gitignore` (`build/`, `*.mp4`) and `.claude/showreel/.gitignore` (`.tool/`) if they are absent.
+Work files go to `showreel/` (`facts.json`, `storyboard.json`, `build/`, `<slug>-<N>s.mp4`; drafts are `<slug>-<N>s-draft.mp4`). A film is moved onto that name only after `verify` passes: if verify fails, the film stays at `showreel/build/<name>.unverified.mp4`, the error says why, and your previous film is untouched — fix the cause and re-render to publish. Preflight writes `showreel/.gitignore` (`build/`, `*.mp4`) and `.claude/showreel/.gitignore` (`.tool/`) if they are absent.
 
 ## Environment variables
 

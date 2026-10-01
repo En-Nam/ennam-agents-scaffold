@@ -2,10 +2,10 @@
 // Policy = M0 RULINGS (mem:decisions/showreel-addon-v1.16, binding):
 //   --final  GPU, S=6, 60 fps, crf 18 (14 with --master)
 //   --draft  S=1, 30 fps
-//   GPU-less (renderer names SwiftShader) --final → S=1 @ 60 fps + GPU_NOTICE
+//   GPU-less (SwiftShader or no WebGL, see isGpuLess) --final → S=1 @ 60 fps + GPU_NOTICE
 // One browser, sequential frames: no parallelism in v1.
 import { ShowreelError } from '../util/out.mjs';
-import { GPU_NOTICE } from '../preflight/plan.mjs';
+import { GPU_NOTICE, isGpuLess } from '../preflight/plan.mjs';
 
 export const RENDER_USAGE = 'Use: node .claude/showreel/cli.mjs render [--draft|--final] [--master]';
 
@@ -32,7 +32,7 @@ export function fpsFor(mode) {
 
 /** → {mode, fps, samples, crf, gpu, notice} */
 export function renderPolicy({ mode, master, renderer }) {
-  const gpu = !/swiftshader/i.test(String(renderer ?? ''));
+  const gpu = !isGpuLess(renderer);
   if (mode === 'draft') return { mode, fps: fpsFor(mode), samples: 1, crf: 18, gpu, notice: null };
   return { mode: 'final', fps: fpsFor('final'), samples: gpu ? 6 : 1, crf: master ? 14 : 18, gpu, notice: gpu ? null : GPU_NOTICE };
 }

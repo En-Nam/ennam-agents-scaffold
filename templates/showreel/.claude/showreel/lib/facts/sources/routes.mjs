@@ -9,7 +9,8 @@ const NEXT_PAGE = /^(?:src\/)?app\/(?:(.*)\/)?page\.(?:tsx|jsx|ts|js)$/;
 // Line-anchored: a decorator in a comment never matches; docstrings are masked (maskPython).
 const PY_ROUTE = /^[ \t]*@(app|router)\.(get|post|put|delete|patch)\(\s*["']([^"']+)/gm;
 const PY_ASSIGN = /^[ \t]*(app|router)[ \t]*(?::[^=\n]*)?=[ \t]*([\w.]+)[ \t]*\(/gm;
-const PY_INCLUDE = /\binclude_router\s*\(/g;
+// A router mounted elsewhere: FastAPI include_router(...) / Flask register_blueprint(...).
+const PY_INCLUDE = /\b(?:include_router|register_blueprint)\s*\(/g;
 const CS_CLASS = /\b((?:(?:public|internal|private|protected|sealed|partial|abstract|static)\s+)*)class\s+(\w+)/g;
 // [Route("t")] and [Route("t", Name = "X", Order = 1)] (named args do not drop the template).
 const CS_ROUTE = /\bRoute\(\s*"([^"]*)"[^)]*\)/;
@@ -83,21 +84,22 @@ function callArgs(text, open) {
   return null;
 }
 
-const hasPrefixKw = (args) => /(?:^|[\s,(])prefix\s*=/.test(args);
+// FastAPI APIRouter/include_router `prefix=`; Flask Blueprint/register_blueprint `url_prefix=`.
+const hasPrefixKw = (args) => /(?:^|[\s,(])(?:url_)?prefix\s*=/.test(args);
 
-/** `prefix=` of a call's args: '' when absent, the literal when a plain string, else null. */
+/** `prefix=` / `url_prefix=` of a call's args: '' when absent, the literal when a plain string, else null. */
 function literalPrefix(args) {
   if (args === null) return null;
   if (!hasPrefixKw(args)) return '';
-  const m = /(?:^|[\s,(])prefix\s*=\s*(["'])([^"'\\\n]*)\1\s*(?:,|$)/.exec(args);
+  const m = /(?:^|[\s,(])(?:url_)?prefix\s*=\s*(["'])([^"'\\\n]*)\1\s*(?:,|$)/.exec(args);
   return m ? m[2] : null;
 }
 
-/** Does any product .py file call include_router(..., prefix=...)? (mount prefix unknowable) */
+/** Does any product .py file call include_router(..., prefix=...) / register_blueprint(..., url_prefix=...)? (mount prefix unknowable) */
 function repoIncludePrefix(pyFiles, ctx) {
   for (const file of pyFiles) {
     const text = ctx.read(file);
-    if (!text.includes('include_router')) continue;
+    if (!text.includes('include_router') && !text.includes('register_blueprint')) continue;
     const masked = maskPython(text);
     PY_INCLUDE.lastIndex = 0;
     let m;
@@ -110,8 +112,8 @@ function repoIncludePrefix(pyFiles, ctx) {
 }
 
 const PY_RULE = '@(app|router).(get|post|put|delete|patch)("<path>") at line start (not in comments/docstrings) → "<VERB> <prefix><path>"; '
-  + '<prefix> = literal prefix= of that name\'s APIRouter(...) in the same file; routes of a router whose prefix is not a string literal, '
-  + 'a "router" not assigned in that file, or any router when the repo has include_router(..., prefix=...) are NOT emitted (real path unknowable); '
+  + '<prefix> = literal prefix= (FastAPI APIRouter) or url_prefix= (Flask Blueprint) of that name\'s constructor in the same file; routes of a router whose prefix is not a string literal, '
+  + 'a "router" not assigned in that file, or any router when the repo has include_router(..., prefix=...) or register_blueprint(..., url_prefix=...) are NOT emitted (real path unknowable); '
   + `test_*.py, *_test.py, conftest.py skipped; ${NON_PRODUCT_RULE}`;
 
 function pythonRoutes(file, text, includePrefix) {

@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execa } from 'execa';
 import { makeStoryboard, type DigestFact } from './helpers/storyboard';
+import { resolveFfmpeg } from '../../templates/showreel/.claude/showreel/lib/render/ffmpeg.mjs';
 
 // v1.16 showreel — end to end on a freshly scaffolded repo (gated: SHOWREEL_E2E=1 + SHOWREEL_TOOL_DIR).
 // This is the M1 exit proof (mem:decisions/showreel-addon-v1.16): a `<role> showreel` install runs
@@ -85,6 +86,23 @@ describe.skipIf(!E2E)('showreel end to end on a scaffolded repo (SHOWREEL_E2E=1)
     }
   }
 
+  /** Replace the rendered film with an ffmpeg-tampered copy, run verify (expecting E_VERIFY), restore the film. */
+  async function verifyTamperedFilm(cwd: string, rel: string, ffArgs: (src: string, dst: string) => string[]): Promise<string> {
+    const film = path.join(cwd, rel);
+    const backup = path.join(cwd, 'showreel', 'build', 'film.orig.mp4');
+    const tampered = path.join(cwd, 'showreel', 'build', 'film.tampered.mp4');
+    copyFileSync(film, backup);
+    await execa(resolveFfmpeg(cwd), ['-y', '-hide_banner', '-loglevel', 'error', ...ffArgs(backup, tampered)]);
+    copyFileSync(tampered, film);
+    try {
+      return (await srFail(cwd, 'E_VERIFY', 'verify')).error.message as string;
+    } finally {
+      copyFileSync(backup, film);
+      rmSync(backup);
+      rmSync(tampered);
+    }
+  }
+
   const pngSize = (file: string) => { const b = readFileSync(file); return { w: b.readUInt32BE(16), h: b.readUInt32BE(20) }; };
 
   function keep(cwd: string, name: string, rels: string[]) {
@@ -136,6 +154,7 @@ describe.skipIf(!E2E)('showreel end to end on a scaffolded repo (SHOWREEL_E2E=1)
     expect(render).toMatchObject({ out: 'showreel/acme-shop-30s.mp4', mode: 'final', frames: 1800 });
     expectPolicy(render, 'final');
     expect(existsSync(path.join(cwd, render.out))).toBe(true);
+    expect(existsSync(path.join(cwd, 'showreel', 'build', 'acme-shop-30s.unverified.mp4'))).toBe(false); // moved on pass
 
     const verify = await sr(cwd, 'verify');
     expectExact(verify, 30, 60);
@@ -187,6 +206,17 @@ describe.skipIf(!E2E)('showreel end to end on a scaffolded repo (SHOWREEL_E2E=1)
 
     // the record no longer matches the build → stale, not a toolkit bug
     await verifyTampered(neg, 'render.json', (r) => ({ ...r, fps: 60 }), 'E_STALE_RENDER');
+
+    // D13 "EXACTLY N s": a film cut short must be rejected by the frame count …
+    const truncated = await verifyTamperedFilm(neg, render.out, (src, dst) => ['-i', src, '-t', '14', '-c', 'copy', dst]);
+    expect(truncated).toContain('videoFrames');
+    // … and a film whose AUDIO alone is 1 s short (video intact) by the sample count.
+    const shortAudio = await verifyTamperedFilm(neg, render.out, (src, dst) => [
+      '-i', src, '-map', '0:v:0', '-map', '0:a:0', '-c:v', 'copy',
+      '-af', 'atrim=end=14', '-c:a', 'aac', '-b:a', '256k', '-ar', '48000', '-ac', '2', dst,
+    ]);
+    expect(shortAudio).toContain('audioSamples');
+    expect(shortAudio).not.toContain('videoFrames');
 
     // untouched copy still verifies: the failures above came from the tampering alone
     await sr(neg, 'verify');

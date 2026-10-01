@@ -7,14 +7,11 @@
 import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 import { ok, fail, ShowreelError } from './lib/util/out.mjs';
-import { VERSION } from './lib/util/version.mjs';
+import { VERSION, NODE_FLOOR, nodeTooOld } from './lib/util/version.mjs';
 
 export { VERSION };
 
-const NODE_FLOOR = [22, 12];
-
 // Command → loader of a module exporting `run(args, hostRoot) → Promise<exitCode>`.
-// null = not implemented in this toolkit version.
 const COMMANDS = {
   preflight: () => import('./lib/preflight/cmd.mjs'),
   facts: () => import('./lib/facts/cmd.mjs'),
@@ -22,12 +19,6 @@ const COMMANDS = {
   render: () => import('./lib/render/cmd.mjs'),
   verify: () => import('./lib/verify/cmd.mjs'),
 };
-
-function nodeTooOld(version) {
-  const parts = String(version).split('.').map(Number);
-  if (parts[0] !== NODE_FLOOR[0]) return parts[0] < NODE_FLOOR[0];
-  return parts[1] < NODE_FLOOR[1];
-}
 
 function parseArgs(argv) {
   const rest = [];
@@ -52,8 +43,8 @@ export async function main(argv) {
     return fail(
       'preflight',
       'E_NODE',
-      'Node ' + process.versions.node + ' is too old for the showreel toolkit (needs >= 22.12).',
-      'Install Node 22.12+ (e.g. nvm install 22) and re-run: node .claude/showreel/cli.mjs preflight',
+      'Node ' + process.versions.node + ' is too old for the showreel toolkit (needs >= ' + NODE_FLOOR.join('.') + ').',
+      'Install Node ' + NODE_FLOOR.join('.') + '+ (e.g. nvm install ' + NODE_FLOOR[0] + ') and re-run: node .claude/showreel/cli.mjs preflight',
     );
   }
   const usage = 'Use: node .claude/showreel/cli.mjs <' + Object.keys(COMMANDS).concat('version').join('|') + '> [--root <dir>]';
@@ -61,13 +52,9 @@ export async function main(argv) {
   if (!Object.prototype.hasOwnProperty.call(COMMANDS, cmd)) {
     return fail(cmd || 'cli', 'E_USAGE', cmd ? 'Unknown command "' + cmd + '".' : 'No command given.', usage);
   }
-  const loader = COMMANDS[cmd];
-  if (loader === null) {
-    return fail(cmd, 'E_NOT_IMPLEMENTED', 'Command "' + cmd + '" is not implemented in toolkit ' + VERSION + '.', 'Upgrade the toolkit: npx @ennamjsc/agents-scaffold@latest <your-roles> showreel');
-  }
   try {
     const args = parseArgs(argv.slice(1));
-    const mod = await loader();
+    const mod = await COMMANDS[cmd]();
     return await mod.run(args.rest, args.root);
   } catch (err) {
     if (err instanceof ShowreelError) return fail(cmd, err.code, err.message, err.fix);

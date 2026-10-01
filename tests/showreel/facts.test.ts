@@ -294,6 +294,21 @@ describe('facts — fixture extraction (exact ids/kinds/displays)', () => {
     expect(nonLiteral).toEqual([]);
   });
 
+  it('flask: Blueprint(url_prefix="…") is prepended; register_blueprint(..., url_prefix=…) makes the mount unknowable (never rootless)', () => {
+    // Rule 13 / D8: "GET /x" for a blueprint served at /items/x is a wrong fact on screen.
+    const own = memCollect({
+      'app/items.py': 'from flask import Blueprint\nrouter = Blueprint("items", __name__, url_prefix="/items")\n\n@router.get("/<id>")\ndef item(id): ...\n',
+    });
+    expect(own).toEqual(['GET /items/<id>']);
+
+    const mounted = memCollect({
+      'app/__init__.py': 'from flask import Flask\nfrom app.items import router\napp = Flask(__name__)\napp.register_blueprint(router, url_prefix="/v1")\n\n@app.get("/health")\ndef h(): ...\n',
+      'app/items.py': 'from flask import Blueprint\nrouter = Blueprint("items", __name__, url_prefix="/items")\n\n@router.get("/<id>")\ndef item(id): ...\n',
+    });
+    // The real route is GET /v1/<id> (register's url_prefix wins); app routes are unaffected.
+    expect(mounted).toEqual(['GET /health']);
+  });
+
   it('python: decorators in comments and docstrings are not routes', () => {
     const routes = memCollect({
       'app/main.py': [
