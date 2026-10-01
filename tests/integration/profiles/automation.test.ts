@@ -32,12 +32,12 @@ describe('install automation add-on', () => {
     await execa('npm', ['-w', '@ennamjsc/agents-scaffold', 'run', 'build'], { cwd: REPO_ROOT, shell: true });
   });
 
-  for (const role of ['next', 'hr']) {
-    it(`${role} + automation installs ${role} byte-identically, plus the 3 guidance files`, async () => {
+  for (const roles of [['next'], ['hr'], ['ba', 'pm']]) {
+    it(`${roles.join(' ')} + automation installs ${roles.join(' ')} byte-identically, plus the 3 guidance files`, async () => {
       const withAddon = await fresh();
       const alone = await fresh();
-      expect((await install(withAddon, [role, 'automation'])).exitCode).toBe(0);
-      await install(alone, [role]);
+      expect((await install(withAddon, [...roles, 'automation'])).exitCode).toBe(0);
+      await install(alone, roles);
       // Whole tree: the ONLY difference is the add-on's files.
       const aloneFiles = await tree(alone);
       expect((await tree(withAddon)).sort()).toEqual([...aloneFiles, ...ADDON_FILES].sort());

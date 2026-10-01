@@ -117,14 +117,14 @@ cli
 
     // Composed display profile — the union of extra MCPs, a joined name. For a
     // single profile this IS the profile, so single-profile UX is unchanged.
-    // v1.15 — one role + add-ons (`game-unity automation`) displays and renders AS the role,
-    // so role-specific next steps / handoff behave exactly as for the role alone.
+    // v1.15 — display/render identity comes from the ROLES only (add-ons excluded), so
+    // `game-unity automation` behaves as game-unity and `ba pm automation` renders as `ba pm`.
     const voters = roleVoters(profileDefs);
     const displayProfile: ProfileDef = voters.length === 1 ? voters[0]! : {
-      name: profileDefs.map(p => p.name).join(' + '),
-      description: `composed: ${profileDefs.map(p => p.name).join(', ')}`,
+      name: voters.map(p => p.name).join(' + '),
+      description: `composed: ${voters.map(p => p.name).join(', ')}`,
       templateDir: '',
-      extraMcp: [...new Set(profileDefs.flatMap(p => p.extraMcp))],
+      extraMcp: [...new Set(voters.flatMap(p => p.extraMcp))],
     };
 
     // v1.9.0 — preflight: warn if user's local Claude Code is older than any

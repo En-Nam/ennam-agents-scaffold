@@ -35,6 +35,13 @@ describe('automation profile — composition neutrality', () => {
     }
   });
 
+  it('does not change the workflow recommended for a multi-role compose', () => {
+    for (const roles of [['ba', 'pm'], ['hr', 'ceo'], ['next', 'hr']]) {
+      const alone = recommendWorkflow(roles.map(getProfile));
+      expect(recommendWorkflow([...roles.map(getProfile), getProfile('automation')])).toBe(alone);
+    }
+  });
+
   it('alone, falls back to the default (engineering) recommendation', () => {
     expect(recommendWorkflow([getProfile('automation')])).toBe('engineering-full');
   });
@@ -61,9 +68,18 @@ describe('add-on overlay contract (fail loud, Rule 12)', () => {
   }
 
   // The contract must hold whether the add-on joins one role or a multi-role compose.
-  const ROLE_SETS: Array<[string, string[]]> = [['one role', ['next']], ['two roles', ['ba', 'pm']]];
+  // Third element: a path one of the ROLES (not _shared) ships.
+  const ROLE_SETS: Array<[string, string[], string]> = [
+    ['one role', ['next'], '.claude/agents/web-dev.md'],
+    ['two roles', ['ba', 'pm'], '.claude/agents/product-manager.md'],
+  ];
 
-  for (const [label, roles] of ROLE_SETS) {
+  for (const [label, roles, rolePath] of ROLE_SETS) {
+    it(`${label}: throws when an add-on ships a role-owned path (${rolePath})`, async () => {
+      const addOn = await fakeAddOn({ [rolePath]: 'mine' });
+      await expect(enumerateProfiles([...roles.map(getProfile), addOn])).rejects.toThrow(/collides with the selected role\(s\)/);
+    });
+
     it(`${label}: overlays add-on files, keeping the plan sorted`, async () => {
       const entries = await enumerateProfiles([...roles.map(getProfile), await fakeAddOn({ 'notes/x.md': 'x' })]);
       const paths = entries.map(e => e.relPath);
@@ -104,8 +120,8 @@ describe('automation profile — guidance content discipline', () => {
     // The evaluator only reads the transcript — evidence must be PRINTED, not just written to Serena.
     expect(t).toMatch(/does not run commands or read files/i);
     expect(t).toMatch(/\/goal clear/);
-    // A resumed session restores an active goal.
-    expect(t).toMatch(/resume/i);
+    // A resumed session restores an active goal — the reason /goal clear matters.
+    expect(t).toMatch(/resumed session \([^)]*\) restores an active goal/);
   });
 
   it('skill: Serena stays the mailbox — scheduled/goal results are checkpointed, not left in the transcript', async () => {

@@ -3,6 +3,7 @@ import { intro, outro, log, confirm, isCancel, cancel } from '@clack/prompts';
 import type { OperationPlan, ProfileDef } from './types.js';
 import type { ExecuteResult } from './execute.js';
 import { buildKeyReport, formatKeyReportStep } from './env-scan.js';
+import { getProfile } from './profiles.js';
 
 export function printIntro(version: string): void {
   intro(pc.cyan(`Ennam Agents Scaffold v${version}`));
@@ -58,7 +59,7 @@ export async function printNextSteps(profile: ProfileDef, result: ExecuteResult,
   // v1.15 — automation is usually an add-on, so check the selected names, not the display profile.
   if (selected.includes('automation')) {
     steps.push('Automation guidance installed: skill `ennam-automation` (loads when you use /goal, /loop, schedules or `claude -p`), `.claude/loop.md` (report-only default for a bare /loop — edit freely, never overwritten), runbook docs/agents-scaffold/automation.md.');
-    steps.push('Goals and loops run on your Anthropic account until they stop — always bound a goal ("… or stop after 20 turns"). Requires Claude Code >= 2.1.246 (preflight warns if behind).');
+    steps.push(`Goals and loops run on your Anthropic account until they stop — always bound a goal ("… or stop after 20 turns"). Requires Claude Code >= ${getProfile('automation').minClaudeCodeVersion} (preflight warns if behind).`);
   }
 
   // Profile-specific prereq + post-install reminders (game-unity has the heaviest setup —

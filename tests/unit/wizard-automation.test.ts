@@ -26,6 +26,7 @@ describe('wizard — automation add-on', () => {
     answers.length = 0;
     confirmCalls.length = 0;
     multiselectOptions.length = 0;
+    confirmAnswer = false;  // never inherit CANCEL: a regression would hit the real process.exit
     Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
   });
   afterEach(() => {
