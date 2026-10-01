@@ -46,8 +46,8 @@ describe('install game-unity profile into empty cwd', () => {
     expect((await stat(path.join(cwd, 'Editor-templates/EnnamPerf.cs'))).isFile()).toBe(true);
     expect((await stat(path.join(cwd, 'Editor-templates/README.md'))).isFile()).toBe(true);
 
-    // README
-    expect((await stat(path.join(cwd, 'README.md'))).isFile()).toBe(true);
+    // Profile README lands under docs/agents-scaffold/ — never the user's root README (v1.14)
+    expect((await stat(path.join(cwd, 'docs/agents-scaffold/game-unity.md'))).isFile()).toBe(true);
 
     // CLAUDE.md has both game-specific marker blocks
     const claude = await readFile(path.join(cwd, 'CLAUDE.md'), 'utf8');
@@ -66,7 +66,7 @@ describe('install game-unity profile into empty cwd', () => {
     expect(mcp.mcpServers.unity.command).toBe('uvx');
     expect(mcp.mcpServers.unity.args).toContain('coplay-mcp-server');
 
-    // .gitattributes (from _shared/.gitattributes.append) has LFS rules
+    // .gitattributes (from game-unity/.gitattributes.append) has LFS rules
     expect((await stat(path.join(cwd, '.gitattributes'))).isFile()).toBe(true);
     const gitattrs = await readFile(path.join(cwd, '.gitattributes'), 'utf8');
     expect(gitattrs).toMatch(/\*\.fbx\s+filter=lfs/);

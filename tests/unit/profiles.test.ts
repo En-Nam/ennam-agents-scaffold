@@ -65,9 +65,9 @@ describe('profiles', () => {
     expect(getProfile('game-unity').extraMcp).toEqual([]);
   });
 
-  it('agent-org declares minClaudeCodeVersion 2.1.178 (post-TeamCreate removal + team_name deprecation)', () => {
+  it('agent-org declares minClaudeCodeVersion 2.1.248 (workflow agentType reference; v1.14)', () => {
     const p = getProfile('agent-org');
-    expect(p.minClaudeCodeVersion).toBe('2.1.178');
+    expect(p.minClaudeCodeVersion).toBe('2.1.248');
   });
 
   it('no other profile in v1.9.0 declares minClaudeCodeVersion (infra is opt-in per profile)', () => {

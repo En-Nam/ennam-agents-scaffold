@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { enumerateFiles } from '../../packages/cli/src/enumerate.js';
+import { enumerateFiles, enumerateProfiles } from '../../packages/cli/src/enumerate.js';
 import { getProfile } from '../../packages/cli/src/profiles.js';
 
 describe('enumerateFiles', () => {
@@ -45,5 +45,52 @@ describe('enumerateFiles', () => {
     expect(mcpEntry?.kind).toBe('json-merge');
     expect(mcpEntry?.extraSrcAbs).toBeDefined();
     expect(mcpEntry?.extraSrcAbs).toMatch(/\.mcp\.json\.partial\.hbs$/);
+  });
+
+  // v1.14 — the Unity LFS rules lived in _shared and leaked into EVERY profile:
+  // a Next.js user got *.png/*.jpg routed to Git LFS. Only game-unity may ship them.
+  it('does NOT ship .gitattributes for non-Unity profiles', async () => {
+    const entries = await enumerateFiles(getProfile('next'));
+    expect(entries.map(e => e.relPath)).not.toContain('.gitattributes');
+  });
+
+  it('ships .gitattributes (append) for game-unity', async () => {
+    const entries = await enumerateFiles(getProfile('game-unity'));
+    const ga = entries.find(e => e.relPath === '.gitattributes');
+    expect(ga?.kind).toBe('append-lines');
+  });
+
+  // v1.14 — a profile's root README.md documents the profile; it must never target
+  // the user's own project README (that prompted to overwrite their README).
+  it.each(['agent-org', 'game-unity', 'qa-automation'])(
+    '%s: profile README is remapped under docs/agents-scaffold/, never the root README',
+    async (name) => {
+      const rels = (await enumerateFiles(getProfile(name))).map(e => e.relPath);
+      expect(rels).not.toContain('README.md');
+      expect(rels).toContain(`docs/agents-scaffold/${name}.md`);
+    },
+  );
+
+  // v1.14 — profile-specific settings (agent-org's SubagentStop hook + isolatePeerMachines)
+  // must reach .claude/settings.json without a manual paste step.
+  it('agent-org settings.json entry carries the profile settings partial', async () => {
+    const entries = await enumerateFiles(getProfile('agent-org'));
+    const s = entries.find(e => e.relPath === '.claude/settings.json');
+    expect(s?.kind).toBe('json-merge');
+    expect(s?.extraSrcAbs).toMatch(/settings\.json\.partial\.hbs$/);
+  });
+
+  it('profiles without a settings partial keep the shared settings only', async () => {
+    const entries = await enumerateFiles(getProfile('next'));
+    expect(entries.find(e => e.relPath === '.claude/settings.json')?.extraSrcAbs).toBeUndefined();
+  });
+
+  // v1.14 — before the README remap, two profiles that each ship a README.md could not be
+  // composed at all (same path, different content → Rule-7 conflict). Each now gets its own doc.
+  it("compose: agent-org + qa-automation no longer collide on README.md", async () => {
+    const rels = (await enumerateProfiles([getProfile("agent-org"), getProfile("qa-automation")])).map(e => e.relPath);
+    expect(rels).toContain("docs/agents-scaffold/agent-org.md");
+    expect(rels).toContain("docs/agents-scaffold/qa-automation.md");
+    expect(rels).not.toContain("README.md");
   });
 });

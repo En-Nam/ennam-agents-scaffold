@@ -46,14 +46,13 @@ export async function printNextSteps(profile: ProfileDef, result: ExecuteResult,
   // v1.12 (#24) — point users at the official-plugin menu (guidance only; nothing installed).
   steps.push('Amplify your role with official plugins — see docs/plugins.md: https://github.com/En-Nam/ennam-agents-scaffold/blob/main/docs/plugins.md');
 
-  // v1.9.0 — agent-org profile needs a manual SubagentStop hook wire-in.
-  // The shared settings.json.hbs merger doesn't support profile-specific hook
-  // fragments yet (backlog: `.claude/settings.json.partial.hbs` merge, v1.10.x).
-  // Surface the exact JSON so users don't have to guess. Rule 12 — fail loud.
+  // agent-org: SubagentStop hook + isolatePeerMachines merge via the profile settings
+  // partial (#25). If the user's own SubagentStop blocks ours, index.ts prints a warning.
   if (profile.name === 'agent-org') {
     steps.push('The SubagentStop hook is now installed automatically in .claude/settings.json (merged from the profile; the OS-correct .ps1/.sh command is already selected) — no manual paste needed.');
-    steps.push('COST DISCLOSURE: agent-org runs Opus orchestrator + Sonnet workers concurrently — 5-10x tokens vs solo. Only dispatch when task decomposition genuinely helps.');
-    steps.push('Requires Claude Code >= 2.1.178 (post-TeamCreate/Delete removal + team_name deprecation). The wizard preflight will WARN if you are behind.');
+    steps.push('Claude Code dynamic workflows installed (.claude/workflows/): /review-changes [base-ref], /judge-panel <question>, /fix-loop <check command>. Watch runs with /workflows. (Not the same thing as the CLAUDE.md --workflow preset.)');
+    steps.push('COST DISCLOSURE: agent-org runs multi-agent dispatch on your Anthropic account — 5-10x tokens vs solo (/review-changes ~6 agents, /fix-loop up to 9). Only dispatch when task decomposition genuinely helps.');
+    steps.push('Requires Claude Code >= 2.1.248 (dynamic workflows + agentType roles). The wizard preflight will WARN if you are behind.');
   }
 
   // Profile-specific prereq + post-install reminders (game-unity has the heaviest setup —

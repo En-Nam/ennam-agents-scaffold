@@ -20,6 +20,7 @@ import { runAnalyzeClaude } from './analyze-claude.js';
 import { renderCatalogJson, renderCatalogHuman } from './list.js';
 import { runDoctor } from './doctor.js';
 import { detectLegacySettings, hasStaleChromeDevtools } from './checks.js';
+import { findBlockedHooks, type BlockedHook } from './hook-conflict.js';
 import type { UserStrategy, OperationPlan, ProfileDef } from './types.js';
 
 // Re-export wizard types/functions so external callers (and tests) can keep
@@ -194,13 +195,20 @@ cli
         // For json-merge: "identical" means the existing file already has the same merged result.
         // Compute mergeJson(userExisting, scaffoldCombined) to match execute.ts exactly.
         let existingObj: Record<string, unknown> = {};
+        let existingText: string;
         try {
-          const existingText = await readFile(path.join(cwd, rel), 'utf8');
-          if (existingText.trim().length > 0) {
-            existingObj = JSON.parse(existingText) as Record<string, unknown>;
-          }
+          existingText = await readFile(path.join(cwd, rel), 'utf8');
         } catch {
           return null;  // file absent — scanConflicts handles absent separately
+        }
+        if (existingText.trim().length > 0) {
+          try {
+            existingObj = JSON.parse(existingText) as Record<string, unknown>;
+          } catch (err) {
+            // Never merge over a file we cannot read — that would silently replace the user's
+            // settings (v1.14 review finding). Abort before anything is written (Rule 12).
+            throw new Error(`${rel} is not valid JSON (${(err as Error).message}). Fix or remove it, then re-run — nothing was written.`);
+          }
         }
         const scaffoldObj = await renderJsonContent(entry, ctx);
         const merged = mergeJson(
@@ -237,7 +245,12 @@ cli
 
     printPlan(plan);
 
+    // v1.14 — read the user's settings BEFORE writing so we can name scaffold hooks
+    // that user-wins merging will drop (e.g. agent-org's SubagentStop).
+    const blockedHooks = await computeBlockedHooks(cwd, byRel.get('.claude/settings.json'), ctx);
+
     if (flags.dryRun) {
+      printBlockedHooks(blockedHooks);
       console.log('\n(dry-run — no files written)');
       process.exit(0);
     }
@@ -249,6 +262,7 @@ cli
 
     const result = await executeOps({ cwd, ops, ctx, interactive });
     await printNextSteps(displayProfile, result, hasGit, cwd, workflow);
+    printBlockedHooks(blockedHooks);
 
     // Migration hint: v1.1 users may still have a stale chrome-devtools entry
     // in their .mcp.json (mergeJson is user-wins, so the scaffold cannot
@@ -295,6 +309,39 @@ const isMain = (() => {
 })();
 if (isMain) {
   cli.parse();
+}
+
+async function computeBlockedHooks(
+  cwd: string,
+  entry: Parameters<typeof renderJsonContent>[0] | undefined,
+  ctx: Parameters<typeof renderJsonContent>[1],
+): Promise<BlockedHook[]> {
+  if (!entry) return [];
+  let user: Record<string, unknown>;
+  try {
+    const txt = await readFile(path.join(cwd, '.claude', 'settings.json'), 'utf8');
+    if (!txt.trim()) return [];
+    user = JSON.parse(txt) as Record<string, unknown>;
+  } catch {
+    return [];  // absent — the merge writes our hooks. (Invalid JSON aborts at plan time.)
+  }
+  return findBlockedHooks(user, await renderJsonContent(entry, ctx));
+}
+
+function printBlockedHooks(blocked: BlockedHook[]): void {
+  if (!blocked.length) return;
+  console.log('');
+  console.log('  Warning: your .claude/settings.json already defines these hook events, so the');
+  console.log('  scaffold did NOT add its own entry (your settings win). Fix by hand if you want it:');
+  for (const b of blocked) {
+    for (const old of b.replaces) {
+      console.log(`    hooks.${b.event}: REPLACE the outdated scaffold command "${old}"`);
+    }
+    for (const c of b.commands) {
+      const verb = b.replaces.length ? '      with' : `    Append to the hooks.${b.event} array:`;
+      console.log(`${verb} { "hooks": [ { "type": "command", "command": "${c}" } ] }`);
+    }
+  }
 }
 
 async function maybeWarnStaleChromeDevtools(cwd: string): Promise<void> {

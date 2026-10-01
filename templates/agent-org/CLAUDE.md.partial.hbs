@@ -1,6 +1,6 @@
 ## Role: multi-agent engineering organization
 
-This project uses the **3-role dispatch pattern** (orchestrator → implementer → reviewer) with a SubagentStop hook that logs to Serena. Adopt it for any task larger than a single-file edit.
+This project uses the **3-role dispatch pattern** (orchestrator → implementer → reviewer), **dynamic workflows** that drive those roles from a script, and a SubagentStop hook that logs role runs to Serena. Solo remains the default.
 
 ### The 3 roles
 
@@ -8,35 +8,52 @@ This project uses the **3-role dispatch pattern** (orchestrator → implementer 
 - **`implementer`** (Sonnet tier) — executes ONE subtask at a time. Must run `build + test` green before reporting done. Fails loud on under-specified spec (Rule 12).
 - **`reviewer`** (Sonnet tier) — reads the diff, applies AGENTS.md rules, reports blocker / major / minor / nit. Does NOT modify code.
 
-### When to dispatch vs solo
+### Dynamic workflows (`.claude/workflows/`)
+
+Not the same as this file's "Workflow" section above (the phase preset chosen with `--workflow`). A dynamic workflow is a script Claude Code runs in the background; **the script decides what runs next**, not a model turn by turn (AGENTS.md Rule 5). `/review-changes` and `/fix-loop` run the roles above as workers (`agentType`); `/judge-panel` uses untyped read-only agents, so its runs do not appear in the hook log. Watch and stop runs with `/workflows`.
+
+| Command | What it does | Agents |
+|---|---|---|
+| `/review-changes [base-ref]` | correctness / conventions / test-intent reviewers on the diff vs `base-ref` (default `main`), then a skeptic per lens refutes what it can't confirm | ~6 |
+| `/judge-panel <question>` | 3 advocates (simplicity / risk / fit) propose, 1 judge scores and picks — or declares a tie. Read-only. Used by the `handoff` skill | 4 |
+| `/fix-loop <check command>` | implementer runs the check, fixes, repeats; stops green, after 2 rounds with no progress, or at 5 checks | ≤ 9 |
+
+The scaffold never overwrites these files — edit them to fit your project.
+
+### Which dispatch mode
 
 | Task shape | Mode |
 |---|---|
-| Single-file typo, config change | Solo (main loop) |
-| 3+ related edits, single subsystem | Orchestrator + 1 implementer + 1 reviewer |
-| Independent subtasks (e.g. 3 SKILLs) | Orchestrator + N implementers in parallel + 1 reviewer per output |
-| Cross-cutting migration | Orchestrator + serial implementers (avoid file conflicts) + reviewer after each |
+| Single-file typo, config change, anything < 3 steps | **Solo** (main loop) |
+| Known, repeatable shape — review a diff, decide between approaches, make a red check green | **Dynamic workflow** |
+| One-off task whose decomposition you only learn by reading the code | **`orchestrator`** + implementers (parallel if independent, serial if they share files) + reviewer per output |
+| Another live session needs to know something now | **Message it** — durable content to Serena first, the message points at it (see "Cross-session messaging" above) |
 
 ### SubagentStop hook
 
-Every dispatched subagent's completion appends a timestamped marker to `.serena/memories/comms/active/spike-log.md`. The orchestrator reads this trail to see which subagents actually ran in its dispatch window. Hook is log-only; it never blocks.
+Registered in `.claude/settings.json` by the scaffold. Each `orchestrator` / `implementer` / `reviewer` completion appends `- <timestamp> SubagentStop <role>` to `.serena/memories/qa/agent-org-log.md`. Other subagents (Claude Code's internal agents, un-typed workflow agents) are ignored. Log-only; it never blocks.
 
 If you want to gate on test/lint before allowing "done", extend the hook script to run `npm test` (or your project's equivalent) and `exit 2` on failure — that re-prompts the subagent to keep working. Only do this once your test suite is fast enough that a per-subagent run is acceptable.
+
+### Cross-session messaging in this profile
+
+- `isolatePeerMachines` is `true`: a message to a session on **another machine or in the cloud** asks you first (it travels through Anthropic's servers). Same-machine messages don't prompt.
+- A session running with **bypassed permissions holds** messages from normal sessions for your approval, and drops them after 5 minutes unanswered (`dialogExpiry`).
+- **WSL 2 ↔ native Windows** sessions can't reach each other; nor can a **container ↔ its host**. `--bare` sessions have no inbox.
 
 ### Cost disclosure
 
 This pattern is expensive on the end-user's Anthropic account:
 
-- Opus orchestrator + N Sonnet workers running concurrently.
+- Opus orchestrator + N Sonnet workers running concurrently; a dynamic workflow runs every agent in its table above.
 - Rough back-of-envelope: a 3-role dispatch on a medium task consumes ~5–10× the tokens of solo work on the same task.
-- Only worth it when task decomposition genuinely benefits from independent context (see the "When to dispatch" table).
+- Only worth it when task decomposition genuinely benefits from independent context (see "Which dispatch mode").
 
 ### Boundaries
 
-- Human gates stay. The orchestrator does NOT auto-merge PRs. Reviewer surfaces issues; humans decide.
+- Human gates stay. Nothing here auto-merges PRs. Reviewers surface issues; humans decide.
 - No swarm-for-swarm's-sake. Solo is the default; dispatch is opt-in per task.
-- Requires Claude Code ≥ 2.1.178 (post-`TeamCreate`/`TeamDelete` shape).
+- Requires Claude Code ≥ 2.1.248 (dynamic workflows + `agentType` roles; also covers messaging on native Windows, ≥ 2.1.234).
+- The scaffold does not turn on `ultracode` or set a workflow size guideline — those are your cost choices (`/effort`, `/config`).
 
-### Decision reference
-
-See `mem:decisions/v1.9-scope` in this repo's Serena for the origin R&D and kill criteria.
+Profile details: `docs/agents-scaffold/agent-org.md`.

@@ -70,7 +70,8 @@ export async function enumerateFiles(profile: ProfileDef, opts: EnumerateOptions
   for (const { src, rel } of profileFiles) {
     if (collectMarker(src, rel, false)) continue;
     if (src.endsWith('.partial.hbs')) continue;
-    const target = targetRelPath(rel);
+    // A profile's root README.md documents the profile — never target the user's own README.
+    const target = rel === 'README.md' ? `docs/agents-scaffold/${profile.name}.md` : targetRelPath(rel);
     map.set(target, {
       srcAbs: src,
       relPath: target,
@@ -196,7 +197,8 @@ export async function enumerateProfiles(profiles: ProfileDef[], opts: EnumerateO
       if (rel === 'CLAUDE.md.partial.hbs') continue;    // marker — handled below
       if (rel === '.mcp.json.partial.hbs') continue;    // json — handled below
       if (src.endsWith('.partial.hbs')) continue;
-      const target = targetRelPath(rel);
+      // Profile README → its own docs path (never the user's README; never a compose collision).
+      const target = rel === 'README.md' ? `docs/agents-scaffold/${profile.name}.md` : targetRelPath(rel);
       const content = await readFile(src, 'utf8');
       const prev = owner.get(target);
       if (prev && prev.content !== content) {

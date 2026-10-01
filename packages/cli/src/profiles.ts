@@ -212,12 +212,13 @@ const REGISTRY: Record<string, ProfileDef> = {
   },
   'agent-org': {
     name: 'agent-org',
-    description: 'Multi-agent dispatch — orchestrator + implementer + reviewer + SubagentStop hook. Cost-heavy; opt-in.',
+    description: 'Multi-agent dispatch — orchestrator + implementer + reviewer, dynamic workflows, SubagentStop audit hook. Cost-heavy; opt-in.',
     templateDir: path.join(TEMPLATES, 'agent-org'),
     extraMcp: [],
-    // v1.9.0 — first profile to use minClaudeCodeVersion. 2.1.178 is the
-    // post-TeamCreate/Delete-removal + post-team_name-deprecation cutline.
-    minClaudeCodeVersion: '2.1.178',
+    // v1.14.0 — 2.1.248: first version documenting the workflow-script reference
+    // (agent() `agentType` resolving .claude/agents/ roles). Supersedes v1.9.0's 2.1.178
+    // (TeamCreate/Delete removal) cutline. See mem:decisions/v1.14-dynamic-workflows-messaging.
+    minClaudeCodeVersion: '2.1.248',
   },
 };
 

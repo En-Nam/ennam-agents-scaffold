@@ -91,14 +91,17 @@ export async function executeOps(input: ExecuteInput): Promise<ExecuteResult> {
       await mkdir(path.dirname(target), { recursive: true });
       let existingObj: Record<string, unknown> = {};
       let existed = false;
+      let existingText = '';
       try {
-        const existingText = await readFile(target, 'utf8');
-        if (existingText.trim().length > 0) {
-          existingObj = JSON.parse(existingText) as Record<string, unknown>;
-          existed = true;
-        }
+        existingText = await readFile(target, 'utf8');
       } catch {
         // file doesn't exist — fine
+      }
+      if (existingText.trim().length > 0) {
+        // Defense in depth: the plan stage already aborts on invalid JSON. Never fall through
+        // to overwriting a file we could not parse.
+        existingObj = JSON.parse(existingText) as Record<string, unknown>;
+        existed = true;
       }
       if (existed) await backupFile(input.cwd, op.relPath, session);
 
