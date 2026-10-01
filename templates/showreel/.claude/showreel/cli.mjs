@@ -16,8 +16,8 @@ const NODE_FLOOR = [22, 12];
 // null = not implemented yet (M1 tasks wire these: facts = Task 2, preflight = Task 7,
 // check/render/verify = Task 8).
 const COMMANDS = {
-  preflight: null,
-  facts: null,
+  preflight: () => import('./lib/preflight/cmd.mjs'),
+  facts: () => import('./lib/facts/cmd.mjs'),
   check: null,
   render: null,
   verify: null,
