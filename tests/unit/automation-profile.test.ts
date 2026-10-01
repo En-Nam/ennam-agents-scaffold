@@ -60,20 +60,27 @@ describe('add-on overlay contract (fail loud, Rule 12)', () => {
     return { name: 'fake-addon', description: '', templateDir: dir, extraMcp: [], augmentation: true };
   }
 
-  it('overlays add-on files onto the role', async () => {
-    const entries = await enumerateProfiles([getProfile('next'), await fakeAddOn({ 'notes/x.md': 'x' })]);
-    expect(entries.map(e => e.relPath)).toContain('notes/x.md');
-  });
+  // The contract must hold whether the add-on joins one role or a multi-role compose.
+  const ROLE_SETS: Array<[string, string[]]> = [['one role', ['next']], ['two roles', ['ba', 'pm']]];
 
-  it('throws when an add-on ships a partial', async () => {
-    const addOn = await fakeAddOn({ '.claude/settings.json.partial.hbs': '{}' });
-    await expect(enumerateProfiles([getProfile('next'), addOn])).rejects.toThrow(/must not ship partials/);
-  });
+  for (const [label, roles] of ROLE_SETS) {
+    it(`${label}: overlays add-on files, keeping the plan sorted`, async () => {
+      const entries = await enumerateProfiles([...roles.map(getProfile), await fakeAddOn({ 'notes/x.md': 'x' })]);
+      const paths = entries.map(e => e.relPath);
+      expect(paths).toContain('notes/x.md');
+      expect(paths).toEqual([...paths].sort((a, b) => a.localeCompare(b)));
+    });
 
-  it('throws when an add-on ships a path the role already ships', async () => {
-    const addOn = await fakeAddOn({ 'AGENTS.md': 'mine' });
-    await expect(enumerateProfiles([getProfile('next'), addOn])).rejects.toThrow(/collides with the selected role on AGENTS\.md/);
-  });
+    it(`${label}: throws when an add-on ships a partial`, async () => {
+      const addOn = await fakeAddOn({ '.claude/settings.json.partial.hbs': '{}' });
+      await expect(enumerateProfiles([...roles.map(getProfile), addOn])).rejects.toThrow(/must not ship partials/);
+    });
+
+    it(`${label}: throws when an add-on ships a path the install already has (_shared AGENTS.md)`, async () => {
+      const addOn = await fakeAddOn({ 'AGENTS.md': 'mine' });
+      await expect(enumerateProfiles([...roles.map(getProfile), addOn])).rejects.toThrow(/collides with the selected role\(s\) on AGENTS\.md/);
+    });
+  }
 });
 
 describe('automation profile — guidance content discipline', () => {

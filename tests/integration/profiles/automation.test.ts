@@ -4,6 +4,7 @@ import { mkdir, readFile, writeFile, access } from 'node:fs/promises';
 import path from 'node:path';
 import { execa } from 'execa';
 import { fileURLToPath } from 'node:url';
+import fg from 'fast-glob';
 
 // v1.15 — `automation` is an add-on: one role + automation must install the role EXACTLY
 // as if alone (a wizard "Yes" must never cost the user their role's setup or next steps),
@@ -24,6 +25,7 @@ async function fresh() {
 }
 const exists = (p: string) => access(p).then(() => true, () => false);
 const read = (cwd: string, rel: string) => readFile(path.join(cwd, rel), 'utf8');
+const tree = (cwd: string) => fg('**/*', { cwd, dot: true, onlyFiles: true, ignore: ['.git/**'] });
 
 describe('install automation add-on', () => {
   beforeAll(async () => {
@@ -36,14 +38,13 @@ describe('install automation add-on', () => {
       const alone = await fresh();
       expect((await install(withAddon, [role, 'automation'])).exitCode).toBe(0);
       await install(alone, [role]);
+      // Whole tree: the ONLY difference is the add-on's files.
+      const aloneFiles = await tree(alone);
+      expect((await tree(withAddon)).sort()).toEqual([...aloneFiles, ...ADDON_FILES].sort());
       // .mcp.json embeds the install dir (serena --project <cwd>) — normalize only that.
       const norm = async (cwd: string, rel: string) => (await read(cwd, rel)).split(JSON.stringify(cwd).slice(1, -1)).join('<CWD>');
-      for (const rel of ['CLAUDE.md', 'AGENTS.md', '.claude/settings.json', '.mcp.json', '.gitignore']) {
+      for (const rel of aloneFiles) {
         expect(await norm(withAddon, rel), rel).toBe(await norm(alone, rel));
-      }
-      for (const rel of ADDON_FILES) {
-        expect(await exists(path.join(withAddon, rel)), rel).toBe(true);
-        expect(await exists(path.join(alone, rel)), rel).toBe(false);
       }
     });
   }
@@ -61,9 +62,10 @@ describe('install automation add-on', () => {
 
   it('in a multi-role compose, automation does not flip doc-first roles to engineering', async () => {
     const cwd = await fresh();
-    await install(cwd, ['ba', 'pm', 'automation']);
+    const { stdout } = await install(cwd, ['ba', 'pm', 'automation']);
     expect(await read(cwd, 'AGENTS.md')).toContain('Think Before Drafting');
     for (const rel of ADDON_FILES) expect(await exists(path.join(cwd, rel)), rel).toBe(true);
+    expect(stdout).toMatch(/Automation guidance installed/);
   });
 
   it('a user-edited .claude/loop.md survives a re-run, even with --merge-strategy=overwrite', async () => {
@@ -76,7 +78,9 @@ describe('install automation add-on', () => {
 
   it('works standalone and is idempotent', async () => {
     const cwd = await fresh();
-    expect((await install(cwd, ['automation'])).exitCode).toBe(0);
+    const first = await install(cwd, ['automation']);
+    expect(first.exitCode).toBe(0);
+    expect(first.stdout).toMatch(/Automation guidance installed/);
     const second = await install(cwd, ['automation']);
     expect(second.exitCode).toBe(0);
     expect(second.stdout).toMatch(/Written:\s*0/);

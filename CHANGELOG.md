@@ -14,8 +14,8 @@ Adds the opt-in **`automation` add-on**: guidance that teaches Claude to use Cla
   - `minClaudeCodeVersion: 2.1.246` (warn-only). That release caps `/goal` idle check-ins at 3.
 - **Wizard**: after any guided role, asks "Add Claude Code automation guidance?" (default **No**). Compose mode lists `automation` in the multiselect. `--list` shows it under **Add-on**.
 - **`ProfileDef.augmentation`** + `roleVoters()` — add-on profiles never change the role they are added to:
-  - **One role + add-ons** (`hr automation`, or a wizard Yes) installs the role exactly as if alone. CLAUDE.md, AGENTS.md, workflow preset, settings, next steps and handoff are all byte-identical; the add-on's static files are overlaid. An add-on that ships a partial, or a path the role already ships, fails loud.
-  - **Several roles + add-ons** (`pm qa automation`): add-ons don't vote on the AGENTS.md family or the workflow preset. Without this, a profile with no `ruleFamily` would have flipped a doc-first install to engineering.
+  - The selected roles are installed exactly as if the add-on weren't there, then the add-on's static files are overlaid. `hr automation` (or a wizard Yes) is byte-identical to `hr`: CLAUDE.md, AGENTS.md, workflow preset, settings, next steps and handoff. `ba pm automation` keeps the doc-first AGENTS.md, which a profile with no `ruleFamily` would otherwise have flipped to engineering.
+  - The add-on contract holds for one or many roles. An add-on that ships a partial, or a path the install already has (role or `_shared`), fails loud instead of being merged or shadowed.
 
 ### Changed
 

@@ -7,12 +7,13 @@ const answers: unknown[] = [];
 let confirmAnswer: unknown = false;
 const confirmCalls: Array<{ initialValue?: boolean }> = [];
 const multiselectOptions: string[] = [];
+const CANCEL = vi.hoisted(() => Symbol('clack-cancel'));
 
 vi.mock('@clack/prompts', () => ({
   select: vi.fn(async () => answers.shift()),
   multiselect: vi.fn(async (opts: { options: Array<{ value: string }> }) => { multiselectOptions.push(...opts.options.map(o => o.value)); return answers.shift(); }),
   confirm: vi.fn(async (opts: { initialValue?: boolean }) => { confirmCalls.push(opts); return confirmAnswer; }),
-  isCancel: () => false,
+  isCancel: (v: unknown) => v === CANCEL,
   cancel: vi.fn(),
   log: { info: vi.fn() },
 }));
@@ -42,6 +43,17 @@ describe('wizard — automation add-on', () => {
     confirmAnswer = false;
     expect(await runWizard('/tmp/x')).toEqual(['hr']);
     expect(confirmCalls[0]?.initialValue).toBe(false);
+  });
+
+  it('Ctrl+C at the automation question aborts (exit 1) instead of installing anything', async () => {
+    answers.push('single', 'HR');
+    confirmAnswer = CANCEL;
+    const exit = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => { throw new Error(`exit ${code}`); }) as never);
+    try {
+      await expect(runWizard('/tmp/x')).rejects.toThrow('exit 1');
+    } finally {
+      exit.mockRestore();
+    }
   });
 
   it('compose mode does not ask again (automation is already in the multiselect)', async () => {

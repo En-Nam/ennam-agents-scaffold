@@ -151,20 +151,10 @@ export async function enumerateFiles(profile: ProfileDef, opts: EnumerateOptions
 }
 
 /**
- * v1.11 (#10) — compose one or more profiles into a single install.
- * - 1 profile → identical to enumerateFiles (single-profile path is untouched).
- * - N profiles → merge shared + every profile's files. CLAUDE.md concatenates each
- *   profile's partial (sub-headed); .mcp.json unions every profile partial; AGENTS.md
- *   uses the ENGINEERING variant if ANY profile is engineering (a repo with both dev
- *   and doc roles is a code repo), else doc-first; POLICY.md emits if any profile
- *   auto-attaches or --policy is set.
- * - Fail loud (Rule 7): if two profiles ship the SAME file path with DIFFERENT content
- *   (an agent/command/skill collision), throw a listed error instead of silently picking one.
- */
-/**
- * v1.15 — add the static files of add-on (augmentation) profiles to a role's entries.
- * Add-ons ship guidance files only: a partial (CLAUDE/.mcp/settings) or a path the role
- * already ships is a contract violation → fail loud (Rule 12), never a silent pick.
+ * v1.15 — add the static files of add-on (augmentation) profiles on top of the roles'
+ * entries. Add-ons ship guidance files only: a partial (CLAUDE/.mcp/settings) or a path
+ * the install already has (role OR _shared) would otherwise be silently merged or
+ * shadowed, so both are contract violations → fail loud (Rule 12).
  */
 async function overlayAddOns(entries: FileEntry[], addOns: ProfileDef[]): Promise<FileEntry[]> {
   const taken = new Set(entries.map(e => e.relPath));
@@ -175,31 +165,42 @@ async function overlayAddOns(entries: FileEntry[], addOns: ProfileDef[]): Promis
       }
       const target = profileTargetRelPath(rel, addOn.name);
       if (taken.has(target)) {
-        throw new Error(`Add-on profile "${addOn.name}" collides with the selected role on ${target}.`);
+        throw new Error(`Add-on profile "${addOn.name}" collides with the selected role(s) on ${target}.`);
       }
       taken.add(target);
       entries.push({ srcAbs: src, relPath: target, isTemplate: src.endsWith('.hbs'), kind: classifyFile(target) });
     }
   }
-  return entries;
+  return entries.sort((a, b) => a.relPath.localeCompare(b.relPath));
 }
 
+/**
+ * v1.11 (#10) — compose one or more profiles into a single install.
+ * - 1 profile → identical to enumerateFiles (single-profile path is untouched).
+ * - Roles + add-ons (v1.15, `augmentation`) → enumerate the roles alone (so `hr automation`
+ *   is byte-identical to `hr`), then overlayAddOns() their static files.
+ * - N profiles → merge shared + every profile's files. CLAUDE.md concatenates each
+ *   profile's partial (sub-headed); .mcp.json unions every profile partial; AGENTS.md
+ *   uses the ENGINEERING variant if ANY profile is engineering (a repo with both dev
+ *   and doc roles is a code repo), else doc-first; POLICY.md emits if any profile
+ *   auto-attaches or --policy is set.
+ * - Fail loud (Rule 7): if two profiles ship the SAME file path with DIFFERENT content
+ *   (an agent/command/skill collision), throw a listed error instead of silently picking one.
+ */
 export async function enumerateProfiles(profiles: ProfileDef[], opts: EnumerateOptions = {}): Promise<FileEntry[]> {
   if (profiles.length <= 1) {
     return enumerateFiles(profiles[0]!, opts);
   }
 
-  // v1.15 — one role + add-ons: install the role exactly as if alone (CLAUDE.md, AGENTS.md,
-  // settings byte-identical) and overlay the add-ons' static files on top.
   const voters = roleVoters(profiles);
-  if (voters.length === 1) {
-    return overlayAddOns(await enumerateFiles(voters[0]!, opts), profiles.filter(p => p !== voters[0]));
+  const addOns = profiles.filter(p => !voters.includes(p));
+  if (addOns.length > 0) {
+    return overlayAddOns(await enumerateProfiles(voters, opts), addOns);
   }
 
-  // v1.15 — `anyEngineering` below already ignores add-ons via roleVoters.
   const sharedDir = getSharedDir();
   const shared = await collect(sharedDir);
-  const anyEngineering = voters.some(p => p.ruleFamily !== 'doc-first');
+  const anyEngineering = profiles.some(p => p.ruleFamily !== 'doc-first');
   const wantPolicy = !!opts.policy || profiles.some(p => p.autoPolicy);
 
   const map = new Map<string, FileEntry>();

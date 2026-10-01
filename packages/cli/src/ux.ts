@@ -26,7 +26,7 @@ export async function confirmProceed(): Promise<boolean> {
   return yes === true;
 }
 
-export async function printNextSteps(profile: ProfileDef, result: ExecuteResult, hasGit: boolean, cwd: string, workflow?: string, addOns: string[] = []): Promise<void> {
+export async function printNextSteps(profile: ProfileDef, result: ExecuteResult, hasGit: boolean, cwd: string, workflow?: string, selected: string[] = [profile.name]): Promise<void> {
   const steps: string[] = [];
   if (hasGit) {
     steps.push('Review changes: git diff');
@@ -55,8 +55,8 @@ export async function printNextSteps(profile: ProfileDef, result: ExecuteResult,
     steps.push('Requires Claude Code >= 2.1.248 (dynamic workflows + agentType roles). The wizard preflight will WARN if you are behind.');
   }
 
-  // v1.15 — automation arrives as an add-on (`next automation`), alone, or in a multi-role compose.
-  if ([...profile.name.split(' + '), ...addOns].includes('automation')) {
+  // v1.15 — automation is usually an add-on, so check the selected names, not the display profile.
+  if (selected.includes('automation')) {
     steps.push('Automation guidance installed: skill `ennam-automation` (loads when you use /goal, /loop, schedules or `claude -p`), `.claude/loop.md` (report-only default for a bare /loop — edit freely, never overwritten), runbook docs/agents-scaffold/automation.md.');
     steps.push('Goals and loops run on your Anthropic account until they stop — always bound a goal ("… or stop after 20 turns"). Requires Claude Code >= 2.1.246 (preflight warns if behind).');
   }

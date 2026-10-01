@@ -120,7 +120,6 @@ cli
     // v1.15 — one role + add-ons (`game-unity automation`) displays and renders AS the role,
     // so role-specific next steps / handoff behave exactly as for the role alone.
     const voters = roleVoters(profileDefs);
-    const addOnNames = profileDefs.filter(p => !voters.includes(p)).map(p => p.name);
     const displayProfile: ProfileDef = voters.length === 1 ? voters[0]! : {
       name: profileDefs.map(p => p.name).join(' + '),
       description: `composed: ${profileDefs.map(p => p.name).join(', ')}`,
@@ -265,7 +264,7 @@ cli
     }
 
     const result = await executeOps({ cwd, ops, ctx, interactive });
-    await printNextSteps(displayProfile, result, hasGit, cwd, workflow, addOnNames);
+    await printNextSteps(displayProfile, result, hasGit, cwd, workflow, profileDefs.map(p => p.name));
     printBlockedHooks(blockedHooks);
 
     // Migration hint: v1.1 users may still have a stale chrome-devtools entry
