@@ -7,20 +7,20 @@
 import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 import { ok, fail, ShowreelError } from './lib/util/out.mjs';
+import { VERSION } from './lib/util/version.mjs';
 
-export const VERSION = '1.0.0';
+export { VERSION };
 
 const NODE_FLOOR = [22, 12];
 
 // Command → loader of a module exporting `run(args, hostRoot) → Promise<exitCode>`.
-// null = not implemented yet (M1 tasks wire these: facts = Task 2, preflight = Task 7,
-// check/render/verify = Task 8).
+// null = not implemented in this toolkit version.
 const COMMANDS = {
   preflight: () => import('./lib/preflight/cmd.mjs'),
   facts: () => import('./lib/facts/cmd.mjs'),
-  check: null,
-  render: null,
-  verify: null,
+  check: () => import('./lib/check/cmd.mjs'),
+  render: () => import('./lib/render/cmd.mjs'),
+  verify: () => import('./lib/verify/cmd.mjs'),
 };
 
 function nodeTooOld(version) {

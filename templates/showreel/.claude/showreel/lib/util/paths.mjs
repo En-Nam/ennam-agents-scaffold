@@ -16,6 +16,7 @@ export function paths(hostRoot) {
     scoreWav: 'showreel/build/score.wav',
     sheet: 'showreel/build/sheet.png',
     manifest: 'showreel/build/manifest.json',
-    out: (slug, N) => `showreel/${slug}-${N}s.mp4`,
+    // A draft gets its own name so it can never overwrite a verified final (orchestrator ruling, M1).
+    out: (slug, N, { draft = false } = {}) => `showreel/${slug}-${N}s${draft ? '-draft' : ''}.mp4`,
   };
 }
