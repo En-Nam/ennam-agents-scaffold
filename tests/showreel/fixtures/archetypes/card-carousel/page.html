@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>showreel archetype fixture: card-carousel</title>
+<style>html, body { margin: 0; background: black; height: 100%; overflow: hidden; }</style>
+</head>
+<body>
+<!-- Test-local registry (M2 Tasks 2-5): the engine with {...ARCHETYPES, 'card-carousel'} injected, so the gated
+     test does not depend on archetypes/index.mjs. Mirrors engine/core.mjs boot(): window.SHOWREEL {ready,
+     renderer, renderAt, manifest, fit} + layouts {beatId: [{source, kind, px}]}. ?nudge=<px> wraps draw() in a translate — the negative control that
+     proves offFrame() can fail for this archetype. -->
+<script type="module">
+  import { createEngine } from '/engine/core.mjs';
+  import { gpuRenderer } from '/engine/canvas.mjs';
+  import { manifest } from '/engine/text.mjs';
+  import { loadFonts } from '/engine/fonts.mjs';
+  import { ARCHETYPES, TRANSITIONS } from '/archetypes/index.mjs';
+  import card from '/archetypes/card-carousel.mjs';
+
+  const q = new URLSearchParams(location.search);
+  const notReady = () => { throw new Error('SHOWREEL not ready'); };
+  const S = { ready: null, renderer: gpuRenderer(), renderAt: notReady, manifest, fit: notReady };
+  window.SHOWREEL = S;
+  S.ready = (async () => {
+    const get = async (u) => { const r = await fetch(u); if (!r.ok) throw new Error(`${u} → HTTP ${r.status}`); return r.json(); };
+    const [timeline, resolved] = await Promise.all([get('/build/timeline.json'), get('/build/resolved.json')]);
+    await loadFonts('/fonts');
+    // record each beat's per-card drawn px (fit() reports only the slot minimum — see deviation 1 in the test)
+    const layouts = (S.layouts = {});
+    let arch = { ...card, layout(rb, v, api) { const L = card.layout(rb, v, api); layouts[api.beatId] = L.cards.map((c) => ({ source: c.item.id, kind: c.kind, px: c.px })); return L; } };
+    if (q.has('nudge')) {
+      const dx = Number(q.get('nudge'));
+      arch = { ...arch, draw(ctx, ...rest) { ctx.translate(dx, 0); card.draw(ctx, ...rest); } };
+    }
+    const eng = createEngine({ timeline, resolved, archetypes: { ...ARCHETYPES, [card.id]: arch }, transitions: TRANSITIONS });
+    S.renderAt = eng.renderAt;
+    S.fit = eng.fit;
+    return true;
+  })();
+</script>
+</body>
+</html>
