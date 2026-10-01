@@ -2,6 +2,7 @@
 //   D13  video frames == timeline.frames (ffmpeg null decode); audio samples within ±1024 (one AAC
 //        frame) of durationS × 48000 (decoded s16le byte count); stream format (H.264 High yuv420p
 //        1920x1080 @ fps, AAC 48 kHz stereo)
+//   M2   colorTags: the video is tagged limited-range BT.709 (space, primaries, trc), the matrix that encode converts to
 //   AC4  analyzeScore on the muxed score WAV: exact length, peak ≤ −1 dBFS, no clip/NaN, every hit onset ±1 frame
 //   D8   build/manifest.json (what the engine drew) ⊆ resolved, and every resolved item was drawn
 //   D9   the 3 hashes recorded during render re-rendered in a FRESH page are identical
@@ -44,6 +45,13 @@ export function streamsOk(streams, fps) {
   const a = streams.audio;
   return !!v && !!a && v.codec === 'h264' && v.profile === 'High' && v.pixFmt === 'yuv420p' && v.width === 1920 && v.height === 1080
     && v.fps === fps && a.codec === 'aac' && a.rate === SR && a.layout === 'stereo';
+}
+
+/** M2 colour gate (color = parseColor output): null when tagged tv + bt709/bt709/bt709, else the failure line. */
+export function colorTagsFailure(color) {
+  const c = color ?? {};
+  if (c.range === 'tv' && c.space === 'bt709' && c.primaries === 'bt709' && c.trc === 'bt709') return null;
+  return `colorTags ${JSON.stringify(color)} are not tv + bt709 (colorspace/primaries/trc): players would decode the colours with the wrong matrix`;
 }
 
 /** Coverage half of D8: an engine that draws nothing would pass manifest ⊆ resolved trivially. */
@@ -94,12 +102,14 @@ export async function runVerify(hostRoot) {
 
   // D13
   const expected = { frames: timeline.frames, samples: Math.round(timeline.durationS * SR) };
-  const { frames: videoFrames, streams } = await probeVideo(ffmpeg, out);
+  const { frames: videoFrames, streams, color } = await probeVideo(ffmpeg, out);
   const audioSamples = await countAudioSamples(ffmpeg, out);
   if (videoFrames !== expected.frames) failed.push(`videoFrames ${videoFrames} != ${expected.frames}`);
   if (Math.abs(audioSamples - expected.samples) > AAC_FRAME) failed.push(`audioSamples ${audioSamples} not within ±${AAC_FRAME} of ${expected.samples}`);
   const formatOk = streamsOk(streams, rec.fps);
   if (!formatOk) failed.push(`streams ${JSON.stringify(streams)} are not H.264 High yuv420p 1920x1080@${rec.fps} + AAC 48000 Hz stereo`);
+  const colorFail = colorTagsFailure(color);
+  if (colorFail) failed.push(colorFail);
 
   // AC4 on the exact WAV that was muxed
   const score = decodeWav(readFileSync(join(hostRoot, p.scoreWav)));
@@ -143,6 +153,8 @@ export async function runVerify(hostRoot) {
       audioSamples,
       expected,
       streamsOk: formatOk,
+      colorTags: color,
+      colorTagsOk: !colorFail,
       peakDbfs: Math.round(an.peakDbfs * 100) / 100,
       scoreOk: an.ok,
       hitsOk,

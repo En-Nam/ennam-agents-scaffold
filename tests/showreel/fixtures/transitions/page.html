@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>showreel engine + test registry injection</title>
+<style>html, body { margin: 0; background: #000; }</style>
+</head>
+<body>
+<!-- Test-only twin of engine/page.html (tests/showreel/transitions.test.ts). Served from /build/ so the toolkit
+     registry (archetypes/index.mjs) stays untouched: column-wipe and two solid-fill probe archetypes are injected
+     into createEngine. Same SHOWREEL surface as boot(): ready, renderAt, fit, manifest. -->
+<script type="module">
+  import { createEngine } from '/engine/core.mjs';
+  import { loadFonts } from '/engine/fonts.mjs';
+  import { manifest } from '/engine/text.mjs';
+  import { ARCHETYPES, TRANSITIONS } from '/archetypes/index.mjs';
+  import columnWipe from '/archetypes/transitions/column-wipe.mjs';
+
+  // probe archetypes: opaque full-frame fills, so a pixel tells which beat is on screen
+  const solid = (id, fill) => ({ id, layout: () => ({}), draw(ctx, lt, p) { ctx.fillStyle = fill; ctx.fillRect(0, 0, p.W, p.H); } });
+  const S = (window.SHOWREEL = { manifest });
+  S.ready = (async () => {
+    const [timeline, resolved] = await Promise.all(['timeline', 'resolved'].map((n) => fetch(`/build/${n}.json`).then((r) => r.json())));
+    await loadFonts('/fonts');
+    const eng = createEngine({
+      timeline, resolved,
+      archetypes: { ...ARCHETYPES, 'probe-out': solid('probe-out', '#ff0000'), 'probe-in': solid('probe-in', '#0000ff') },
+      transitions: { ...TRANSITIONS, [columnWipe.id]: columnWipe },
+    });
+    S.renderAt = eng.renderAt;
+    S.fit = eng.fit;
+    return true;
+  })();
+</script>
+</body>
+</html>

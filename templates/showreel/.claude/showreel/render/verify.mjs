@@ -2,6 +2,7 @@
 //   video frames  = decode the video stream to the null muxer, read the FINAL `frame=` stats line
 //   audio samples = decode the audio stream to s16le stereo on stdout, count bytes / 4
 //   streams       = codec/profile/pix_fmt/size/fps + AAC rate/layout from the `-i` stream banner
+//   color         = range + colorspace/primaries/trc from the pix_fmt parenthetical of the video banner
 import { runFfmpeg } from '../lib/render/ffmpeg.mjs';
 
 /** Last `frame=N` in ffmpeg stats output (progress lines are \r-separated). null when absent. */
@@ -21,10 +22,32 @@ export function parseStreams(stderr) {
   };
 }
 
-/** → {frames, streams} for an MP4. */
+const FIELD_ORDER = /^(progressive|top first|bottom first|top coded first \(swapped\)|bottom coded first \(swapped\))$/;
+
+/**
+ * Colour tags of the first video stream, from the pix_fmt parenthetical ffmpeg prints:
+ *   yuv420p(tv, bt709, progressive)                    → all three tags equal, printed once
+ *   yuv420p(tv, bt470bg/unknown/unknown, progressive)  → space/primaries/trc
+ *   yuv420p(progressive)                               → untagged
+ * → {range, space, primaries, trc} (each a string or null), or null when there is no video stream.
+ */
+export function parseColor(stderr) {
+  const line = /Stream #\d+:\d+[^:]*: Video: .*/.exec(String(stderr));
+  if (!line) return null;
+  // pix_fmt(…) — the group allows one nested "(swapped)" from the field-order names
+  const m = /, \w+\(([^()]*(?:\([^()]*\)[^()]*)*)\)/.exec(line[0]);
+  const parts = m ? m[1].split(', ') : [];
+  const range = parts.find((x) => x === 'tv' || x === 'pc') ?? null;
+  const rest = parts.filter((x) => x !== range && !FIELD_ORDER.test(x));
+  const tags = rest.length === 1 ? rest[0].split('/') : [];
+  const [space, primaries, trc] = tags.length === 1 ? [tags[0], tags[0], tags[0]] : tags.length === 3 ? tags : [null, null, null];
+  return { range, space, primaries, trc };
+}
+
+/** → {frames, streams, color} for an MP4. */
 export async function probeVideo(ffmpeg, file) {
   const { stderr } = await runFfmpeg(ffmpeg, ['-hide_banner', '-nostats', '-i', file, '-map', '0:v:0', '-f', 'null', '-'], { what: 'verify (video frames)' });
-  return { frames: parseFrameCount(stderr), streams: parseStreams(stderr) };
+  return { frames: parseFrameCount(stderr), streams: parseStreams(stderr), color: parseColor(stderr) };
 }
 
 /** Decoded audio sample frames (per channel) of an MP4's first audio stream. */
