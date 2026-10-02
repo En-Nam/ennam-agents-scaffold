@@ -113,7 +113,21 @@ describe.skipIf(!FULL)('showreel e2e-full: next + python × 15/30/45/60 s --fina
       // gives the full 4-duration picture for the profile
       for (const N of DURATIONS) {
         const { count, sb } = storyboard(digest, N);
-        expect(sb.beats.map((b) => `${b.archetype}/${b.variant}`)).toEqual(ARR[String(N)]!.map((b) => `${b.archetype}/${b.variant}`));
+        // the arrangement's beats in order; a flow-graph beat is upgraded from the arrangement's 'cluster' to a
+        // sequential variant ONLY when the digest carries a README ordered list (ruling R-k) — and never otherwise
+        const sequenced = digest.some((f: any) => f.sequence != null);
+        expect(sb.beats.map((b) => b.archetype)).toEqual(ARR[String(N)]!.map((b) => b.archetype));
+        // the ordered list is presented once: only the FIRST flow beat may become sequential; later ones stay cluster
+        let firstFlow = true;
+        sb.beats.forEach((b, i) => {
+          const planned = ARR[String(N)]![i]!.variant;
+          if (b.archetype !== 'flow-graph') expect(b.variant, `${profile} ${N}s b${i + 1}`).toBe(planned);
+          else {
+            expect(sequenced && firstFlow ? ['chain', 'converge'] : ['cluster'], `${profile} ${N}s flow b${i + 1}`).toContain(b.variant);
+            firstFlow = false;
+          }
+        });
+        if (sequenced) expect(sb.beats.some((b) => b.archetype === 'flow-graph' && b.variant !== 'cluster'), `${profile} ${N}s uses its ordered list`).toBe(true);
         writeFileSync(path.join(cwd, 'showreel', 'storyboard.json'), JSON.stringify(sb, null, 2));
 
         const check = await sr(cwd, ['check', '--sheet']);

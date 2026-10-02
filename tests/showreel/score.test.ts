@@ -387,12 +387,11 @@ describe('every recommended arrangement scores in sync at seeds 1/7/42 and at ma
   const ARR = readToolkitJson('archetypes', 'arrangements.json').arrangements;
   const minJump: Record<string, number> = {};
 
-  // typical slot counts at every seed, plus max slot counts (the densest storyboard an arrangement
-  // allows) at one seed: the margin is thinnest there (min onset jump ~3.2–3.3 dB at 30/45 s).
-  const CASES = [
-    ...[15, 30, 45, 60].flatMap((d) => [1, 7, 42].map((seed) => [d, seed, 'typical'] as const)),
-    ...[15, 30, 45, 60].map((d) => [d, 1, 'max'] as const),
-  ];
+  // typical AND max slot counts (the densest storyboard an arrangement allows), each at seeds 1/7/42.
+  // CTO condition on R-g: the >= 3 dB onset headroom is pinned at max-N for every arrangement x seed,
+  // because the margin is thinnest there (~3.2-3.3 dB at 30/45 s) and a later mix tweak must not erode it.
+  const CASES = (['typical', 'max'] as const).flatMap((count) =>
+    [15, 30, 45, 60].flatMap((d) => [1, 7, 42].map((seed) => [d, seed, count] as const)));
   it.each(CASES)('%i s arrangement, seed %i, %s slot counts', (d, seed, count) => {
     const sb = storyboardFromArrangement(SYNTH_DIGEST, d, ARR[String(d)], ARCH, PHRASES, { seed, count });
     const tl = compileTimeline(sb, resolve(sb, { archetypes: ARCH, facts: SYNTH_FACTS, phrases: PHRASES }), ARCH, { fps: 60 }) as Timeline;

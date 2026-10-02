@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validate } from '../../templates/showreel/.claude/showreel/lib/util/schema.mjs';
@@ -177,6 +178,43 @@ describe('ruling (f) — arrangements default to cluster; the helper picks seque
     const sb = storyboardFromArrangement(DIGEST, 30, chained, ARCH, PHRASES);
     expect(flowBeats(sb).map((b) => b.variant)).toEqual(['cluster']);
     expect(validateStoryboard(sb, inputs)).toEqual([]);
+  });
+
+  // CTO condition on R-k + PO addition 1: a repo with NO ordered setup/usage list still gets a full film
+  // with a flow-graph beat — as an honest cluster — and arrows are refused. Real extractor, real README.
+  describe('R-k end to end: README without a numbered list → no sequence facts; arrows rejected, cluster accepted', () => {
+    let digest: DigestFact[]; let facts: any;
+    beforeAll(async () => {
+      const root = mkdtempSync(path.join(os.tmpdir(), 'showreel-rk-'));
+      writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 'acme-shop', description: 'A storefront for tiny teams.',
+        dependencies: { next: '16.0.0', react: '19.0.0', tailwindcss: '4.0.0', prisma: '6.0.0' }, scripts: { dev: 'next dev', build: 'next build', start: 'next start', test: 'vitest' } }));
+      // a bullet list under "Getting started" and a numbered list under "Features": neither is an ordered setup source
+      writeFileSync(path.join(root, 'README.md'), '# Acme Shop\n\nA storefront for tiny teams.\n\n## Features\n\n1. One-tap checkout\n2. Order tracking\n3. Saved carts\n4. Gift cards\n5. Live inventory\n6. Team roles\n\n## Getting started\n\n- Install the dependencies\n- Start the dev server\n- Open the browser\n');
+      ({ facts } = await extractFacts(root));
+      digest = makeDigest(facts.facts).digest;
+      rmSync(root, { recursive: true, force: true });
+    });
+
+    it('no fact carries a sequence', () => {
+      expect(facts.facts.filter((f: any) => f.sequence != null)).toEqual([]);
+    });
+
+    for (const d of DURATIONS) {
+      it(`${d} s: the default film keeps a flow-graph beat as cluster and validates; the same beat as chain/converge → E_SLOT_ORDER`, () => {
+        const sb: any = storyboardFromArrangement(digest, d, arrangement(d), ARCH, PHRASES);
+        const flows = sb.beats.filter((b: any) => b.archetype === 'flow-graph');
+        expect(flows.length, 'the film keeps its graph beat').toBeGreaterThan(0);
+        for (const b of flows) expect(b.variant).toBe('cluster');
+        expect(validateStoryboard(sb, { archetypes: ARCH, facts, phrases: PHRASES })).toEqual([]);
+        for (const v of ['chain', 'converge']) {
+          const forced = structuredClone(sb);
+          const fb = forced.beats.find((b: any) => b.archetype === 'flow-graph');
+          fb.variant = v; delete fb.phrases?.lead; // isolate the ordering rule from phrase pairing
+          const codes = validateStoryboard(forced, { archetypes: ARCH, facts, phrases: PHRASES }).map((e: any) => e.code);
+          expect(codes, v).toContain('E_SLOT_ORDER');
+        }
+      });
+    }
   });
 
   describe('real fixtures (js-next, python-fastapi: README steps) × every arrangement × every count', () => {
