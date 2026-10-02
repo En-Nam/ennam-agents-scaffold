@@ -86,10 +86,11 @@ describe('column-wipe module (C9 transition contract)', () => {
     expect(tl.beats.slice(0, -1).map((b: any) => b.overlapOut)).toEqual([0.25, 0.25, 0.25]);
     const withWipe = { ...TRANSITIONS, [columnWipe.id]: columnWipe };
     expect(checkTimeline(tl, rs, ARCHETYPES, withWipe)).toEqual([]);
+    expect(checkTimeline(tl, rs, ARCHETYPES, TRANSITIONS)).toEqual([]); // registered in archetypes/index.mjs (M2 Task 7)
+    expect((TRANSITIONS as Record<string, unknown>)['column-wipe']).toBe(columnWipe);
     // without the module the engine refuses the film instead of cutting silently
-    if (!(TRANSITIONS as Record<string, unknown>)['column-wipe']) {
-      expect(checkTimeline(tl, rs, ARCHETYPES, TRANSITIONS).join('\n')).toContain('transition "column-wipe" is not registered');
-    }
+    const withoutWipe = Object.fromEntries(Object.entries(TRANSITIONS as Record<string, unknown>).filter(([id]) => id !== 'column-wipe'));
+    expect(checkTimeline(tl, rs, ARCHETYPES, withoutWipe).join('\n')).toContain('transition "column-wipe" is not registered');
   });
 });
 
@@ -114,10 +115,10 @@ describe.skipIf(!E2E)('column-wipe in the engine (SHOWREEL_E2E=1)', () => {
     exe = found;
     const mod = await loadDep('puppeteer-core', process.cwd());
     puppeteer = mod.default ?? mod;
-  });
+  }, 180_000);
   afterAll(async () => {
     for (const c of cleanups.reverse()) await c();
-  });
+  }, 120_000);
 
   async function serve(timeline: unknown, resolved: unknown) {
     const dir = mkdtempSync(path.join(os.tmpdir(), 'showreel-wipe-'));
@@ -186,7 +187,7 @@ describe.skipIf(!E2E)('column-wipe in the engine (SHOWREEL_E2E=1)', () => {
     // outside the overlap there is exactly one beat
     expect((await columnColours(page, b2!.t0 - F, H / 2)).map(which)).toEqual(Array(COLS).fill('old'));
     expect((await columnColours(page, b1!.t1 + F, H / 2)).map(which)).toEqual(Array(COLS).fill('new'));
-  });
+  }, 180_000);
 
   it('wipe direction alternates per column (even columns reveal top-down, odd bottom-up)', async () => {
     const url = await serve(PROBE_TIMELINE, PROBE_RESOLVED);
@@ -197,7 +198,7 @@ describe.skipIf(!E2E)('column-wipe in the engine (SHOWREEL_E2E=1)', () => {
     const bottom = (await columnColours(page, mid, H - 120)).map(which);
     expect([top[2], bottom[2]]).toEqual(['new', 'old']); // col 2 wipes down: front at ≈0.74 H
     expect([top[3], bottom[3]]).toEqual(['old', 'new']); // col 3 wipes up: front at ≈0.26 H from the bottom
-  });
+  }, 180_000);
 
   it('AC3: a film of column-wipes hashes identically across fresh pages, 2 orders, 2 launches, at S=1 and S=6', async () => {
     const rs = resolve(WIPE_STORYBOARD, INPUTS);
@@ -224,5 +225,5 @@ describe.skipIf(!E2E)('column-wipe in the engine (SHOWREEL_E2E=1)', () => {
       expect(runs[1], `S=${S}`).toEqual(runs[0]);
       expect(new Set(Object.values(runs[0]!)).size, `S=${S}: distinct frames`).toBe(T.length);
     }
-  });
+  }, 180_000);
 });

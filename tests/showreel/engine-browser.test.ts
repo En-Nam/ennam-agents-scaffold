@@ -9,11 +9,17 @@ import { startServer } from '../../templates/showreel/.claude/showreel/render/se
 import { rng } from '../../templates/showreel/.claude/showreel/engine/math.mjs';
 import { checkManifest } from '../../templates/showreel/.claude/showreel/lib/truth/manifest.mjs';
 import { familyOf } from '../../templates/showreel/.claude/showreel/engine/fonts.mjs';
+import { validateStoryboard } from '../../templates/showreel/.claude/showreel/lib/truth/validate.mjs';
+import { resolve } from '../../templates/showreel/.claude/showreel/lib/truth/resolve.mjs';
+import { compileTimeline } from '../../templates/showreel/.claude/showreel/lib/compile/timeline.mjs';
+import { storyboardFromArrangement, type ArrangementBeat, type DigestFact } from './helpers/storyboard';
 
 // v1.16 showreel engine — browser half (gated: SHOWREEL_E2E=1, SHOWREEL_TOOL_DIR=<dir with puppeteer-core +
 // fontsource>, browser via SHOWREEL_BROWSER / CHROME_PATH / a known install path).
 //   AC3  frames are byte-identical (RGBA SHA-256) per timestamp across fresh pages, different render
 //        orders and separate browser launches, at S=1 and S=6, on the GPU path (D9 / M0 ruling).
+//        Two films: the M1 fixture (4 M1 archetypes, zoom-through, cut) and an M2 film compiled from the
+//        45 s arrangement (all 8 archetypes incl. the kinetic chapter card, zoom-through AND column-wipe).
 //   D8   every drawn string is in the manifest and the manifest ⊆ resolved (Rule 13: the oracle is
 //        proven to catch a forged draw, so a manifest that records nothing or echoes cannot pass).
 //   fit  a 90-char command reports fit null → `check` fails instead of clipping (review focus 2).
@@ -27,6 +33,45 @@ const FIX = path.join(HERE, 'fixtures', 'engine');
 const TIMELINE = JSON.parse(readFileSync(path.join(FIX, 'timeline.json'), 'utf8'));
 const RESOLVED = JSON.parse(readFileSync(path.join(FIX, 'resolved.json'), 'utf8'));
 const FRAME = 1 / TIMELINE.fps;
+
+// M2 film (Task 7): the 45 s recommended arrangement (C15) — every archetype, two chapter cards, two
+// column-wipes, four zoom-throughs — bound to synthetic facts through the PRODUCTION validate → resolve →
+// compile path, so the cue-map hit names/times are the compiler's, never hand-written.
+const readJ = (p: string) => JSON.parse(readFileSync(p, 'utf8'));
+const ARCH = readJ(path.join(TOOLKIT, 'archetypes', 'archetypes.json'));
+const PHRASES = readJ(path.join(TOOLKIT, 'phrases.json'));
+const ARRANGEMENT_45: ArrangementBeat[] = readJ(path.join(TOOLKIT, 'archetypes', 'arrangements.json')).arrangements['45'];
+function synthFact(kind: string, n: number, display: string, extra: Record<string, unknown> = {}) {
+  return {
+    id: `f.${kind}.${n}`, kind, value: display as unknown, display, unit: null as string | null,
+    source: { file: 'synthetic', locator: `${kind}/${n}`, extractor: 'test', rule: 'synthetic' },
+    hash: 'sha256:0000000000000000', ...extra,
+  };
+}
+const M2_FACTS = {
+  version: 1,
+  minimumGate: { passed: true, missing: [] },
+  brand: { name: 'Acme Shop', palette: 'violet', wordmark: 'f.app.name.1' },
+  facts: [
+    synthFact('app.name', 1, 'Acme Shop'),
+    synthFact('app.tagline', 1, 'Checkout in one click'),
+    ...['Saved carts', 'Guest checkout', 'Order history', 'Live inventory', 'Gift cards', 'Fast search'].map((d, i) => synthFact('feature', i + 1, d)),
+    ...['Next.js', 'React', 'TypeScript', 'Tailwind CSS', 'Postgres', 'Stripe'].map((d, i) => synthFact('stack.item', i + 1, d)),
+    ...['/checkout', '/cart', '/orders/[id]', '/api/health'].map((d, i) => synthFact('route', i + 1, d)),
+    ...['npm run dev', 'npm test', 'npm run build'].map((d, i) => synthFact('command', i + 1, d)),
+    ...([[42, 'routes'], [7, 'commands'], [128, 'tests'], [12, 'components']] as const).map(([v, u], i) => synthFact('count', i + 1, String(v), { value: v, unit: u })),
+  ],
+};
+function buildM2Film() {
+  const digest: DigestFact[] = M2_FACTS.facts.map((f) => ({ id: f.id, kind: f.kind, display: f.display, unit: f.unit }));
+  const sb = storyboardFromArrangement(digest, 45, ARRANGEMENT_45, ARCH, PHRASES);
+  const inputs = { archetypes: ARCH, facts: M2_FACTS, phrases: PHRASES };
+  const errors = validateStoryboard(sb, inputs);
+  const resolved = resolve(sb, inputs);
+  const timeline = compileTimeline(sb, resolved, ARCH, { fps: 60 });
+  return { sb, errors, resolved, timeline };
+}
+const M2 = buildM2Film();
 
 type Item = { id: string; text: string; number: number | null; unit: string | null };
 type Resolved = { beats: Record<string, { archetype: string; slots: Record<string, { items: Item[] }> }> };
@@ -47,6 +92,17 @@ const BROWSER_CANDIDATES = [
 // Oracle for manifest ⊆ resolved = Task 3's lib/truth/manifest.mjs checkManifest — the SAME function `check`/
 // `verify` use, so a source the engine records but the pipeline rejects (e.g. `unit:<factId>`) fails here too.
 
+describe('AC3 M2 film (hermetic precondition of the gated AC3 run)', () => {
+  it('the 45 s arrangement film validates and covers all 8 archetypes, the chapter variant and both overlap transitions', () => {
+    expect(M2.errors).toEqual([]);
+    const archs = new Set(M2.timeline.beats.map((b: any) => b.archetype));
+    expect([...archs].sort()).toEqual(Object.keys(ARCH.archetypes).sort());
+    expect(M2.timeline.beats.some((b: any) => b.archetype === 'kinetic-text' && b.variant === 'chapter')).toBe(true);
+    const outs = new Set(M2.timeline.beats.filter((b: any) => b.overlapOut > 0).map((b: any) => b.transitionOut));
+    expect([...outs].sort()).toEqual(['column-wipe', 'zoom-through']);
+  });
+});
+
 describe.skipIf(!E2E)('showreel engine in the browser (SHOWREEL_E2E=1)', () => {
   let puppeteer: any;
   let exe: string;
@@ -59,14 +115,14 @@ describe.skipIf(!E2E)('showreel engine in the browser (SHOWREEL_E2E=1)', () => {
     exe = found;
     const mod = await loadDep('puppeteer-core', process.cwd());
     puppeteer = mod.default ?? mod;
-  });
+  }, 180_000);
   afterAll(async () => {
     for (const c of cleanups.reverse()) await c();
-  });
+  }, 120_000);
 
-  /** temp build dir with the fixture (optionally mutated) + a server for it */
-  async function serve(mutate?: (tl: any, rs: any) => void) {
-    const tl = structuredClone(TIMELINE), rs = structuredClone(RESOLVED);
+  /** temp build dir with the fixture (optionally mutated; default the M1 film) + a server for it */
+  async function serve(mutate?: (tl: any, rs: any) => void, film: { timeline: any; resolved: any } = { timeline: TIMELINE, resolved: RESOLVED }) {
+    const tl = structuredClone(film.timeline), rs = structuredClone(film.resolved);
     mutate?.(tl, rs);
     const dir = mkdtempSync(path.join(os.tmpdir(), 'showreel-engine-'));
     writeFileSync(path.join(dir, 'timeline.json'), JSON.stringify(tl));
@@ -101,9 +157,9 @@ describe.skipIf(!E2E)('showreel engine in the browser (SHOWREEL_E2E=1)', () => {
       return [...new Uint8Array(h)].map((x) => x.toString(16).padStart(2, '0')).join('');
     }, t, S);
 
-  // 13 timestamps over all 4 archetypes (+ both variants of kinetic-text and metrics), both zoom-through
-  // overlaps, both sides of a cut, the ENTER impact (chromatic-aberration path), the lockup slam (blur-filtered
-  // TITLE cache sprites — the M0 root cause) and the lockup sweep (scratch-layer re-light).
+  // M1 film — 13 timestamps over the 4 M1 archetypes (+ both variants of kinetic-text and metrics), both
+  // zoom-through overlaps, both sides of a cut, the ENTER impact (chromatic-aberration path), the lockup slam
+  // (blur-filtered TITLE cache sprites — the M0 root cause) and the lockup sweep (scratch-layer re-light).
   const B = Object.fromEntries(TIMELINE.beats.map((b: any) => [b.id, b]));
   const mid = (id: string) => (B[id].t0 + B[id].t1) / 2;
   const T = [
@@ -121,38 +177,76 @@ describe.skipIf(!E2E)('showreel engine in the browser (SHOWREEL_E2E=1)', () => {
     TIMELINE.hits.find((h: any) => h.cue === 'sweep').t + 2 * FRAME, // lockup light sweep
     TIMELINE.hits.find((h: any) => h.beatId === 'b4').t + FRAME, // kinetic punch slam: ~240 device-px glyphs
   ]; // (large GPU glyphs were order-dependent until text.mjs moved them to CPU sprites — this pins that)
-  const shuffled = (seed: number) => { const r = rng(seed); return T.map((t) => [r(), t]).sort((a, b) => a[0] - b[0]).map(([, t]) => t); };
 
-  it('AC3: RGBA SHA-256 per timestamp is identical across fresh pages, 2 orders, 2 launches, at S=1 and S=6', async () => {
-    const { url } = await serve();
+  // M2 film (45 s arrangement) — every M2 archetype at a hold AND at a signature hit (step lock, converge
+  // implosion, layer thud, card snap, orbit ignite), both chapter cards, both column-wipe overlaps and the
+  // zoom-throughs out of flow-graph and card-carousel.
+  const M2B = M2.timeline.beats as any[];
+  const by = (arch: string, variant?: string, nth = 0) => M2B.filter((b) => b.archetype === arch && (!variant || b.variant === variant))[nth]!;
+  const m2mid = (b: any) => (b.t0 + b.t1) / 2;
+  const m2hit = (b: any, cue: string) => {
+    const h = M2.timeline.hits.find((x: any) => x.beatId === b.id && x.cue === cue);
+    if (!h) throw new Error(`M2 film: no hit "${cue}" in ${b.id} (${b.archetype})`);
+    return h.t as number;
+  };
+  const overlapMid = (b: any) => { const n = M2B[M2B.indexOf(b) + 1]; return (n.t0 + b.t1) / 2; };
+  const wipes = M2B.filter((b) => b.transitionOut === 'column-wipe' && b.overlapOut > 0);
+  const zooms = M2B.filter((b) => b.transitionOut === 'zoom-through' && b.overlapOut > 0);
+  const flow = by('flow-graph'), stack = by('layered-stack'), cards = by('card-carousel'), orbit = by('orbit-network');
+  const T2 = [
+    m2mid(by('kinetic-text', 'chapter', 0)), // chapter card hold
+    m2hit(by('kinetic-text', 'chapter', 1), 'line') + 2 * FRAME, // second chapter card: title landing on its cue
+    overlapMid(wipes[0]), // column-wipe #1
+    overlapMid(wipes[1]), // column-wipe #2
+    overlapMid(zooms.find((b) => b.archetype === 'flow-graph')), // zoom-through flow-graph → next
+    overlapMid(zooms.find((b) => b.archetype === 'card-carousel')), // zoom-through card-carousel → next
+    m2hit(flow, 'step.2') + 2 * FRAME, // flow-graph step lock (ring + sparks)
+    m2hit(flow, 'converge') + 3 * FRAME, // flow-graph implosion core
+    m2mid(stack), // layered-stack hold
+    m2hit(stack, 'layer.1') + 2 * FRAME, // layered-stack slab thud
+    m2mid(cards), // card-carousel (fan) hold
+    m2hit(cards, 'card.2') + 2 * FRAME, // card-carousel card snap
+    m2hit(orbit, 'ignite') + 3 * FRAME, // orbit-network brain-core ignite
+    m2mid(orbit), // orbit-network hold: badges orbiting, packets
+  ];
+  type Shot = { film: 'm1' | 'm2'; t: number };
+  const SHOTS: Shot[] = [...T.map((t) => ({ film: 'm1' as const, t })), ...T2.map((t) => ({ film: 'm2' as const, t }))];
+  const shuffled = (seed: number) => { const r = rng(seed); return SHOTS.map((_, i) => [r(), i] as const).sort((a, b) => a[0] - b[0]).map(([, i]) => i); };
+
+  it('AC3: RGBA SHA-256 per timestamp is identical across fresh pages, 2 orders, 2 launches, at S=1 and S=6 (all 8 archetypes, both transitions)', async () => {
+    const urls = { m1: (await serve()).url, m2: (await serve(undefined, M2)).url };
+    expect(SHOTS.length).toBeGreaterThanOrEqual(16);
+    for (const t of T2) expect(Number.isFinite(t), 'every M2 timestamp resolved from the compiled timeline').toBe(true);
     const orders = [shuffled(11), shuffled(23)];
     expect(orders[0]).not.toEqual(orders[1]);
-    const result: Record<number, Record<string, string>[]> = { 1: [], 6: [] };
+    // the orders interleave the films: fresh pages of BOTH films share one browser in every launch
+    expect(new Set(orders[0]!.slice(0, 8).map((i) => SHOTS[i]!.film)).size).toBe(2);
+    const result: Record<number, string[][]> = { 1: [], 6: [] };
     let renderer = '';
     for (const S of [1, 6]) {
       for (const order of orders) {
         const browser = await launch();
-        const byT: Record<string, string> = {};
+        const byShot: string[] = [];
         try {
-          for (const t of order) {
-            const page = await openPage(browser, url);
+          for (const i of order) {
+            const page = await openPage(browser, urls[SHOTS[i]!.film]);
             renderer ||= await page.evaluate(() => (window as any).SHOWREEL.renderer);
-            byT[t] = await hashAt(page, t, S);
+            byShot[i] = await hashAt(page, SHOTS[i]!.t, S);
             await page.close();
           }
         } finally {
           await browser.close();
         }
-        result[S].push(byT);
+        result[S]!.push(byShot);
       }
     }
-    console.log(JSON.stringify({ ac3: { renderer, timestamps: T, S1: result[1][0], S6: result[6][0] } }));
+    console.log(JSON.stringify({ ac3: { renderer, shots: SHOTS, S1: result[1]![0], S6: result[6]![0] } }));
     if (/SwiftShader/i.test(renderer)) console.warn('[AC3] ran on SwiftShader, NOT the GPU path — rerun on a GPU host for the M1 evidence');
-    for (const S of [1, 6]) for (const t of T) expect(result[S][1][t], `S=${S} t=${t}`).toBe(result[S][0][t]);
+    for (const S of [1, 6]) SHOTS.forEach((s, i) => expect(result[S]![1]![i], `S=${S} ${s.film} t=${s.t}`).toBe(result[S]![0]![i]));
     // the frames actually change over time and with motion blur (a blank or frozen renderer cannot pass)
-    expect(new Set(T.map((t) => result[1][0][t])).size).toBe(T.length);
-    expect(T.filter((t) => result[1][0][t] !== result[6][0][t]).length).toBeGreaterThanOrEqual(T.length - 1);
-  }, 600_000);
+    expect(new Set(result[1]![0]).size).toBe(SHOTS.length);
+    expect(SHOTS.filter((_, i) => result[1]![0]![i] !== result[6]![0]![i]).length).toBeGreaterThanOrEqual(SHOTS.length - 2);
+  }, 1_200_000);
 
   it('AC3: a page that has read back many frames still hashes like a fresh page (GPU backing stays pinned)', async () => {
     // Chrome de-accelerates a canvas after ~100 getImageData readbacks unless willReadFrequently is EXPLICITLY
@@ -290,33 +384,37 @@ describe.skipIf(!E2E)('showreel engine in the browser (SHOWREEL_E2E=1)', () => {
     }
   }, 120_000);
 
-  it('rate check: S=6 ms/frame per archetype (60 frames mid-beat), logged for the M1 commit body', async () => {
-    const { url, resolved } = await serve();
+  it('rate check: S=6 ms/frame per archetype (60 frames mid-beat), all 8 archetypes, logged for the commit body', async () => {
     const browser = await launch();
     const rates: Record<string, number> = {};
     const jpeg: Record<string, number> = {};
+    let real: string[] = [];
     try {
-      const page = await openPage(browser, url);
-      const real: string[] = await page.evaluate("import('/archetypes/index.mjs').then((m) => Object.keys(m.ARCHETYPES))");
-      for (const b of TIMELINE.beats) {
-        const arch = resolved.beats[b.id].archetype;
-        if (rates[arch] !== undefined) continue;
-        const t0 = (b.t0 + b.t1) / 2 - 30 * FRAME;
-        // render-only (1-px readback as a GPU flush) and render + production JPEG q0.97 capture
-        const [ms, msJpeg] = await page.evaluate((t0: number, f: number) => {
-          const stage = document.getElementById('stage') as HTMLCanvasElement;
-          const c = stage.getContext('2d')!;
-          const now = () => performance.now();
-          (window as any).SHOWREEL.renderAt(t0, 6); c.getImageData(0, 0, 1, 1); // warm-up
-          let s = now();
-          for (let i = 0; i < 60; i++) { (window as any).SHOWREEL.renderAt(t0 + i * f, 6); c.getImageData(0, 0, 1, 1); }
-          const render = (now() - s) / 60;
-          s = now();
-          for (let i = 0; i < 60; i++) { (window as any).SHOWREEL.renderAt(t0 + i * f, 6); stage.toDataURL('image/jpeg', 0.97); }
-          return [render, (now() - s) / 60];
-        }, t0, FRAME);
-        rates[arch] = Math.round(ms * 10) / 10;
-        jpeg[arch] = Math.round(msJpeg * 10) / 10;
+      for (const film of [{ timeline: TIMELINE, resolved: RESOLVED }, M2]) {
+        const { url, resolved } = await serve(undefined, film);
+        const page = await openPage(browser, url);
+        real = await page.evaluate("import('/archetypes/index.mjs').then((m) => Object.keys(m.ARCHETYPES))");
+        for (const b of film.timeline.beats) {
+          const arch = resolved.beats[b.id].archetype;
+          if (rates[arch] !== undefined) continue;
+          const t0 = (b.t0 + b.t1) / 2 - 30 * FRAME;
+          // render-only (1-px readback as a GPU flush) and render + production JPEG q0.97 capture
+          const [ms, msJpeg] = await page.evaluate((t0: number, f: number) => {
+            const stage = document.getElementById('stage') as HTMLCanvasElement;
+            const c = stage.getContext('2d')!;
+            const now = () => performance.now();
+            (window as any).SHOWREEL.renderAt(t0, 6); c.getImageData(0, 0, 1, 1); // warm-up
+            let s = now();
+            for (let i = 0; i < 60; i++) { (window as any).SHOWREEL.renderAt(t0 + i * f, 6); c.getImageData(0, 0, 1, 1); }
+            const render = (now() - s) / 60;
+            s = now();
+            for (let i = 0; i < 60; i++) { (window as any).SHOWREEL.renderAt(t0 + i * f, 6); stage.toDataURL('image/jpeg', 0.97); }
+            return [render, (now() - s) / 60];
+          }, t0, FRAME);
+          rates[arch] = Math.round(ms * 10) / 10;
+          jpeg[arch] = Math.round(msJpeg * 10) / 10;
+        }
+        await page.close();
       }
       console.log(JSON.stringify({ rateS6msPerFrame: rates, rateS6withJpegMsPerFrame: jpeg, realArchetypes: real }));
       expect(Object.keys(rates).sort()).toEqual([...real].sort()); // every shipped archetype was measured
@@ -324,7 +422,7 @@ describe.skipIf(!E2E)('showreel engine in the browser (SHOWREEL_E2E=1)', () => {
     } finally {
       await browser.close();
     }
-  }, 180_000);
+  }, 300_000);
 });
 
 // Registered only when E2E is off: a full E2E run must report 0 skipped (Rule 12), so a

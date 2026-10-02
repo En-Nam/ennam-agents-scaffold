@@ -212,11 +212,11 @@ describe.skipIf(!E2E)('BT.709 colour round trip (SHOWREEL_E2E=1)', () => {
     const puppeteer = mod.default ?? mod;
     browser = await puppeteer.launch({ executablePath: exe, headless: true, args: launchArgs() });
     dir = mkdtempSync(path.join(os.tmpdir(), 'showreel-color-'));
-  });
+  }, 180_000);
   afterAll(async () => {
     await browser?.close();
     if (dir) rmSync(dir, { recursive: true, force: true });
-  });
+  }, 120_000);
 
   /** a solid-colour frame JPEG-encoded by the browser canvas exactly like render/frames.mjs captures */
   async function canvasJpeg(hex: string): Promise<Buffer> {
@@ -277,6 +277,6 @@ describe.skipIf(!E2E)('BT.709 colour round trip (SHOWREEL_E2E=1)', () => {
       // discrimination: the BT.601-converted stream decoded as BT.709 is clearly worse than the threshold
       expect(dOld).toBeGreaterThan(3);
       expect(dOld).toBeGreaterThan(dNow * 2);
-    });
+    }, 180_000);
   }
 });

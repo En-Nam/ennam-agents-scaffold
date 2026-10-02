@@ -322,17 +322,26 @@ describe('showreel render/verify helpers', () => {
     expect(new Set(pts.map((p: { t: number }) => p.t)).size).toBe(3);
   });
 
-  it('sheetTimes: 2 stills per beat, inside the beat, on the frame grid; sheet = 4-column tile', () => {
+  it('sheetTimes (C17): 3 labelled stills per beat (enter/hold/exit), inside the beat solo window, on the frame grid; sheet = 4-column tile', () => {
     const st = sheetTimes(ENGINE_TL);
-    expect(st.length).toBe(2 * ENGINE_TL.beats.length);
-    for (const s of st) {
-      const b = ENGINE_TL.beats.find((x: any) => x.id === s.beatId);
-      expect(s.t).toBeGreaterThanOrEqual(b.t0);
-      expect(s.t).toBeLessThan(b.t1);
-      expect(onGrid(s.t)).toBe(true);
+    expect(st.length).toBe(3 * ENGINE_TL.beats.length);
+    for (const b of ENGINE_TL.beats) {
+      const mine = st.filter((s: any) => s.beatId === b.id);
+      expect(mine.map((s: any) => s.still)).toEqual(['enter', 'hold', 'exit']);
+      // ordered in time and inside the part of the beat that is alone on screen (a transition still would
+      // show two beats under one label)
+      expect(mine[0].t).toBeLessThan(mine[1].t);
+      expect(mine[1].t).toBeLessThan(mine[2].t);
+      for (const s of mine) {
+        expect(s.t).toBeGreaterThanOrEqual(b.t0 + b.overlapIn);
+        expect(s.t).toBeLessThan(b.t1 - b.overlapOut);
+        expect(onGrid(s.t)).toBe(true);
+        // label = beat id, archetype/variant, still, LOCAL t (seconds since the beat's t0)
+        expect(s.label).toBe(`${b.id}  ${b.archetype}/${b.variant}  ${s.still}  t=${(s.t - b.t0).toFixed(2)}s`);
+      }
     }
-    const a = sheetArgs({ out: 'sheet.png', count: 14 });
-    expect(a.join(' ')).toContain('tile=4x4');
+    const a = sheetArgs({ out: 'sheet.png', count: 3 * 8 });
+    expect(a.join(' ')).toContain('tile=4x6');
   });
 
   it('parseFrameCount reads the FINAL frame= of ffmpeg stats (progress lines use \\r)', () => {

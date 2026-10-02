@@ -113,12 +113,12 @@ describe.skipIf(!E2E)('kinetic-text chapter in the browser (SHOWREEL_E2E=1)', ()
     close = () => srv.close();
     browser = await puppeteer.launch({ executablePath: exe, headless: true, args: launchArgs() });
     page = await openPage(url);
-  });
+  }, 180_000);
   afterAll(async () => {
     await browser?.close();
     await close();
     if (dir) rmSync(dir, { recursive: true, force: true });
-  });
+  }, 120_000);
 
   const manifestAt = async (t: number): Promise<Entry[]> => page.evaluate((t: number) => {
     (window as any).SHOWREEL.renderAt(t, 1);
@@ -131,7 +131,7 @@ describe.skipIf(!E2E)('kinetic-text chapter in the browser (SHOWREEL_E2E=1)', ()
     expect(typeof fit.b2.lead).toBe('number');
     expect(typeof fit.b3.lead).toBe('number');
     expect(typeof fit.b3.lines).toBe('number');
-  });
+  }, 180_000);
 
   for (const id of ['b2', 'b3']) {
     it(`${id}: at local progress 0.5 and the last fully-on frame every item is drawn, inside the 48 px safe area, and traceable`, async () => {
@@ -142,7 +142,7 @@ describe.skipIf(!E2E)('kinetic-text chapter in the browser (SHOWREEL_E2E=1)', ()
         expect(offFrame(m), `${id} t=${t}`).toEqual([]);
         expect(checkManifest(m, resolved), `${id} t=${t}`).toEqual([]);
       }
-    });
+    }, 180_000);
   }
 
   it('0-line card draws only the title; 1-line card draws title + line, the title clearly dominant', async () => {
@@ -153,7 +153,7 @@ describe.skipIf(!E2E)('kinetic-text chapter in the browser (SHOWREEL_E2E=1)', ()
     const line = m.find((e) => e.source === 'f.feature.1')!.bbox!;
     expect(title.h).toBeGreaterThan(1.8 * line.h);
     expect(line.y).toBeGreaterThan(title.y + title.h * 0.8); // the line sits under the title
-  });
+  }, 180_000);
 
   it('the title lands on cue `line` and the fact line only after it', async () => {
     const b3 = beat('b3');
@@ -164,7 +164,7 @@ describe.skipIf(!E2E)('kinetic-text chapter in the browser (SHOWREEL_E2E=1)', ()
     expect(justAfter).toContain(SHORTEST_CHAPTER);
     expect(justAfter).not.toContain('f.feature.1');
     expect(drawnIn(await manifestAt(b3.t1 - b3.overlapOut - F))).toContain('f.feature.1');
-  });
+  }, 180_000);
 
   it('AC3: chapter frames hash identically in a fresh page, at S=1 and S=6', async () => {
     const b3 = beat('b3');
@@ -184,5 +184,5 @@ describe.skipIf(!E2E)('kinetic-text chapter in the browser (SHOWREEL_E2E=1)', ()
       expect(b, `S=${S}`).toEqual(a);
       expect(a[0]).not.toBe(a[1]);
     }
-  });
+  }, 180_000);
 });

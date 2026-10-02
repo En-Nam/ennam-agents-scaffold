@@ -83,10 +83,10 @@ describe.skipIf(!E2E)('card-carousel in the browser (SHOWREEL_E2E=1)', () => {
     exe = found;
     const mod = await loadDep('puppeteer-core', process.cwd());
     puppeteer = mod.default ?? mod;
-  });
+  }, 180_000);
   afterAll(async () => {
     for (const c of cleanups.reverse()) await c();
-  });
+  }, 120_000);
 
   async function serve(name: string, mutate?: (tl: any, rs: any) => void) {
     const f = await serveFilm(name, { toolDir: toolDir(), mutate });

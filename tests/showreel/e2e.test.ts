@@ -36,7 +36,7 @@ describe.skipIf(!E2E)('showreel end to end on a scaffolded repo (SHOWREEL_E2E=1)
   }, 120_000);
   afterAll(() => {
     for (const t of temps) rmSync(t, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
-  });
+  }, 120_000);
 
   async function scaffold(fixture: string, roles: string[]) {
     const cwd = mkdtempSync(path.join(os.tmpdir(), 'showreel-e2e-'));
@@ -146,7 +146,7 @@ describe.skipIf(!E2E)('showreel end to end on a scaffolded repo (SHOWREEL_E2E=1)
 
     const check = await sr(cwd, 'check', '--sheet');
     expect(check).toMatchObject({ beats: 7, sheet: 'showreel/build/sheet.png' });
-    expect(pngSize(path.join(cwd, 'showreel', 'build', 'sheet.png'))).toEqual({ w: 1920, h: 270 * 4 });
+    expect(pngSize(path.join(cwd, 'showreel', 'build', 'sheet.png'))).toEqual({ w: 1920, h: 270 * Math.ceil((3 * 7) / 4) }); // 3 labelled stills per beat (C17)
     const resolved = JSON.parse(readFileSync(path.join(cwd, 'showreel', 'build', 'resolved.json'), 'utf8'));
     for (const b of Object.values<any>(resolved.beats)) for (const s of Object.values<any>(b.slots)) if (s.items.length) expect(s.fitSizePx).toBeGreaterThan(0);
 

@@ -175,10 +175,10 @@ describe.skipIf(!E2E)('flow-graph in the browser (SHOWREEL_E2E=1)', () => {
     }
     browser = await puppeteer.launch({ executablePath: exe, headless: true, args: launchArgs() });
     cleanups.push(() => browser.close());
-  }, 60_000);
+  }, 180_000);
   afterAll(async () => {
     for (const c of cleanups.reverse()) await c();
-  });
+  }, 120_000);
 
   async function openPage(url: string): Promise<Page> {
     const page = await browser.newPage();

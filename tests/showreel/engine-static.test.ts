@@ -127,20 +127,17 @@ describe('archetype registry (C9)', () => {
     }
   });
 
-  // M2 interim (plan Tasks 1 → 7): archetypes.json declares the 4 M2 archetypes before their modules exist;
-  // the orchestrator registers them in Task 7, which MUST empty this list. Until then the engine rejects a
-  // timeline naming one at boot (checkTimeline: "not registered"), so nothing renders blank.
-  const PENDING_M2 = ['card-carousel', 'flow-graph', 'layered-stack', 'orbit-network'];
-
-  it('ARCHETYPES keys EQUAL archetypes.json keys minus the pending M2 ids (a storyboard can never name an archetype the engine cannot draw)', () => {
-    expect(Object.keys(ARCHETYPES).sort()).toEqual(ids.filter((id) => !PENDING_M2.includes(id)).sort());
+  // M2 Task 7 registered the 4 M2 archetypes: the registry now EQUALS archetypes.json (no pending ids).
+  it('ARCHETYPES keys EQUAL archetypes.json keys (a storyboard can never name an archetype the engine cannot draw)', () => {
+    expect(Object.keys(ARCHETYPES).sort()).toEqual([...ids].sort());
+    for (const id of ['card-carousel', 'flow-graph', 'layered-stack', 'orbit-network']) expect(Object.keys(ARCHETYPES), id).toContain(id);
   });
 
-  it('a pending M2 id stays pending only while its module does not exist (registration cannot be forgotten)', () => {
-    for (const id of PENDING_M2) {
-      expect(ids, id).toContain(id);
-      expect(existsSync(path.join(TOOLKIT, 'archetypes', `${id}.mjs`)), `${id}.mjs exists: register it in archetypes/index.mjs and drop it from PENDING_M2`).toBe(false);
-    }
+  it('TRANSITIONS keys EQUAL the storyboard transitionOut enum minus "cut" (every overlap transition can be drawn)', () => {
+    const sb = readJson(path.join(TOOLKIT, 'schema', 'storyboard.schema.json'));
+    const enumT: string[] = sb.$defs.beat.properties.transitionOut.enum;
+    expect(Object.keys(TRANSITIONS).sort()).toEqual(enumT.filter((t) => t !== 'cut').sort());
+    expect(Object.keys(TRANSITIONS)).toContain('column-wipe');
   });
 
   it('zoom-through transition is registered with id + apply(ctx, k, drawOut, drawIn, api)', () => {
