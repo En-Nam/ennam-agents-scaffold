@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.16.0 — unreleased (draft — film output figures pending M3 AC7 run)
+## v1.16.0 — unreleased
 
 Adds the opt-in **`showreel` add-on**: `/showreel [15|30|45|60]` makes a 1920x1080@60 H.264 + AAC promo film of the host repo, exactly N seconds, where every on-screen string comes from code-extracted facts or a fixed phrase library. Decision: `mem:decisions/showreel-addon-v1.16`.
 

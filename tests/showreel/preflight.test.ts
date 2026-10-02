@@ -534,8 +534,12 @@ describe('runGpuProbe — child process hygiene (fake browser module)', () => {
   it('timeout after the browser spawned → the orphaned browser is killed and the error says so', () => {
     // M0 leak class: killing only the node child would leave headless Edge running on the user's box.
     withEnv('hang');
-    const r = runGpuProbe({ hostRoot: tmpdir(), exe: 'fake', browserModuleUrl: FAKE, timeoutMs: 5_000 });
-    expect(r.error).toMatch(/timed out after 5 s/);
+    // The probe timeout must outlast child startup (node + module import + fake browser spawn, ~1 s warm) even
+    // under full-suite load, or it fires BEFORE a browser exists and the kill path is never exercised (that was
+    // the flake: 5 s timed out at 5.9 s under load). 15 s gives a wide margin; the pid assertions below still
+    // prove the browser did spawn before the timeout, so the leak path is genuinely tested (Rule 9).
+    const r = runGpuProbe({ hostRoot: tmpdir(), exe: 'fake', browserModuleUrl: FAKE, timeoutMs: 15_000 });
+    expect(r.error).toMatch(/timed out after 15 s/);
     expect(r.error).toMatch(/leftover browser processes were killed/);
     const pid = Number(readFileSync(join(work, 'pid'), 'utf8'));
     expect(pid).toBeGreaterThan(0);
