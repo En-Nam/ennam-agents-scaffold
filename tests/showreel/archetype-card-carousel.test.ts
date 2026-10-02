@@ -1,11 +1,13 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync, existsSync, mkdtempSync, rmSync, appendFileSync } from 'node:fs';
 import os from 'node:os';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { loadDep } from '../../templates/showreel/.claude/showreel/lib/util/tooldeps.mjs';
 import { launchArgs } from '../../templates/showreel/.claude/showreel/render/browser.mjs';
 import { offFrame } from '../../templates/showreel/.claude/showreel/lib/truth/safearea.mjs';
 import { checkManifest } from '../../templates/showreel/.claude/showreel/lib/truth/manifest.mjs';
+import { sheetTimes } from '../../templates/showreel/.claude/showreel/render/sheet.mjs';
 import {
   ARCHETYPE_FILE, SPEC, COUNTS, NEAR_MAX, STORYBOARDS, buildFilm, serveFilm, openPage, beatTimes,
 } from './fixtures/archetypes/card-carousel/film.mjs';
@@ -275,7 +277,7 @@ describe.skipIf(!E2E)('card-carousel in the browser (SHOWREEL_E2E=1)', () => {
     // are full — R5: the first title read greyer). A control at the beat's enter frame proves the probe sees the
     // placeholders (so a ghost left under a landed card would fail here). `r5` = the R5 sheet's card beats — added
     // as a regression guard: it was already green at c4af0fa (the R5 ghost/deck symptom came from a stale frame).
-    type Probe = { dash: number; deck: number; title: Record<string, number> };
+    type Probe = { dash: number; deck: number; title: Record<string, number>; shadow?: Record<string, number>; border?: number };
     const probeAt = (page: Page, t: number, id: string): Promise<Probe> =>
       page.evaluate((t: number, id: string) => {
         const S = (window as any).SHOWREEL;
@@ -303,8 +305,15 @@ describe.skipIf(!E2E)('card-carousel in the browser (SHOWREEL_E2E=1)', () => {
             const at = new Map((await manifest(page)).filter((e) => e.bbox).map((e) => [e.source, e.bbox!]));
             const label = `${name}.${b.id} (${b.variant}, N=${ids.length}) local t=${(t - tb.t0).toFixed(3)} (${((t - tb.t0) / (tb.t1 - tb.t0)).toFixed(3)} of beat)`;
             expect({ dash: pr.dash, deck: pr.deck }, `${label}: placeholder draws (dashed ghost slot / unswung deck card)`).toEqual({ dash: 0, deck: 0 });
+            // PO R5 (b): every landed card's frame + tag tile stays "on" whether or not it holds the focus (2662418:
+            // a card the focus had moved past fell to border alpha 0.455 — with a violet accent on the violet
+            // backdrop that read "disabled")
+            expect(pr.border ?? 0, `${label}: weakest card frame / tile border alpha`).toBeGreaterThanOrEqual(0.7);
             for (const id of ids) {
               expect(pr.title[id] ?? 0, `${label}: ${id} title opacity`).toBeGreaterThanOrEqual(0.999);
+              // PO R5 (b): no shadow glow under the title — with the engine bloom on top it read as a doubled,
+              // ghosted outline on thin mono strokes (2662418 drew every title with shadowBlur 10-24)
+              expect(pr.shadow?.[id] ?? 0, `${label}: ${id} title shadowBlur`).toBe(0);
               const bb = at.get(id);
               expect(bb, `${label}: ${id} not landed`).toBeTruthy();
               const fb = final.get(id)!;
@@ -323,7 +332,8 @@ describe.skipIf(!E2E)('card-carousel in the browser (SHOWREEL_E2E=1)', () => {
     // Why: the engine's vignette (post-FX, radial from 0.35 H) darkens the frame edges after the scene is drawn, so
     // white text can only be as bright as its place allows. Fixed 560 px cards put a short first title ("One-tap
     // checkout", "Saved carts") at the left edge of a wide row: on the R5 hold it read grey next to its siblings.
-    // Cards now hug their own title, so the set sits nearer the centre. Pixels, not inference: on every 8th frame
+    // Cards now are chips hugging their own title, two columns centred on the frame (PO R5 (b) below), so every
+    // title sits near the centre. Pixels, not inference: on every 8th frame
     // from 0.45 to the last fully-on frame, the 90th-percentile luminance inside each card title's drawn bbox must
     // be ≥ 0.88 × the brightest title's in the same frame (the fixed-width layout measured 0.75-0.82 on the first
     // title; now ≥ 0.95, ≥ 0.91 on the settle-hit frame where the engine's aberration dips every title). Relative,
@@ -373,6 +383,131 @@ describe.skipIf(!E2E)('card-carousel in the browser (SHOWREEL_E2E=1)', () => {
         await browser.close();
       }
     }
+  }, 300_000);
+
+  // The engine vignette (core.mjs post-FX): read from the engine source, never copied — if the engine changes it,
+  // the parse fails loudly instead of the corrected metric silently dividing out the wrong amount.
+  const VIGNETTE = (() => {
+    const core = readFileSync(path.join(path.dirname(ARCHETYPE_FILE), '..', 'engine', 'core.mjs'), 'utf8');
+    const g = /createRadialGradient\(W \/ 2, H \/ 2, H \* ([\d.]+), W \/ 2, H \/ 2, H \* ([\d.]+)\)/.exec(core);
+    const a = /addColorStop\(0, 'rgba\(0,0,0,0\)'\); rg\.addColorStop\(1, 'rgba\(0,0,0,([\d.]+)\)'\)/.exec(core);
+    if (!g || !a) throw new Error('core.mjs vignette gradient not found: update the PO R5 (b) test\'s vignette parse');
+    return { cx: 960, cy: 540, r0: Number(g[1]) * 1080, r1: Number(g[2]) * 1080, alpha: Number(a[1]) };
+  })();
+
+  it('PO R5 (b): at the contact-sheet hold no card reads disabled — every title glyph luma ≥ 0.9 × the brightest, as rendered (row + fan, S=1 + S=6)', async () => {
+    // Why: on the R5 sheet (mechanical hold = 0.6 of the beat's solo window, sheetTimes) the first card read
+    // "disabled" next to its siblings. The focus highlight may move between cards, but every landed title must read
+    // at full contrast. Metric per title: its exact glyph mask (the frame rendered with vs without that one title,
+    // SHOWREEL.hide — rotated fan bboxes overlap the neighbours' glyphs), median luma over the mask, relative to the
+    // brightest title of the same frame.
+    // (1) AS RENDERED — the PO condition, what the viewer sees, engine vignette included. The cause at 2662418 was
+    //     the layout: a row of three put the outer titles out where the vignette (radial from 0.35 H) darkens white
+    //     type to grey. Now: two columns of chips centred on the frame + a fan whose titles sit near the centre.
+    //     Proven red at 2662418 below (the archetype at that commit served in place of the working tree's).
+    // (2) VIGNETTE-CORRECTED — archetype-only guard: pixels divided by the vignette's darkening at their place
+    //     (parameters parsed from core.mjs above), so a title the archetype itself draws dim is caught wherever it is.
+    //     Negative control: ?dimfirst=0.4 (a typical "disabled" opacity) on each beat's first title must be caught.
+    const MIN = 0.9;
+    type Luma = { raw: Record<string, number>; cor: Record<string, number> };
+    const holdLuma = (page: Page, t: number, S: number, ids: string[]): Promise<Luma> =>
+      page.evaluate((t: number, S: number, ids: string[], V: typeof VIGNETTE) => {
+        const R = (window as any).SHOWREEL;
+        const g = (document.getElementById('stage') as HTMLCanvasElement).getContext('2d')!;
+        const lumaOf = (d: Uint8ClampedArray) => {
+          const L = new Float32Array(d.length / 4);
+          for (let i = 0; i < L.length; i++) L[i] = 0.2126 * d[4 * i] + 0.7152 * d[4 * i + 1] + 0.0722 * d[4 * i + 2];
+          return L;
+        };
+        R.hide = null;
+        R.renderAt(t, S);
+        const boxes: Record<string, number[] | null> = {};
+        for (const id of ids) {
+          const e = R.manifest().find((x: any) => x.source === id && x.bbox);
+          boxes[id] = e ? [Math.round(e.bbox.x), Math.round(e.bbox.y), Math.max(1, Math.round(e.bbox.w)), Math.max(1, Math.round(e.bbox.h))] : null;
+        }
+        const shown: Record<string, Float32Array> = {};
+        for (const id of ids) if (boxes[id]) shown[id] = lumaOf(g.getImageData(...(boxes[id] as [number, number, number, number])).data);
+        const out = { raw: {} as Record<string, number>, cor: {} as Record<string, number> };
+        const median = (v: number[]) => (v.sort((p, q) => p - q), v.length > 50 ? Math.round(v[v.length >> 1]) : -1);
+        for (const id of ids) {
+          if (!boxes[id]) { out.raw[id] = out.cor[id] = -1; continue; } // not drawn: fails below
+          R.hide = id;
+          R.renderAt(t, S);
+          const hidden = lumaOf(g.getImageData(...(boxes[id] as [number, number, number, number])).data);
+          // glyph mask = the pixels this title changes (> 48 luma). raw = the median of their shown luma; cor = the
+          // same divided by the vignette's darkening at each pixel (linear 0 → alpha from r0 to r1 about the centre)
+          const raw: number[] = [], cor: number[] = [];
+          const [bx, by, bw] = boxes[id] as number[];
+          for (let i = 0; i < hidden.length; i++) {
+            if (shown[id][i] - hidden[i] <= 48) continue;
+            const r = Math.hypot(bx + (i % bw) - V.cx, by + Math.floor(i / bw) - V.cy);
+            raw.push(shown[id][i]);
+            cor.push(shown[id][i] / (1 - V.alpha * Math.min(1, Math.max(0, (r - V.r0) / (V.r1 - V.r0)))));
+          }
+          out.raw[id] = median(raw);
+          out.cor[id] = median(cor);
+        }
+        R.hide = null;
+        return out;
+      }, t, S, ids, VIGNETTE);
+    const ratios = (lum: Record<string, number>) => {
+      const top = Math.max(...Object.values(lum));
+      return Object.fromEntries(Object.entries(lum).map(([id, v]) => [id, v / top]));
+    };
+    // the archetype as it was at 2662418 (the R5 sheet the PO judged), served in place of the working tree's —
+    // the as-rendered check must be red there, else it cannot catch the reported symptom
+    const BEFORE_REF = '2662418';
+    let before: string;
+    try {
+      before = execFileSync('git', ['show', `${BEFORE_REF}:templates/showreel/.claude/showreel/archetypes/card-carousel.mjs`], { encoding: 'utf8' });
+    } catch (e: any) {
+      throw new Error(`PO R5 (b) red-at-${BEFORE_REF} control needs that commit in the local git history (shallow clone?): ${e.message}`);
+    }
+    const openBefore = async (browser: Browser, url: string): Promise<Page> => {
+      const p = await browser.newPage();
+      await p.setRequestInterception(true);
+      p.on('request', (r: any) => (new URL(r.url()).pathname === '/archetypes/card-carousel.mjs'
+        ? r.respond({ status: 200, contentType: 'text/javascript', body: before }) : r.continue()));
+      await p.goto(url, { waitUntil: 'load' });
+      await p.waitForFunction('!!(window.SHOWREEL && window.SHOWREEL.ready)');
+      await p.evaluate(() => (window as any).SHOWREEL.ready);
+      return p;
+    };
+    let redBefore = 0;
+    for (const name of ['look', 'r5']) {
+      const film = await serve(name);
+      const browser = await launch();
+      try {
+        const page = await openPage(browser, film.url);
+        const ctl = await openPage(browser, film.url, '?dimfirst=0.4');
+        const old = await openBefore(browser, film.url);
+        const holds = sheetTimes(film.timeline).filter((s: any) => s.still === 'hold');
+        for (const b of cardBeats(STORYBOARDS[name])) {
+          const t = holds.find((s: any) => s.beatId === b.id).t;
+          const ids: string[] = film.resolved.beats[b.id].slots.cards.items.map((it: any) => it.id);
+          for (const S of [1, 6]) {
+            const lum = await holdLuma(page, t, S, ids);
+            const label = `${name}.${b.id} (${b.variant}) hold S=${S} ${JSON.stringify(lum)}`;
+            expect(Math.max(...Object.values(lum.raw)), `${label}: brightest title as rendered`).toBeGreaterThan(220);
+            // (1) as rendered — the PO condition
+            for (const [id, r] of Object.entries(ratios(lum.raw))) expect(r, `${label}: ${id} as rendered`).toBeGreaterThanOrEqual(MIN);
+            // (2) vignette-corrected — what the archetype draws
+            for (const [id, r] of Object.entries(ratios(lum.cor))) expect(r, `${label}: ${id} vignette-corrected`).toBeGreaterThanOrEqual(MIN);
+            const ctlLum = await holdLuma(ctl, t, S, ids);
+            expect(ratios(ctlLum.cor)[ids[0]], `${label}: control (first title at 0.4 opacity) ${JSON.stringify(ctlLum.cor)} must be caught`).toBeLessThan(MIN);
+            const oldLum = await holdLuma(old, t, S, ids);
+            if (Math.min(...Object.values(ratios(oldLum.raw))) < MIN) redBefore++;
+          }
+        }
+      } finally {
+        await browser.close();
+      }
+    }
+    // measured at 2662418 (S=1, weakest title as rendered): look.b2 row 0.62, look.b3 fan 0.81, r5.b2 row 0.74
+    // (One-tap checkout 184 vs 239), r5.b3 fan 0.84; working tree: ≥ 0.91 / 0.94 / 0.91 / 0.96 —
+    // every beat × S fails as rendered, so the check provably sees the reported symptom
+    expect(redBefore, `as-rendered check red at ${BEFORE_REF} (of 8 beat × S cases)`).toBe(8);
   }, 300_000);
 
   it('rate check: S=6 ms/frame (60 frames mid-beat, render + JPEG q0.97) per variant', async () => {

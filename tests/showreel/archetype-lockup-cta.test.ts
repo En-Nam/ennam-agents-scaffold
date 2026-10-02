@@ -10,6 +10,7 @@ import { validateStoryboard } from '../../templates/showreel/.claude/showreel/li
 import { resolve as resolveStoryboard } from '../../templates/showreel/.claude/showreel/lib/truth/resolve.mjs';
 import { compileTimeline } from '../../templates/showreel/.claude/showreel/lib/compile/timeline.mjs';
 import { offFrame } from '../../templates/showreel/.claude/showreel/lib/truth/safearea.mjs';
+import { sheetTimes } from '../../templates/showreel/.claude/showreel/render/sheet.mjs';
 
 // v1.16 M2 R5 fix (lockup-cta). Two defects the R5 sheet showed next to spike A, each pinned so it can fail:
 //   (1) Safe area at EVERY frame, not just the contract's two "fully revealed" moments. The tagline snaps open
@@ -40,6 +41,11 @@ const FPS = 60;
 const SAFE = { W: 1920, H: 1080, margin: 48 };
 const KEEP = 0.8; // a sweep frame keeps ≥ 80 % of each strip's pre-sweep contrast
 const SHIPPED_KEEP = 0.7; // …and ≥ 70 % with the engine's hit FX (kick + chromatic aberration) left on
+// PO R5 (a), measured on the R5 row-6 shape (S=1): HEAD 2662418 hold = 37.8 % of wordmark ink clipped to pure white,
+// edge 103.8, halo 142; after = 14.7 %, 112.6, 129; the slam impact halo is 170 both before and after (unchanged).
+// With the resting face kept opaque (FACE_REST 1: only the halo + re-light cuts) the hold still clips 34.5 % (31 %
+// with no re-light at all) — the clip limit is met only through the face's resting headroom (lockup-cta.mjs).
+const CLIP_MAX = 0.2, EDGE_MIN = 108, IMPACT_HALO_MIN = 155;
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Entry = { text: string; source: string; bbox: { x: number; y: number; w: number; h: number } | null };
@@ -47,8 +53,10 @@ const len = (s: string) => [...s].length;
 const display = (id: string) => FACTS.facts.find((f: any) => f.id === id).display as string;
 
 const LOCK = 'b4';
-/** 15 s film: cold open → kinetic stack → kinetic punch → lockup (max: 32-char name, tagline, 64-char command, longest cta). */
-function film(tagline: string) {
+/** 15 s film: cold open → kinetic stack → kinetic punch → lockup (default = the max: 32-char name, tagline,
+ *  64-char command, longest cta; `o` swaps the lockup's name / command / cta for the R5 row-6 shape). */
+function film(tagline: string, o: { name?: string; command?: string; cta?: string } = {}) {
+  const name = o.name ?? 'f.app.name.1', command = o.command ?? 'f.command.2', cta = o.cta ?? 'p.cta.3';
   const sb = {
     version: 1, durationS: 15, seed: 7, palette: 'violet',
     beats: [
@@ -56,7 +64,7 @@ function film(tagline: string) {
       { id: 'b2', archetype: 'kinetic-text', variant: 'stack', weight: 1, bindings: { lines: ['f.feature.1'] }, phrases: {}, transitionOut: 'cut' },
       { id: 'b3', archetype: 'kinetic-text', variant: 'punch', weight: 1, bindings: { lines: ['f.app.tagline.4'] }, phrases: {}, transitionOut: 'cut' },
       // weight 2.5: the 64-char command finishes typing before the reference frame (sweep − 0.5 s)
-      { id: LOCK, archetype: 'lockup-cta', variant: 'center', weight: 2.5, bindings: { name: 'f.app.name.1', tagline, command: 'f.command.2' }, phrases: { cta: 'p.cta.3' }, transitionOut: 'cut' },
+      { id: LOCK, archetype: 'lockup-cta', variant: 'center', weight: 2.5, bindings: { name, tagline, command }, phrases: { cta }, transitionOut: 'cut' },
     ],
   };
   const inputs = { archetypes: ARCH, facts: FACTS, phrases: PHRASES };
@@ -65,10 +73,12 @@ function film(tagline: string) {
   const timeline = resolved ? compileTimeline(sb, resolved, ARCH, { fps: FPS }) : null;
   const b = timeline?.beats.find((x: any) => x.id === LOCK);
   const cue = (name: string) => timeline.hits.find((h: any) => h.beatId === LOCK && h.cue === name).t as number;
-  return { tagline, sb, errors, resolved, timeline, b, cue };
+  return { tagline, name, command, cta, sb, errors, resolved, timeline, b, cue };
 }
 const TAGS = ['f.app.tagline.1', 'f.app.tagline.2', 'f.app.tagline.3'];
-const FILMS = TAGS.map(film);
+const FILMS = TAGS.map((t) => film(t));
+// the R5 row-6 shape (PO conditions a + c): a short wordmark at the full 260 px display size, a short command chip
+const SHORT = film('f.app.tagline.4', { name: 'f.app.name.2', command: 'f.command.3', cta: 'p.cta.2' });
 
 describe('lockup-cta static guards (D8 text API, D9 canvas roles, palette-only colours)', () => {
   const src = readFileSync(path.join(TOOLKIT, 'archetypes', 'lockup-cta.mjs'), 'utf8');
@@ -97,7 +107,7 @@ describe('lockup-cta fixtures (hermetic precondition)', () => {
     expect(len(display('f.command.2'))).toBe(SPEC.slots.command.maxChars);
   });
   it('every film validates, resolves and compiles, and the lockup has both cues', () => {
-    for (const f of FILMS) {
+    for (const f of [...FILMS, SHORT]) {
       expect(f.errors, f.tagline).toEqual([]);
       expect(f.timeline, f.tagline).not.toBeNull();
       expect(f.cue('slam')).toBeGreaterThan(f.b.t0);
@@ -339,6 +349,226 @@ describe.skipIf(!E2E)('lockup-cta in the browser (SHOWREEL_E2E=1)', () => {
     for (const s of Object.keys(r.lost)) expect(r.lost[s], `${s}: strips the synthetic band washes out`).toBeGreaterThan(0);
     expect(r.errors).toEqual([]);
   }, 240_000);
+
+  // ── PO R5 condition (c): the light sweep never crosses the command chip or the CTA pill ──
+  // The command chip is the one line the viewer should copy; on the R5 sheet (row 6) the band ran across it. The
+  // oracle is a DIFFERENCE: the same frame rendered from a copy of the film whose `sweep` hit is moved past the beat
+  // (so the archetype draws no band, no re-light, no sweep-cued pulse) — whatever differs inside a chip rect is the
+  // sweep's light there (engine bloom spill included). Both copies have the sweep hit's engine amplitude zeroed: the
+  // engine kick moves the whole frame (impact language, not this archetype's light; the shipped kick is pinned by
+  // the legibility test above). Moving the cue also moves the ENTER ping (ENT = sweep + 6 sixteenths), which lights
+  // the pill on purpose — so frames from ENT − 0.15 s (the pre-press) on are not compared; the test pins that the
+  // sweep window (cue ± 0.35 s) closes before then, so no sweep frame escapes.
+  /** a pill's border box relative to its text bbox, in text-bbox heights (l/r: left of the text / right of its end) */
+  type Pad = { l: number; t: number; r: number; b: number };
+  type ChipSpec = { cmd: string; cta: string; pads: { chip: Pad; cta: Pad }; ref: { cmdH: number; cmdW: number } };
+  type ChipFrame = { rects: Record<string, Box>; luma: Record<string, string>; quarter: string };
+  /** The pill's border box around text `src` on frame t, found from the pixels (no geometry copied from
+   *  lockup-cta.mjs, so a pill that grows or moves is followed — and one whose border is not found fails loudly).
+   *  Scanning outward from each side of the text bbox (up to 4 text heights sideways, 1.25 above / below), the
+   *  border is the OUTERMOST local luma peak ≥ 60 that stands ≥ 25 above the median 4–10 px on either side of it:
+   *  the 2 px brand stroke reads ~70–160 against ~20–100 glass fill / backdrop (its primary end is the dim one),
+   *  and the prompt chevron and the cursor sit inside it. Each scan position is the median of 3 parallel lines
+   *  (centre row ±1; text columns ¼ ½ ¾). */
+  const pillPad = (page: any, t: number, src: string): Promise<Pad> =>
+    page.evaluate((t: number, src: string) => {
+      const S = (window as any).SHOWREEL;
+      S.renderAt(t, 1);
+      const stage = document.getElementById('stage') as HTMLCanvasElement;
+      const W = stage.width, H = stage.height;
+      const e = S.manifest().find((m: any) => m.source === src && m.bbox);
+      if (!e) throw new Error(`pillPad: ${src} not drawn at t=${t}`);
+      const d = stage.getContext('2d')!.getImageData(0, 0, W, H).data;
+      const lum = (x: number, y: number) => { const i = (Math.round(y) * W + Math.round(x)) * 4; return 0.2126 * d[i]! + 0.7152 * d[i + 1]! + 0.0722 * d[i + 2]!; };
+      const med3 = (a: number, b: number, c: number) => Math.max(Math.min(a, b), Math.min(Math.max(a, b), c));
+      const { x, y, w, h } = e.bbox, yc = y + h / 2;
+      // line(k) = the scan value k px out from the text edge; returns k of the outermost border peak
+      const outermost = (side: string, n: number, line: (k: number) => number) => {
+        const v = Array.from({ length: n + 11 }, (_, k) => line(k + 1));
+        const med = (a: number[]) => a.sort((p, q) => p - q)[Math.floor(a.length / 2)]!;
+        let hit = -1;
+        for (let k = 1; k < n; k++) {
+          const inner = med(v.slice(Math.max(0, k - 10), Math.max(1, k - 3))), outer = med(v.slice(k + 4, k + 11));
+          if (v[k]! >= 60 && v[k]! >= v[k - 1]! && v[k]! >= v[k + 1]! && v[k]! - Math.max(inner, outer) >= 25) hit = k + 1;
+        }
+        if (hit < 0) throw new Error(`pillPad: no pill border ${side} of ${src} at t=${t}`);
+        return hit;
+      };
+      const row = (dx: number) => (k: number) => med3(lum(dx(k), yc - 1), lum(dx(k), yc), lum(dx(k), yc + 1));
+      const col = (dy: (k: number) => number) => (k: number) => med3(lum(x + w / 4, dy(k)), lum(x + w / 2, dy(k)), lum(x + 3 * w / 4, dy(k)));
+      return {
+        l: outermost('left', Math.round(4 * h), row((k) => x - k)) / h,
+        r: outermost('right', Math.round(4 * h), row((k) => x + w + k)) / h,
+        t: outermost('above', Math.round(1.25 * h), col((k) => y - k)) / h,
+        b: outermost('below', Math.round(1.25 * h), col((k) => y + h + k)) / h,
+      };
+    }, t, src);
+  /** Render t; the chip rects (each pill's found border box, placed on this frame's text bbox — the command at its
+   *  full rested width, since it may be mid-typing — scaled with the text, + 3 px for the anti-aliased stroke) are
+   *  computed from THIS page's manifest unless given. */
+  const chipFrame = (page: any, t: number, spec: ChipSpec, given: Record<string, Box> | null): Promise<ChipFrame> =>
+    page.evaluate((t: number, spec: ChipSpec, given: Record<string, Box> | null) => {
+      const S = (window as any).SHOWREEL;
+      S.renderAt(t, 1);
+      const stage = document.getElementById('stage') as HTMLCanvasElement, g = stage.getContext('2d')!;
+      let rects = given;
+      if (!rects) {
+        rects = {};
+        const m = S.manifest().filter((e: any) => e.bbox);
+        const cmd = m.find((e: any) => e.source === spec.cmd), cta = m.find((e: any) => e.source === spec.cta);
+        const box = (bb: Box, textW: number, p: Pad) => ({
+          x: bb.x - p.l * bb.h - 3, y: bb.y - p.t * bb.h - 3, w: textW + (p.l + p.r) * bb.h + 6, h: bb.h * (1 + p.t + p.b) + 6,
+        });
+        if (cmd) rects.chip = box(cmd.bbox, spec.ref.cmdW * (cmd.bbox.h / spec.ref.cmdH), spec.pads.chip);
+        if (cta) rects.cta = box(cta.bbox, cta.bbox.w, spec.pads.cta);
+        for (const k of Object.keys(rects)) {
+          const r = rects[k]!, x0 = Math.max(0, Math.floor(r.x)), y0 = Math.max(0, Math.floor(r.y));
+          rects[k] = { x: x0, y: y0, w: Math.min(stage.width, Math.ceil(r.x + r.w)) - x0, h: Math.min(stage.height, Math.ceil(r.y + r.h)) - y0 };
+        }
+      }
+      const enc = (d: Uint8ClampedArray) => {
+        const n = d.length / 4, u = new Uint8Array(n);
+        for (let i = 0; i < n; i++) u[i] = Math.round(0.2126 * d[4 * i]! + 0.7152 * d[4 * i + 1]! + 0.0722 * d[4 * i + 2]!);
+        let s = '';
+        for (let i = 0; i < n; i += 8192) s += String.fromCharCode(...u.subarray(i, i + 8192));
+        return btoa(s);
+      };
+      const luma: Record<string, string> = {};
+      for (const [k, r] of Object.entries(rects)) luma[k] = enc(g.getImageData(r.x, r.y, r.w, r.h).data);
+      const q = document.createElement('canvas'); q.width = 480; q.height = 270;
+      const qg = q.getContext('2d')!; qg.drawImage(stage, 0, 0, 480, 270);
+      return { rects, luma, quarter: enc(qg.getImageData(0, 0, 480, 270).data) };
+    }, t, spec, given);
+  const bytes = (b64: string) => Buffer.from(b64, 'base64');
+
+  for (const [label, f] of [['64-char tagline / 64-char command', FILMS[2]!], ['R5 row-6 shape (acme-shop / npm run build)', SHORT]] as const) {
+    it(`PO R5 (c), ${label}: the sweep's contribution inside the command chip and the CTA pill is ~0 at every 5 % step and every sweep frame`, async () => {
+      if (!f.timeline) throw new Error(`${f.tagline}: storyboard did not compile — ${JSON.stringify(f.errors)}`);
+      const lit = JSON.parse(JSON.stringify(f.timeline));
+      for (const h of lit.hits) if (h.beatId === LOCK && h.cue === 'sweep') h.amp = 0;
+      const dark = JSON.parse(JSON.stringify(lit));
+      for (const h of dark.hits) if (h.beatId === LOCK && h.cue === 'sweep') h.t = f.b.t1 + 60;
+      const SW = f.cue('sweep'), ENT = SW + 6 * (60 / f.timeline.music.bpm / 4), until = ENT - 0.15;
+      expect(SW + 0.35, 'the sweep window closes before the ENTER pre-press (frames after it are not compared)').toBeLessThan(until);
+      const A = await open({ ...f, timeline: lit }), B = await open({ ...f, timeline: dark });
+      try {
+        // rested reference (command fully typed, before the sweep): text bbox height + full command width, and each
+        // pill's border box found from the pixels (the sweep-free film B, so no light can sit on a border)
+        const restT = frameAt(SW - 0.6), rest = await drawn(A.page, restT);
+        const cmdE = rest.find((e) => e.source === f.command)!, ctaE = rest.find((e) => e.source === f.cta)!;
+        expect(cmdE && ctaE, 'command + cta drawn on the rested frame').toBeTruthy();
+        expect(cmdE.text, 'the command is fully typed on the rested frame').toBe(display(f.command));
+        const pads = { chip: await pillPad(B.page, restT, f.command), cta: await pillPad(B.page, restT, f.cta) };
+        // the found border box really encloses the text with clearance on every side (the chevron prompt on the
+        // command's left) — a scan that stopped on a glyph or the cursor would not
+        for (const [k, p] of Object.entries(pads)) for (const s of ['l', 't', 'r', 'b'] as const) expect(p[s], `${k} pill pad ${s} (text heights)`).toBeGreaterThan(0.25);
+        // …and found the true border on BOTH ends: both pills are centred on the lockup axis (they differ only by
+        // their few-px layer drift), so a side scan that stopped short on the chevron / cursor shifts one centre off
+        const mid = (bb: Box, p: Pad) => (bb.x - p.l * bb.h + bb.x + bb.w + p.r * bb.h) / 2;
+        const centres = { chip: mid(cmdE.bbox!, pads.chip), cta: mid(ctaE.bbox!, pads.cta) };
+        console.log('[lockup-cta R5c]', label, JSON.stringify({ pads, centres, cmd: cmdE.bbox, cta: ctaE.bbox }));
+        expect(Math.abs(centres.chip - centres.cta), 'command chip vs CTA pill centre x (px)').toBeLessThan(8);
+        const spec: ChipSpec = { cmd: f.command, cta: f.cta, pads, ref: { cmdH: cmdE.bbox!.h, cmdW: cmdE.bbox!.w } };
+        const b = f.b, last = (Math.ceil(b.t1 * FPS - 1e-6) - 1) / FPS, times = new Set<number>();
+        for (let k = 0; k <= 20; k++) times.add(Math.min(last, frameAt(b.t0 + k * 0.05 * (b.t1 - b.t0))));
+        for (let t = frameAt(SW - 0.4); t <= SW + 0.4; t = frameAt(t + 1 / FPS)) times.add(t);
+        const failures: string[] = [], worst: Record<string, number> = { chip: 0, cta: 0 };
+        let judged = 0, sweepFrames = 0, oracle = 0;
+        for (const t of [...times].sort((x, y) => x - y)) {
+          if (t >= until) continue;
+          const a = await chipFrame(A.page, t, spec, null), d = await chipFrame(B.page, t, spec, a.rects);
+          if (a.rects.chip) judged++;
+          for (const k of Object.keys(a.rects)) {
+            const x = bytes(a.luma[k]!), y = bytes(d.luma[k]!), diff: number[] = [];
+            for (let i = 0; i < x.length; i++) diff.push(Math.abs(x[i]! - y[i]!));
+            diff.sort((p, q) => p - q);
+            const mean = diff.reduce((s, v) => s + v, 0) / diff.length, p99 = diff[Math.floor(diff.length * 0.99)]!;
+            worst[k] = Math.max(worst[k]!, p99);
+            if (mean > 0.25 || p99 > 2) failures.push(`t=${t.toFixed(3)} (cue${t - SW >= 0 ? '+' : ''}${(t - SW).toFixed(3)}) ${k}: mean |Δluma| ${mean.toFixed(2)}, p99 ${p99}, max ${diff[diff.length - 1]}`);
+          }
+          // the oracle can see the sweep: on the sweep frames, the frame OUTSIDE the chips really differs
+          if (Math.abs(t - SW) <= 0.3) {
+            sweepFrames++;
+            const x = bytes(a.quarter), y = bytes(d.quarter);
+            let n = 0;
+            for (let i = 0; i < x.length; i++) {
+              const px = (i % 480) * 4, py = Math.floor(i / 480) * 4;
+              const inChip = Object.values(a.rects).some((r) => px > r.x - 60 && px < r.x + r.w + 60 && py > r.y - 60 && py < r.y + r.h + 60);
+              if (!inChip && Math.abs(x[i]! - y[i]!) >= 6) n++;
+            }
+            oracle = Math.max(oracle, n / x.length);
+          }
+        }
+        expect(judged, 'frames judged with the command chip drawn').toBeGreaterThan(40);
+        expect(sweepFrames).toBeGreaterThanOrEqual(34);
+        expect(oracle, 'max fraction of the frame (outside the chips) the sweep visibly changes').toBeGreaterThan(0.02);
+        expect(failures, `worst p99 |Δluma| ${JSON.stringify(worst)}`).toEqual([]);
+        expect([...A.errors, ...B.errors]).toEqual([]);
+      } finally {
+        await A.page.close(); await B.page.close();
+      }
+    }, 300_000);
+  }
+
+  // ── PO R5 condition (a): the wordmark's bloom pulled back a notch at the hold, the impact kept punchy ──
+  // Judged on the R5 row-6 shape (a 9-char wordmark at the full 260 px: large type is where bloom blows out) at the
+  // contact-sheet hold (render/sheet.mjs: 0.6 of the solo window — the frame the PO grades), and on the slam
+  // impact frame. Ink = luma > 200 inside the pixel-found title rect; `clipped` = ink pixels with R, G and B all
+  // ≥ 254 (a blown-out white core: no metal gradient left); `halo` = median luma of the non-ink ring 3–8 px
+  // around the ink (bloom + glow spilling past the glyph edge); `edge` = median ink luma − halo.
+  type InkStats = { ink: number; clipped: number; core: number; halo: number; edge: number };
+  const inkStats = (page: any, t: number, r: Box): Promise<InkStats> =>
+    page.evaluate((t: number, r: Box) => {
+      const S = (window as any).SHOWREEL;
+      S.renderAt(t, 1);
+      const stage = document.getElementById('stage') as HTMLCanvasElement;
+      const P = 10, x0 = Math.max(0, r.x - P), y0 = Math.max(0, r.y - P);
+      const w = Math.min(stage.width, r.x + r.w + P) - x0, h = Math.min(stage.height, r.y + r.h + P) - y0;
+      const d = stage.getContext('2d')!.getImageData(x0, y0, w, h).data;
+      const L = new Float32Array(w * h), ink = new Uint8Array(w * h);
+      for (let i = 0; i < w * h; i++) { L[i] = 0.2126 * d[4 * i]! + 0.7152 * d[4 * i + 1]! + 0.0722 * d[4 * i + 2]!; ink[i] = L[i]! > 200 ? 1 : 0; }
+      const dilate = (m: Uint8Array, k: number) => {
+        const a = new Uint8Array(w * h), b = new Uint8Array(w * h);
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { let v = 0; for (let j = Math.max(0, x - k); j <= Math.min(w - 1, x + k) && !v; j++) v = m[y * w + j]!; a[y * w + x] = v; }
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { let v = 0; for (let j = Math.max(0, y - k); j <= Math.min(h - 1, y + k) && !v; j++) v = a[j * w + x]!; b[y * w + x] = v; }
+        return b;
+      };
+      const d2 = dilate(ink, 2), d8 = dilate(ink, 8);
+      const inkL: number[] = [], ring: number[] = [];
+      let clipped = 0;
+      for (let i = 0; i < w * h; i++) {
+        if (ink[i]) { inkL.push(L[i]!); if (d[4 * i]! >= 254 && d[4 * i + 1]! >= 254 && d[4 * i + 2]! >= 254) clipped++; }
+        else if (d8[i] && !d2[i]) ring.push(L[i]!);
+      }
+      const med = (a: number[]) => a.sort((p, q) => p - q)[Math.floor(a.length / 2)]!;
+      const core = med(inkL), halo = med(ring);
+      return { ink: inkL.length, clipped: clipped / inkL.length, core, halo, edge: core - halo };
+    }, t, r);
+
+  it('PO R5 (a), R5 row-6 shape: at the hold the wordmark core is not blown out and its edges are crisper; the slam impact stays hot', async () => {
+    const f = SHORT;
+    if (!f.timeline) throw new Error(`${f.tagline}: storyboard did not compile — ${JSON.stringify(f.errors)}`);
+    const { page, errors } = await open(f);
+    try {
+      const fit = await page.evaluate(() => (window as any).SHOWREEL.fit());
+      expect(fit[LOCK].name, 'the short wordmark is at the full 260 px display size').toBe(260);
+      const hold = sheetTimes(f.timeline).find((s: any) => s.beatId === LOCK && s.still === 'hold')!.t as number;
+      const impact = frameAt(f.cue('slam') + 0.05);
+      const rect = await titleRect(page, frameAt(f.cue('sweep') - 0.6), f.tagline, fit[LOCK].name);
+      expect(rect.w, 'title probe width').toBeGreaterThan(700);
+      const H = await inkStats(page, hold, rect), I = await inkStats(page, impact, rect);
+      console.log('[lockup-cta R5a]', JSON.stringify({ hold: { t: hold, sweep: f.cue('sweep'), ...H }, impact: { t: impact, ...I }, rect }));
+      expect(H.ink, 'ink pixels judged at the hold').toBeGreaterThan(20_000);
+      expect(H.clipped, 'hold: share of wordmark ink blown to pure white').toBeLessThan(CLIP_MAX);
+      expect(H.edge, 'hold: glyph core vs the ring just outside the glyph edge').toBeGreaterThan(EDGE_MIN);
+      // the impact is still the hot frame: its halo is well above the calmed hold halo (the slam keeps its punch)
+      expect(I.halo, 'impact halo').toBeGreaterThan(IMPACT_HALO_MIN);
+      expect(I.halo - H.halo, 'impact halo above the hold halo').toBeGreaterThan(25);
+      expect(errors).toEqual([]);
+    } finally {
+      await page.close();
+    }
+  }, 180_000);
 });
 
 // Registered only when E2E is off: a full E2E run must report 0 skipped (Rule 12).

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync, mkdtempSync, writeFileSync, rmSync, existsSync, mkdirSync, copyFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -28,6 +29,8 @@ import kineticText from '../../templates/showreel/.claude/showreel/archetypes/ki
 //   (d) AC3 determinism of the punch (glow sprites are build-once cache canvases; nothing carries state).
 //   (e) palette carry + text API: no colour literals, no direct fillText (Rule 13: every string via api.text).
 //   (f) the S=6 rate stays under a loose ceiling.
+//   (g) PO R5 (a): the punch hold is not blown out (clipped-white share + halo bounded) while the impact frame
+//       stays the white-hot, brighter moment.
 // Plus a dev artefact (SHOWREEL_SHEETS=1 only): before/after sheet (spike | old | new) + rate, in .showreel-dev/sheets.
 
 const E2E = process.env.SHOWREEL_E2E === '1';
@@ -72,7 +75,8 @@ const FACTS = {
   ],
 };
 const INPUTS = { archetypes: ARCH, facts: FACTS, phrases: PHRASES };
-const LONGEST_LEAD = [...PHRASES.phrases.filter((p: any) => p.tags.includes('lead'))].sort((a: any, b: any) => b.text.length - a.text.length)[0].id;
+// longest lead that may head feature lines (ruling (f) E_PHRASE_KIND: 'Under the hood' heads stack.item only)
+const LONGEST_LEAD = [...PHRASES.phrases.filter((p: any) => p.tags.includes('lead') && p.kinds.includes('feature'))].sort((a: any, b: any) => b.text.length - a.text.length)[0].id;
 
 const open = (w: number) => ({ id: 'b1', archetype: 'cold-open-command', variant: 'terminal', weight: w, bindings: { command: 'f.command.1' }, phrases: {}, transitionOut: 'zoom-through' });
 const lockup = (id: string, w: number) => ({ id, archetype: 'lockup-cta', variant: 'center', weight: w, bindings: { name: 'f.app.name.1', tagline: 'f.app.tagline.1' }, phrases: {}, transitionOut: 'cut' });
@@ -81,7 +85,7 @@ const R5 = {
   version: 1, durationS: 15, seed: 7, palette: 'violet',
   beats: [
     open(1),
-    { id: 'b2', archetype: 'kinetic-text', variant: 'punch', weight: 1.25, bindings: { lines: ['f.app.tagline.1', 'f.app.tagline.2'] }, phrases: { lead: 'p.lead.2' }, transitionOut: 'cut' },
+    { id: 'b2', archetype: 'kinetic-text', variant: 'punch', weight: 1.25, bindings: { lines: ['f.app.tagline.1', 'f.app.tagline.2'] }, phrases: { lead: 'p.lead.3' }, transitionOut: 'cut' },
     { id: 'b3', archetype: 'kinetic-text', variant: 'chapter', weight: 1, bindings: { lines: 'f.feature.1' }, phrases: { lead: 'p.chapter.3' }, transitionOut: 'cut' },
     lockup('b4', 1.25),
   ],
@@ -97,7 +101,7 @@ const MAXF = {
     punch('b2', ['f.feature.2', 'f.feature.3', 'f.feature.4'], LONGEST_LEAD),
     punch('b3', ['f.feature.5', 'f.feature.6', 'f.feature.7']),
     punch('b4', ['f.feature.8']),
-    punch('b5', ['f.app.tagline.1', 'f.app.tagline.2'], 'p.lead.2'),
+    punch('b5', ['f.app.tagline.1', 'f.app.tagline.2'], 'p.lead.3'),
     punch('b6', ['f.app.tagline.2']),
     lockup('b7', 2),
   ],
@@ -255,7 +259,7 @@ describe.skipIf(!E2E)('kinetic-text punch + chapter title moments in the browser
     const page = await openPage(await serve(r5));
     const t = still(r5, 'b2', 'hold');
     const m = await manifestAt(page, t);
-    const hero = box(m, 'f.app.tagline.2'), lead = box(m, 'p.lead.2');
+    const hero = box(m, 'f.app.tagline.2'), lead = box(m, 'p.lead.3');
     expect(hero, 'hero line on screen at hold').toBeTruthy();
     expect(lead, 'lead on screen at hold').toBeTruthy();
     expect(box(m, 'f.app.tagline.1'), 'one line owns the frame').toBeNull();
@@ -269,7 +273,7 @@ describe.skipIf(!E2E)('kinetic-text punch + chapter title moments in the browser
     expect(hero!.h).toBeGreaterThanOrEqual(2 * lead!.h);
     expect(Math.abs(lead!.x + lead!.w / 2 - (hero!.x + hero!.w / 2))).toBeLessThan(40);
     // spaced accent style: tracking ≥ 0.25 em (the old dim lead was ~0.12 em)
-    const tr = await trackEm(page, 'Under the hood', 700, lead!);
+    const tr = await trackEm(page, 'The essentials', 700, lead!);
     expect(tr, `lead tracking ${tr.toFixed(3)} em`).toBeGreaterThanOrEqual(0.25);
     await page.close();
   }, 180_000);
@@ -324,6 +328,59 @@ describe.skipIf(!E2E)('kinetic-text punch + chapter title moments in the browser
     }
   }, 300_000);
 
+  /** light of the stage in a bbox (after the engine's post-FX): share of clipped-white pixels (every channel
+   *  ≥ 250 — a blown-out core), mean luma inside, and mean luma of a 60 px ring around it (the halo) */
+  const light = (page: any, t: number, S: number, b: { x: number; y: number; w: number; h: number }) =>
+    page.evaluate((t: number, S: number, x: number, y: number, w: number, h: number) => {
+      (window as any).SHOWREEL.renderAt(t, S);
+      const c = document.getElementById('stage') as HTMLCanvasElement;
+      const R = 60, x0 = Math.max(0, Math.floor(x - R)), y0 = Math.max(0, Math.floor(y - R));
+      const x1 = Math.min(c.width, Math.ceil(x + w + R)), y1 = Math.min(c.height, Math.ceil(y + h + R));
+      const d = c.getContext('2d')!.getImageData(x0, y0, x1 - x0, y1 - y0).data;
+      let n = 0, clip = 0, luma = 0, rn = 0, ring = 0;
+      for (let py = y0; py < y1; py++) for (let px = x0; px < x1; px++) {
+        const i = ((py - y0) * (x1 - x0) + (px - x0)) * 4;
+        const r = d[i]!, g = d[i + 1]!, bl = d[i + 2]!, l = 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+        if (px >= x && px < x + w && py >= y && py < y + h) { n++; luma += l; if (Math.min(r, g, bl) >= 250) clip++; } else { rn++; ring += l; }
+      }
+      return { clipped: clip / n, luma: luma / n, ring: ring / rn };
+    }, t, S, b.x, b.y, b.w, b.h);
+
+  it('(g) PO R5 (a): the punch hold is not blown out — few clipped-white pixels at hold, the impact frame stays brighter', async () => {
+    // PO R5 condition (a) (row 7): the punch hero's bloom was "a bit hot" at hold — white cores clipped and a
+    // soft halo around the edges, so the line read as glare rather than type. The hold frame is the reference
+    // (contact-sheet hold, 0.6 of the solo window); the slam must keep its punch, so the same hero's landing
+    // frame (and the beat's first impact, line cue + 2 frames) must still be clearly brighter than the hold.
+    const page = await openPage(await serve(r5));
+    const hold = still(r5, 'b2', 'hold');
+    const impact = r5.timeline.hits.find((h: any) => h.beatId === 'b2' && h.cue === 'line').t + 2 * FRAME;
+    const hb = box(await manifestAt(page, hold), 'f.app.tagline.2')!;
+    const ib = box(await manifestAt(page, impact), 'f.app.tagline.1')!;
+    expect(hb, 'hero at hold').toBeTruthy();
+    expect(ib, 'hero at impact').toBeTruthy();
+    const h = await light(page, hold, 6, hb), i = await light(page, impact, 6, ib);
+    // same hero, like for like: tagline.2's own landing frame — walk back from the hold to its first drawn frame,
+    // then forward to the first frame whose bbox is at least the hold width (every word revealed, heat0 still high)
+    let n = Math.round(hold * FPS);
+    while (box(await manifestAt(page, (n - 1) / FPS), 'f.app.tagline.2')) n--;
+    let lb = box(await manifestAt(page, n / FPS), 'f.app.tagline.2')!;
+    while (lb.w < hb.w - 1) { n++; lb = box(await manifestAt(page, n / FPS), 'f.app.tagline.2')!; }
+    const land = n / FPS, l = await light(page, land, 6, lb);
+    console.log(JSON.stringify({ kineticPunchLight: { hold: h, impact: i, landing2: { t: land, ...l } } }));
+    // measured S=6, violet: HEAD 2662418 (the hot hold) clipped 0.139 / halo ring 72.2 — both fail the bounds
+    // below (asserted in the PO R5 (a) sheet test, which serves the HEAD module); after the pull-back
+    // 0.062 / 63.0. Slam passes unchanged on purpose: tagline.2 landing 0.305 / 127.9, tagline.1 impact 0.095 / 84.3.
+    expect(h.clipped, `clipped-white share at hold ${h.clipped.toFixed(4)}`).toBeLessThan(0.08);
+    expect(h.ring, `halo luma around the hero at hold ${h.ring.toFixed(1)}`).toBeLessThan(68);
+    // not dulled, like for like: the same hero's landing frame is the white-hot moment and throws far more light
+    expect(l.clipped, `landing clipped ${l.clipped.toFixed(4)} vs hold ${h.clipped.toFixed(4)}`).toBeGreaterThan(3 * h.clipped);
+    expect(l.ring, `landing halo ${l.ring.toFixed(1)} vs hold ${h.ring.toFixed(1)}`).toBeGreaterThan(h.ring + 30);
+    // and the beat's first slam (another line, partly revealed — a proxy) still out-glows the hold
+    expect(i.clipped, `impact clipped ${i.clipped.toFixed(4)} vs hold ${h.clipped.toFixed(4)}`).toBeGreaterThan(h.clipped);
+    expect(i.ring, `impact halo ${i.ring.toFixed(1)} vs hold ${h.ring.toFixed(1)}`).toBeGreaterThan(h.ring + 10);
+    await page.close();
+  }, 180_000);
+
   it('(f) rate: the punch hold renders at S=6 within a loose budget (< 120 ms/frame render-only)', async () => {
     const newPage = await openPage(await serve(r5));
     // 60 frames around the punch hold at S=6, render-only and with a JPEG q0.97 encode (what `render` pays)
@@ -351,6 +408,69 @@ describe.skipIf(!E2E)('kinetic-text punch + chapter title moments in the browser
     }
     await newPage.close();
   }, 180_000);
+
+  // dev artefact (SHOWREEL_SHEETS=1 only): PO R5 (a) before/after — left = this module at git 2662418 (served in
+  // place of /archetypes/kinetic-text.mjs via request interception), right = the working tree; R5 punch at the
+  // contact-sheet hold + enter + impact (line cue + 2 frames), and the chapter hold (must not regress), S=6
+  if (SHEETS) it('PO R5 (a) sheet: punch hold / enter / impact + chapter hold, before 2662418 | after (S=6)', async () => {
+    const REF = '2662418';
+    const BEFORE = execFileSync('git', ['show', `${REF}:templates/showreel/.claude/showreel/archetypes/kinetic-text.mjs`], { cwd: REPO, encoding: 'utf8' });
+    const url = await serve(r5);
+    const before = await browser.newPage();
+    await before.setRequestInterception(true);
+    before.on('request', (r: any) => (new URL(r.url()).pathname === '/archetypes/kinetic-text.mjs'
+      ? r.respond({ status: 200, contentType: 'text/javascript', body: BEFORE }) : r.continue()));
+    await before.goto(`${url}/engine/page.html`, { waitUntil: 'load' });
+    await before.waitForFunction('window.SHOWREEL && window.SHOWREEL.ready');
+    await before.evaluate(() => (window as any).SHOWREEL.ready);
+    const after = await openPage(url);
+    // the (g) bounds can fail: the HEAD module's hold breaks them on this same fixture
+    const holdT = still(r5, 'b2', 'hold');
+    const bh = await light(before, holdT, 6, box(await manifestAt(before, holdT), 'f.app.tagline.2')!);
+    console.log(JSON.stringify({ kineticPunchLightBefore: { ref: REF, hold: bh } }));
+    expect(bh.clipped >= 0.08 && bh.ring >= 68, `HEAD hold ${JSON.stringify(bh)}`).toBe(true);
+    // crop = null → whole frame (scaled to the cell); else a 1:1 crop [x, y] of 960×540 stage pixels
+    const shot = (p: any, t: number, crop: [number, number] | null = null): Promise<string> => p.evaluate((t: number, crop: [number, number] | null) => {
+      (window as any).SHOWREEL.renderAt(t, 6);
+      const stage = document.getElementById('stage') as HTMLCanvasElement;
+      if (!crop) return stage.toDataURL('image/jpeg', 0.92);
+      const c = document.createElement('canvas'); c.width = 960; c.height = 540;
+      c.getContext('2d')!.drawImage(stage, crop[0], crop[1], 960, 540, 0, 0, 960, 540);
+      return c.toDataURL('image/jpeg', 0.92);
+    }, t, crop);
+    const impact = r5.timeline.hits.find((h: any) => h.beatId === 'b2' && h.cue === 'line').t + 2 * FRAME;
+    const rows: [string, number, [number, number] | null][] = [
+      ['b2 punch hold (sheet 0.6)', still(r5, 'b2', 'hold'), null], ['b2 punch hold 1:1 crop', still(r5, 'b2', 'hold'), [480, 270]],
+      ['b2 punch enter (sheet 0.2)', still(r5, 'b2', 'enter'), null], ['b2 punch impact line+2F', impact, null],
+      ['b3 chapter hold (sheet 0.6)', still(r5, 'b3', 'hold'), null],
+    ];
+    const cells: { label: string; url: string }[] = [];
+    for (const [label, t, crop] of rows) {
+      cells.push({ label: `BEFORE ${REF} ${label} t=${t.toFixed(3)}`, url: await shot(before, t, crop) });
+      cells.push({ label: `AFTER ${label} t=${t.toFixed(3)}`, url: await shot(after, t, crop) });
+    }
+    const sheet = await browser.newPage();
+    await sheet.setContent('<html><body style="margin:0;background:black"></body></html>');
+    const png: string = await sheet.evaluate(async (cells: { label: string; url: string }[]) => {
+      const cw = 960, ch = 540, lab = 30, cols = 2;
+      const cv = document.createElement('canvas');
+      cv.width = cw * cols; cv.height = (ch + lab) * Math.ceil(cells.length / cols);
+      const g = cv.getContext('2d')!;
+      g.fillStyle = 'black'; g.fillRect(0, 0, cv.width, cv.height);
+      for (let i = 0; i < cells.length; i++) {
+        const img = new Image(); img.src = cells[i]!.url; await img.decode();
+        const x = (i % cols) * cw, y = Math.floor(i / cols) * (ch + lab);
+        g.fillStyle = 'white'; g.font = '18px sans-serif'; g.fillText(cells[i]!.label, x + 10, y + 21);
+        g.drawImage(img, x, y + lab, cw, ch);
+      }
+      return cv.toDataURL('image/png');
+    }, cells);
+    const out = path.join(REPO, '.showreel-dev', 'sheets', 'kinetic-text-r5c.png');
+    mkdirSync(path.dirname(out), { recursive: true });
+    writeFileSync(out, Buffer.from(png.split(',')[1]!, 'base64'));
+    expect(existsSync(out)).toBe(true);
+    for (const p of [before, after, sheet]) await p.close();
+  }, 300_000);
 
   // dev artefact, registered only with SHOWREEL_SHEETS=1: a plain E2E run has no file side effects and does not
   // depend on spikes/showreel-v0 (and, being unregistered rather than skipped, still reports 0 skipped)

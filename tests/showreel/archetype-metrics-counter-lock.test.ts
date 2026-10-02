@@ -18,6 +18,9 @@ import { checkManifest } from '../../templates/showreel/.claude/showreel/lib/tru
 //                every lock flourish must stay inside ITS OWN card. Probed per card in isolation (no engine
 //                post-FX): the pixels the lock changes (lock live vs. deferred) all lie inside that card.
 //   pop          containment must not kill the lock: the lock visibly changes a lot of pixels inside the card.
+//   no debris    PO R5 (d): spark debris inside the locked digits made the values hard to read at the hold: the
+//                spark layer must add ~0 px inside every numeral/unit box from the lock on, yet still burst;
+//                and in the composited frame (engine post-FX on) sparks must not bleed light into those boxes.
 //   weight       the spike's single counter reads big and confident; a row of 3 short counts must not shrink to
 //                a small number floating in a large card (cap height ≥ 40 % of the card height), and the grid's
 //                short cards must be filled to their height fit (cap height ≥ 52 % of the 340 px card).
@@ -175,6 +178,154 @@ describe.skipIf(!E2E)('metrics-counter-lock in the browser (SHOWREEL_E2E=1)', ()
       await browser.close();
     }
   }, 240_000);
+
+  // PO R5 (d): spark debris sat inside the locked digits at the hold still, making the values harder to read.
+  // Probe the SPARK LAYER alone: redraw one card on a bare canvas (no engine post-FX) with api.sparks live vs.
+  // a no-op, and diff. Each numeral (and unit) box is the real drawn box — api.counter/api.unit wrapped to
+  // measure what they just drew under the live transform (lock punch included). From the impact frame through
+  // the whole decay, the sparks change ~0 px inside those boxes — and they still fly (the lock keeps its debris).
+  it('PO R5 (d): no spark debris inside the counter numerals — the spark layer adds ~0 px inside every numeral/unit box from the lock on, yet still bursts around them', async () => {
+    const f = film();
+    const browser = await launch();
+    try {
+      const page = await openPage(browser, await serve(f));
+      // capture each beat's draw params: the fixture's wrapper calls the module's draw by property lookup.
+      // A string, not a function: vitest rewrites import() inside test-file functions (would break in the page).
+      await page.evaluate(`(async () => {
+        const m = (await import('/archetypes/metrics-counter-lock.mjs')).default;
+        window.__mclDraw = m.draw; window.__mcl = {};
+        m.draw = function (ctx, lt, p, rb, cues) { window.__mcl[p.api.beatId] = { p, rb, cues }; return window.__mclDraw.call(this, ctx, lt, p, rb, cues); };
+      })()`);
+      for (const bt of [f.b2, f.b3]) {
+        const id = bt.b.id;
+        await page.evaluate((t: number) => (window as any).SHOWREEL.renderAt(t, 1), bt.hold);
+        const n = f.resolved.beats[id].slots.counters.items.length as number;
+        // impact (+1 frame), early decay, the 30/60 s films' hold offsets (0.1 / 0.183 s), late decay, this film's hold
+        const dls = [FRAME, 0.05, 0.1, 0.183, 0.3, 0.45];
+        if (bt.hold > bt.lock) dls.push(bt.hold - bt.lock);
+        for (let card = 0; card < n; card++) {
+          let burst = 0;
+          for (const dl of dls) {
+            const lt = bt.lock - bt.b.t0 + dl;
+            const r = await page.evaluate((id: string, lt: number, card: number) => {
+              const w = window as any;
+              const { p, rb, cues } = w.__mcl[id];
+              const cd = p.layout.cards[card];
+              const L = { ...p.layout, label: null, cards: [cd] };
+              let boxes: number[][] = [];
+              const boxOf = (ctx: any, m: { width: number; ascent: number; descent: number }, x: number, y: number) => {
+                const T = ctx.getTransform(), l = x - m.width / 2, r = x + m.width / 2, t = y - m.ascent, b = y + m.descent;
+                const xs = [T.a * l + T.c * t + T.e, T.a * r + T.c * b + T.e], ys = [T.b * l + T.d * t + T.f, T.b * r + T.d * b + T.f];
+                boxes.push([Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]);
+              };
+              const shot = (sparksOn: boolean) => {
+                const c = document.createElement('canvas'); c.width = 1920; c.height = 1080;
+                const g = c.getContext('2d')!;
+                boxes = [];
+                const api = {
+                  ...p.api,
+                  sparks: sparksOn ? p.api.sparks : () => {},
+                  counter: (ctx: any, item: any, prog: number, x: number, y: number, o: any) => {
+                    const out = p.api.counter(ctx, item, prog, x, y, o);
+                    if (prog >= 1 && ctx.globalAlpha * (o.alpha ?? 1) > 0) boxOf(ctx, p.api.measure(ctx, item, { size: o.size, weight: o.weight }), x, y);
+                    return out;
+                  },
+                  unit: (ctx: any, item: any, x: number, y: number, o: any) => {
+                    const out = p.api.unit(ctx, item, x, y, o);
+                    boxOf(ctx, p.api.measure(ctx, item, { what: 'unit', size: o.size, weight: o.weight, track: o.track }), x, y);
+                    return out;
+                  },
+                };
+                w.__mclDraw.call(null, g, lt, { ...p, layout: L, api }, rb, cues);
+                return g.getImageData(0, 0, 1920, 1080).data;
+              };
+              const on = shot(true), off = shot(false);
+              const bx = boxes.map(([x0, y0, x1, y1]) => [Math.floor(x0), Math.floor(y0), Math.ceil(x1), Math.ceil(y1)]);
+              let inside = 0, outside = 0;
+              for (let y = 0; y < 1080; y++) for (let x = 0; x < 1920; x++) {
+                const i = (y * 1920 + x) * 4;
+                const d = Math.max(Math.abs(on[i]! - off[i]!), Math.abs(on[i + 1]! - off[i + 1]!), Math.abs(on[i + 2]! - off[i + 2]!), Math.abs(on[i + 3]! - off[i + 3]!));
+                if (d <= 8) continue;
+                if (bx.some(([x0, y0, x1, y1]) => x >= x0! && x < x1! && y >= y0! && y < y1!)) inside++;
+                else outside++;
+              }
+              return { inside, outside, boxes: bx.length };
+            }, id, lt, card);
+            expect(r.boxes, `${id} card ${card} dl=${dl.toFixed(3)}: numeral boxes measured`).toBeGreaterThanOrEqual(1);
+            expect(r.inside, `${id} card ${card} dl=${dl.toFixed(3)}: ${r.inside} px of spark debris inside the numeral/unit boxes`).toBe(0);
+            if (dl <= 0.1) burst = Math.max(burst, r.outside);
+          }
+          // the lock still throws debris around the value: a real burst right after the impact
+          expect(burst, `${id} card ${card}: spark burst area around the numerals`).toBeGreaterThan(150);
+        }
+      }
+    } finally {
+      await browser.close();
+    }
+  }, 240_000);
+
+  // PO R5 (d), final frame: the probe above checks the raw spark layer; engine post-FX (bloom, glow, grain)
+  // could still bleed spark light into the digits of the COMPOSITED frame. Render the full stage at the hold
+  // and the 30/60 s films' hold offsets with api.sparks live vs. a no-op (everything else identical, grain is
+  // frame-seeded) and require the numeral/unit boxes (manifest bboxes) to stay visually unchanged.
+  it('PO R5 (d) composited: with engine post-FX, sparks barely change the numeral/unit boxes of the final frame after the lock', async () => {
+    const f = film();
+    const browser = await launch();
+    try {
+      const page = await openPage(browser, await serve(f));
+      // string, not a function: vitest rewrites import() inside test-file functions (see the probe above)
+      await page.evaluate(`(async () => {
+        const m = (await import('/archetypes/metrics-counter-lock.mjs')).default;
+        const draw = m.draw; window.__mclNoSparks = false;
+        m.draw = function (ctx, lt, p, rb, cues) {
+          const q = window.__mclNoSparks ? { ...p, api: { ...p.api, sparks: () => {} } } : p;
+          return draw.call(this, ctx, lt, q, rb, cues);
+        };
+      })()`);
+      for (const bt of [f.b2, f.b3]) {
+        const id = bt.b.id;
+        const ids = new Set<string>(f.resolved.beats[id].slots.counters.items.map((it: any) => it.id));
+        const dls = [0.1, 0.183];
+        if (bt.hold > bt.lock) dls.push(bt.hold - bt.lock);
+        for (const dl of dls) {
+          const r = await page.evaluate((t: number, ids: string[]) => {
+            const w = window as any;
+            const stage = document.getElementById('stage') as HTMLCanvasElement;
+            const g = stage.getContext('2d')!;
+            const k = stage.width / 1920;
+            const shot = (noSparks: boolean) => {
+              w.__mclNoSparks = noSparks;
+              w.SHOWREEL.renderAt(t, 1);
+              const boxes = w.SHOWREEL.manifest().filter((m: any) => m.bbox && ids.some((id) => m.source === `counter:${id}` || m.source === `unit:${id}`)).map((m: any) => m.bbox);
+              return { px: g.getImageData(0, 0, stage.width, stage.height).data, boxes };
+            };
+            const on = shot(false), off = shot(true);
+            w.__mclNoSparks = false;
+            const lum = (d: Uint8ClampedArray, i: number) => 0.2126 * d[i]! + 0.7152 * d[i + 1]! + 0.0722 * d[i + 2]!;
+            let sum = 0, n = 0, max = 0;
+            for (const b of off.boxes) {
+              const x0 = Math.max(0, Math.floor(b.x * k)), y0 = Math.max(0, Math.floor(b.y * k));
+              const x1 = Math.min(stage.width, Math.ceil((b.x + b.w) * k)), y1 = Math.min(stage.height, Math.ceil((b.y + b.h) * k));
+              for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+                const i = (y * stage.width + x) * 4, d = Math.abs(lum(on.px, i) - lum(off.px, i));
+                sum += d; n++; max = Math.max(max, d);
+              }
+            }
+            let changed = 0; // whole frame: proves the toggle reaches the composited sparks (test not vacuous)
+            for (let i = 0; i < on.px.length; i += 4) if (Math.abs(lum(on.px, i) - lum(off.px, i)) > 8) changed++;
+            return { boxes: off.boxes.length, mean: n ? sum / n : 0, max, changed };
+          }, bt.lock + dl, [...ids]);
+          expect(r.boxes, `${id} dl=${dl.toFixed(3)}: numeral/unit boxes in the manifest`).toBeGreaterThanOrEqual(ids.size);
+          // a post-FX halo may lift a few box pixels by a level or two; a streak through a digit lifts it by 50+
+          expect(r.mean, `${id} dl=${dl.toFixed(3)}: mean luminance change inside the numeral/unit boxes (max ${r.max.toFixed(1)})`).toBeLessThan(0.5);
+          expect(r.max, `${id} dl=${dl.toFixed(3)}: peak luminance change inside the numeral/unit boxes`).toBeLessThan(24);
+          if (dl <= 0.1) expect(r.changed, `${id} dl=${dl.toFixed(3)}: sparks visible in the composited frame`).toBeGreaterThan(150);
+        }
+      }
+    } finally {
+      await browser.close();
+    }
+  }, 180_000);
 
   it('weight: short counts read big — cap height ≥ 40 % of the card (row of 3), ≥ 52 % of the 340 px grid card (grid of 4)', async () => {
     const f = film();

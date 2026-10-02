@@ -33,6 +33,10 @@ const CHROMA = 9;           // chromatic split: ± px of the primary / secondary
 const CHROMA_SLACK = 3;     // antialias slack beyond the split in the cap
 // safe area after the engine camera: api.cam (core.mjs CAMERA) = the worst push about the frame centre and shake
 const SAFE = 48;
+const HOLD_BLOOM = 0.12;    // punch bloom sprite alpha once the slam has decayed (PO R5 (a): 0.4 blew the hold out)
+const PUNCH_SILVER = 0.45; // punch face metal lowered toward neutral silver P.dim (see metal; the brand tint is the
+                            // chapter's); the white-hot overlay pass is untouched, but the slam bloom
+                            // coefficient was raised (see the bloom sprite alpha) to keep impact > hold
 const GP = 100;             // pad around the punch glow/face sprites (≥ 3σ of the bloom blur: no visible sprite edge)
 const CHAPTER_W = 1500;     // title + line width budget (≥ 162 px clear of each edge after the camera push)
 const CHAPTER_MAX = 150;
@@ -50,11 +54,16 @@ function words(str) {
   return out;
 }
 
-/** white metal: P.text at the cap line cooling to a faint primary, then secondary tint at the baseline */
-function metal(ctx, api, top, base) {
+/** white metal: P.text at the cap line cooling to a faint primary, then secondary tint at the baseline.
+ *  silver > 0 lowers every stop toward the neutral P.dim without changing the brand tint (punch: the engine bloom
+ *  adds ~1.5× a large white face, so the full-white metal clipped at hold — PO R5 (a)); chapter keeps silver = 0 */
+function metal(ctx, api, top, base, silver = 0) {
   const { palette: P, mix } = api;
   const g = ctx.createLinearGradient(0, top, 0, base);
-  g.addColorStop(0, P.text); g.addColorStop(0.55, mix(P.text, P.primary, 0.08)); g.addColorStop(1, mix(P.text, P.secondary, 0.2));
+  const s = (c) => (silver ? mix(c, P.dim, silver) : c);
+  g.addColorStop(0, s(P.text));
+  g.addColorStop(0.55, s(mix(P.text, P.primary, 0.08)));
+  g.addColorStop(1, s(mix(P.text, P.secondary, 0.2)));
   return g;
 }
 
@@ -77,7 +86,7 @@ function lineSprites(api, item, o, width, asc, desc) {
   h.filter = `blur(${Math.round(o.size * 0.06)}px)`; h.globalAlpha = 0.35; api.text(h, item, GP, baseLocal, { ...o, fill: edge(h) });
   h.filter = 'none'; h.globalAlpha = 1;
   const face = api.makeCanvas('cache', sw, sh), g = face.ctx;
-  api.text(g, item, GP, baseLocal, { ...o, fill: metal(g, api, baseLocal - asc, baseLocal) });
+  api.text(g, item, GP, baseLocal, { ...o, fill: metal(g, api, baseLocal - asc, baseLocal, PUNCH_SILVER) });
   const inv = api.makeCanvas('cache', sw, sh), iv = inv.ctx;
   iv.fillStyle = edge(iv); iv.fillRect(0, 0, sw, sh);
   iv.globalCompositeOperation = 'destination-out';
@@ -404,7 +413,8 @@ function drawPunch(ctx, lt, p, first, enterAt, streakAt) {
   const hq = ease.outCubic(clamp((lt - first) / 0.5));
   if (hq > 0) {
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
-    const hr = Math.max(340, L.heroW * 0.45), al = (0.13 + 0.10 * pulse) * hq;
+    // PO R5 (a): base 0.13 → 0.09 (cooler hold halo), pulse 0.10 → 0.14 (the slam still flares)
+    const hr = Math.max(340, L.heroW * 0.45), al = (0.09 + 0.14 * pulse) * hq;
     api.glowDot(ctx, cx - L.heroW * 0.25, cy, hr, al, api.hexToRgb(P.primary).join(','));
     api.glowDot(ctx, cx + L.heroW * 0.25, cy, hr, al, api.hexToRgb(P.secondary).join(','));
     ctx.restore();
@@ -476,7 +486,8 @@ function drawPunch(ctx, lt, p, first, enterAt, streakAt) {
       ctx.save();
       ctx.beginPath(); ctx.rect(x0 - GP, spY - (ECHO_MAX + 8), xr - x0 + 2 * GP, pc.sh + ECHO_MAX + 8); ctx.clip();
       ctx.globalCompositeOperation = 'lighter';
-      ctx.globalAlpha = clamp((0.4 + 0.06 * Math.sin(lt * 2.2 + i + j) + 0.5 * heat0 + 0.2 * pulse) * fade, 0, 1);
+      // PO R5 (a): shimmer 0.06 → 0.04 and slam coefficient 0.5 → 0.68 (stronger slam keeps impact > the cooler hold)
+      ctx.globalAlpha = clamp((HOLD_BLOOM + 0.04 * Math.sin(lt * 2.2 + i + j) + 0.68 * heat0 + 0.2 * pulse) * fade, 0, 1);
       ctx.drawImage(pc.glow.canvas, x0 - GP, spY); // bloom, not text: no manifest box (C16 does not judge glow)
       ctx.globalAlpha = 1;
       if (a < 0.18) {
@@ -495,7 +506,7 @@ function drawPunch(ctx, lt, p, first, enterAt, streakAt) {
           const wd = row.words[w], aw = a - w * wordGap, heat = Math.exp(-aw * 9);
           ctx.save();
           ctx.shadowColor = rgba(P.primary, 0.55 + 0.4 * heat); ctx.shadowBlur = 8 + 40 * heat;
-          api.text(ctx, row.item, x0 + wd.x, base, { ...o, slice: [wd.s, wd.e], fill: metal(ctx, api, base - pc.asc, base), alpha: fade * clamp(aw / 0.08) });
+          api.text(ctx, row.item, x0 + wd.x, base, { ...o, slice: [wd.s, wd.e], fill: metal(ctx, api, base - pc.asc, base, PUNCH_SILVER), alpha: fade * clamp(aw / 0.08) });
           if (heat > 0.03) {
             ctx.globalCompositeOperation = 'lighter';
             api.text(ctx, row.item, x0 + wd.x, base, { ...o, slice: [wd.s, wd.e], fill: P.text, alpha: 0.8 * heat * fade });
@@ -504,8 +515,9 @@ function drawPunch(ctx, lt, p, first, enterAt, streakAt) {
         }
       } else {
         ctx.save();
-        ctx.shadowColor = rgba(P.primary, 0.5); ctx.shadowBlur = 10;
-        api.text(ctx, row.item, x0, base, { ...po, fill: metal(ctx, api, base - pc.asc, base), alpha: fade });
+        // PO R5 (a): settled-face halo 0.5/blur 10 → 0.35/blur 6 (softer haloed edges at the hold)
+        ctx.shadowColor = rgba(P.primary, 0.35); ctx.shadowBlur = 6;
+        api.text(ctx, row.item, x0, base, { ...po, fill: metal(ctx, api, base - pc.asc, base, PUNCH_SILVER), alpha: fade });
         ctx.restore();
       }
       // inner brand edge (face sprite) fades in over the landed words, with a landing flash

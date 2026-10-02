@@ -11,6 +11,7 @@ import { resolve } from '../../templates/showreel/.claude/showreel/lib/truth/res
 import { compileTimeline } from '../../templates/showreel/.claude/showreel/lib/compile/timeline.mjs';
 import { offFrame } from '../../templates/showreel/.claude/showreel/lib/truth/safearea.mjs';
 import { checkManifest } from '../../templates/showreel/.claude/showreel/lib/truth/manifest.mjs';
+import { compatiblePhrases } from './helpers/storyboard';
 
 // v1.16 showreel M2 Task 7 — the N-matrix (review focus 1, global constraint "No clipping").
 // EVERY archetype × EVERY variant × {min, typical, max} item count, each item a near-maxChars text
@@ -40,7 +41,7 @@ const COUNTS = ['min', 'typical', 'max'] as const;
 type Count = (typeof COUNTS)[number];
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-type Slot = { source: 'fact' | 'phrase'; kinds?: string[]; tags?: string[]; min: number; max: number; maxChars?: number };
+type Slot = { source: 'fact' | 'phrase'; kinds?: string[]; tags?: string[]; min: number; max: number; maxChars?: number; sequence?: boolean };
 type Entry = { text: string; source: string; bbox: { x: number; y: number; w: number; h: number } | null; onScreen: boolean };
 
 const len = (s: string) => [...s].length;
@@ -82,17 +83,29 @@ function factsRegistry() {
   return { facts, add };
 }
 
-/** bind one slot at count c with near-maxChars facts (fact slots) or the LONGEST tagged phrase (phrase slots) */
+/** phrase slot: the LONGEST phrase that is true of every bound fact kind and allowed in the variant (ruling f,
+ *  E_PHRASE_KIND). None compatible → an optional slot stays empty; a required one fails loudly here. */
+function bindPhrase(s: Slot, c: Count, kinds: string[], variant: string, where: string): string | null {
+  if (nOf(s, c) === 0) return null;
+  const pool = compatiblePhrases(PHRASES.phrases, s.tags!, kinds, variant);
+  if (!pool.length) {
+    if ((s.min ?? 0) === 0) return null;
+    throw new Error(`${where}: no phrase with tags ${s.tags} is true of kinds ${kinds} in variant ${variant}`);
+  }
+  return [...pool].sort((a: any, b: any) => len(b.text) - len(a.text))[0]!.id;
+}
+
+let stepLists = 0;
+/** fact slot at count c: near-maxChars facts. A sequential slot (ruling f) gets one README ordered list:
+ *  same collection, ascending sequence — anything else would be an invented order (E_SLOT_ORDER). */
 function bindSlot(reg: ReturnType<typeof factsRegistry>, s: Slot, c: Count): string | string[] | null {
   const n = nOf(s, c);
   if (n === 0) return null;
-  if (s.source === 'phrase') {
-    const pool = PHRASES.phrases.filter((p: any) => p.tags.some((t: string) => s.tags!.includes(t)));
-    return [...pool].sort((a: any, b: any) => len(b.text) - len(a.text))[0].id;
-  }
+  const list = s.sequence ? `readme.steps.${++stepLists}` : null;
   const ids = Array.from({ length: n }, (_, i) => {
     const kind = s.kinds![i % s.kinds!.length]!;
     const max = s.maxChars!;
+    if (list) return reg.add(kind, near(kind, i, max - 1 - (i % 2)), { collection: list, sequence: i + 1 } as Partial<Fact>);
     if (kind === 'count') {
       // max-length integer display, a long code-extracted plural noun as its unit
       const digits = '987654321098765'.slice(0, max - (i % 2));
@@ -106,11 +119,19 @@ function bindSlot(reg: ReturnType<typeof factsRegistry>, s: Slot, c: Count): str
 function beat(reg: ReturnType<typeof factsRegistry>, id: string, archetype: string, variant: string, c: Count, weight: number) {
   const bindings: Record<string, string | string[]> = {};
   const phrases: Record<string, string> = {};
-  for (const [slotId, s] of Object.entries(slotsFor(ARCH.archetypes[archetype], variant) as Record<string, Slot>)) {
+  const slots = Object.entries(slotsFor(ARCH.archetypes[archetype], variant) as Record<string, Slot>);
+  // facts first, then phrases that are true of what was bound (ruling f)
+  for (const [slotId, s] of slots) {
+    if (s.source === 'phrase') continue;
     const ref = bindSlot(reg, s, c);
-    if (ref === null) continue;
-    if (s.source === 'phrase') phrases[slotId] = ref as string;
-    else bindings[slotId] = ref;
+    if (ref !== null) bindings[slotId] = ref;
+  }
+  const byId = new Map(reg.facts.map((f) => [f.id, f.kind]));
+  const kinds = [...new Set(Object.values(bindings).flat().map((fid) => byId.get(fid)!))];
+  for (const [slotId, s] of slots) {
+    if (s.source !== 'phrase') continue;
+    const ref = bindPhrase(s, c, kinds, variant, `${archetype}/${variant} ${id}.${slotId}`);
+    if (ref !== null) phrases[slotId] = ref;
   }
   return { id, archetype, variant, weight, bindings, phrases, transitionOut: 'cut', count: c };
 }

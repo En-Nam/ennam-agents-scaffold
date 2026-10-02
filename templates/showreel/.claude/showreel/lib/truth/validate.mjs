@@ -85,6 +85,8 @@ export function validateStoryboard(sb, inputs) {
 
     // Bound slots: bindings hold fact ids, phrases hold phrase ids.
     const bound = new Map();
+    const okFacts = []; // [{slotId, fact}] that passed their slot checks (E_PHRASE_KIND input)
+    const okPhrases = []; // [{path, phrase}] likewise
     for (const [group, source] of [['bindings', 'fact'], ['phrases', 'phrase']]) {
       for (const [slotId, ref] of Object.entries(beat[group] || {})) {
         const p = `${at}/${group}/${slotId}`;
@@ -102,11 +104,35 @@ export function validateStoryboard(sb, inputs) {
         if (ids.length < slot.min || ids.length > slot.max) {
           err(p, 'E_SLOT_COUNT', `slot "${slotId}" takes ${slot.min}-${slot.max} item(s) (got ${ids.length})`);
         }
+        const slotFacts = [];
         ids.forEach((id, k) => {
           const ip = Array.isArray(ref) ? `${p}/${k}` : p;
-          if (source === 'fact') checkFact(idx, slotId, slot, id, ip, err);
-          else checkPhrase(idx, slotId, slot, id, ip, err);
+          if (source === 'fact') {
+            const fact = checkFact(idx, slotId, slot, id, ip, err);
+            if (fact) slotFacts.push({ fact, path: ip });
+          } else {
+            const phrase = checkPhrase(idx, slotId, slot, id, ip, err);
+            if (phrase) okPhrases.push({ path: ip, phrase });
+          }
         });
+        if (slot.sequence) checkSequence(beat, slotId, slotFacts, err);
+        for (const { fact } of slotFacts) okFacts.push({ slotId, fact });
+      }
+    }
+    // Ruling (f): a phrase heads the facts of its beat, so it must be true of every one of them ("Under the hood"
+    // over product features is a lie) and may be limited to the variants it describes ("Step by step" ≠ cluster).
+    for (const { path: pp, phrase } of okPhrases) {
+      if (!Array.isArray(phrase.kinds) || phrase.kinds.length === 0) {
+        err(pp, 'E_PHRASE_KIND', `phrase "${phrase.id}" has no "kinds" annotation in phrases.json, so it cannot be proven true of any fact`);
+        continue;
+      }
+      if (Array.isArray(phrase.variants) && !phrase.variants.includes(beat.variant)) {
+        err(pp, 'E_PHRASE_KIND', `phrase "${phrase.id}" ("${phrase.text}") fits variants ${phrase.variants.join('/')} only; beat ${beat.id} is "${beat.variant}"`);
+      }
+      for (const { slotId, fact } of okFacts) {
+        if (!phrase.kinds.includes(fact.kind)) {
+          err(pp, 'E_PHRASE_KIND', `phrase "${phrase.id}" ("${phrase.text}") heads ${phrase.kinds.join('/')} facts only; fact "${fact.id}" in slot "${slotId}" of beat ${beat.id} is ${fact.kind} (pick a phrase whose kinds include ${fact.kind}, or drop it)`);
+        }
       }
     }
     // Required slots left unbound.
@@ -160,22 +186,52 @@ export function validateStoryboard(sb, inputs) {
   return errors;
 }
 
+/** → the fact when it exists and fits the slot's kinds (a length error still binds it), else undefined. */
 function checkFact(idx, slotId, slot, id, path, err) {
   const fact = idx.facts.get(id);
-  if (!fact) return err(path, 'E_UNKNOWN_FACT', `fact "${id}" does not exist in facts.json`);
+  if (!fact) return void err(path, 'E_UNKNOWN_FACT', `fact "${id}" does not exist in facts.json`);
   if (!slot.kinds.includes(fact.kind)) {
-    return err(path, 'E_SLOT_KIND', `slot "${slotId}" takes ${slot.kinds.join('/')} facts; "${id}" is ${fact.kind}`);
+    return void err(path, 'E_SLOT_KIND', `slot "${slotId}" takes ${slot.kinds.join('/')} facts; "${id}" is ${fact.kind}`);
   }
   checkLength(slotId, slot, id, fact.display, path, err);
+  return fact;
 }
 
+/** → the phrase when it exists and carries one of the slot's tags, else undefined. */
 function checkPhrase(idx, slotId, slot, id, path, err) {
   const phrase = idx.phrases.get(id);
-  if (!phrase) return err(path, 'E_UNKNOWN_PHRASE', `phrase "${id}" does not exist in phrases.json`);
+  if (!phrase) return void err(path, 'E_UNKNOWN_PHRASE', `phrase "${id}" does not exist in phrases.json`);
   if (!phrase.tags.some((t) => slot.tags.includes(t))) {
-    return err(path, 'E_SLOT_KIND', `slot "${slotId}" takes phrases tagged ${slot.tags.join('/')}; "${id}" is tagged ${phrase.tags.join('/')}`);
+    return void err(path, 'E_SLOT_KIND', `slot "${slotId}" takes phrases tagged ${slot.tags.join('/')}; "${id}" is tagged ${phrase.tags.join('/')}`);
   }
   checkLength(slotId, slot, id, phrase.text, path, err);
+  return phrase;
+}
+
+/**
+ * Ruling (f): a sequential slot (archetypes.json `"sequence": true`, e.g. flow-graph chain/converge, which draw
+ * arrows) claims "this, then this". Only facts of ONE explicitly ordered source carry that truth: every bound fact
+ * needs a sequence, all from the same collection, strictly ascending (gaps allowed).
+ */
+function checkSequence(beat, slotId, slotFacts, err) {
+  let first = null, prev = null;
+  for (const { fact, path } of slotFacts) {
+    const where = `beat ${beat.id} slot "${slotId}" (variant "${beat.variant}" is sequential)`;
+    if (fact.sequence === null || fact.sequence === undefined) {
+      err(path, 'E_SLOT_ORDER', `${where}: fact "${fact.id}" (${fact.kind}) has no sequence — only items of an ordered README step list (collection readme.steps.<n>) may be drawn in order; use variant "cluster" for unordered facts`);
+      continue;
+    }
+    if (first === null) first = fact;
+    else if (fact.collection !== first.collection) {
+      err(path, 'E_SLOT_ORDER', `${where}: fact "${fact.id}" is from collection "${fact.collection}", but "${first.id}" is from "${first.collection}" — one sequence per beat`);
+      continue;
+    }
+    if (prev !== null && !(fact.sequence > prev.sequence)) {
+      err(path, 'E_SLOT_ORDER', `${where}: fact "${fact.id}" (sequence ${fact.sequence}) does not follow "${prev.id}" (sequence ${prev.sequence}) — bind steps in ascending sequence`);
+      continue;
+    }
+    prev = fact;
+  }
 }
 
 function checkLength(slotId, slot, id, text, path, err) {

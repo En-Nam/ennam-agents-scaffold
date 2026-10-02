@@ -17,6 +17,13 @@ and nothing else.
   - nested detail is not a feature
 - `Stripe payments`
 
+## Getting started
+
+1. `npm install`
+2. `npm run dev`
+3. Open localhost:3000
+4. `npm run test`
+
 ## Setup
 
 - npm install (not a feature)

@@ -8,7 +8,7 @@
 <body>
 <!-- Test-local registry (M2 Tasks 2-5): the engine with {...ARCHETYPES, 'card-carousel'} injected, so the gated
      test does not depend on archetypes/index.mjs. Mirrors engine/core.mjs boot(): window.SHOWREEL {ready,
-     renderer, renderAt, manifest, fit} + layouts {beatId: [{source, kind, px}]}. ?nudge=<px> wraps draw() in a translate — the negative control that
+     renderer, renderAt, manifest, fit} + layouts {beatId: [{source, kind, px, textW}]}. ?nudge=<px> wraps draw() in a translate — the negative control that
      proves offFrame() can fail for this archetype. -->
 <script type="module">
   import { createEngine } from '/engine/core.mjs';
@@ -28,7 +28,19 @@
     await loadFonts('/fonts');
     // record each beat's per-card drawn px (fit() reports only the slot minimum — see deviation 1 in the test)
     const layouts = (S.layouts = {});
-    let arch = { ...card, layout(rb, v, api) { const L = card.layout(rb, v, api); layouts[api.beatId] = L.cards.map((c) => ({ source: c.item.id, kind: c.kind, px: c.px })); return L; } };
+    let arch = { ...card, layout(rb, v, api) { const L = card.layout(rb, v, api); layouts[api.beatId] = L.cards.map((c) => ({ source: c.item.id, kind: c.kind, px: c.px, textW: c.textW })); return L; } };
+    // SHOWREEL.hide = <itemId> (set by the caller, null = off): that item's text is not drawn this frame. A frame
+    // rendered with and without one title gives its exact glyph mask (pixel diff) — rotated fan titles' bboxes
+    // overlap their neighbours' glyphs, so a bbox alone cannot say which pixels are this title's.
+    S.hide = null;
+    {
+      const inner = arch;
+      arch = { ...inner, draw(ctx, lt, p, rb, cues) {
+        if (S.hide == null) return inner.draw(ctx, lt, p, rb, cues);
+        const api = { ...p.api, text: (c, item, ...rest) => (item.id === S.hide ? 0 : p.api.text(c, item, ...rest)) };
+        return inner.draw(ctx, lt, { ...p, api }, rb, cues);
+      } };
+    }
     if (q.has('nudge')) {
       const dx = Number(q.get('nudge'));
       arch = { ...arch, draw(ctx, ...rest) { ctx.translate(dx, 0); card.draw(ctx, ...rest); } };
@@ -38,6 +50,16 @@
     // with the unswung-deck fill (fan). Text-free draws the manifest cannot see (R5 review: pixels, not inference).
     // title[itemId] = the strongest normal (source-over) palette-text draw of that item this frame: its effective
     // opacity (ctx.globalAlpha × opts.alpha) — 1 = the title is drawn at full contrast, not mid-fade or dimmed.
+    // ?dimfirst=<alpha>: every beat's FIRST card title drawn at that opacity — the negative control proving the hold
+    // luma check sees a dimmed first card (R5 (b))
+    if (q.has('dimfirst')) {
+      const inner = arch, a = Number(q.get('dimfirst'));
+      arch = { ...inner, draw(ctx, lt, p, rb, cues) {
+        const first = rb.slots.cards.items[0].id;
+        const api = { ...p.api, text: (c, item, x, y, o = {}) => p.api.text(c, item, x, y, item.id === first ? { ...o, alpha: (o.alpha ?? 1) * a } : o) };
+        inner.draw(ctx, lt, { ...p, api }, rb, cues);
+      } };
+    }
     if (q.has('probe')) {
       const inner = arch;
       arch = { ...inner, draw(ctx, lt, p, rb, cues) {
@@ -46,11 +68,20 @@
         let inCheck = false; // api.checkMark draws its tick on with a dash pattern — not a placeholder
         const api = {
           ...p.api,
-          glass: (c, x, y, w, h, r, o) => { if (o && o.fill === deckFill) rec.deck++; return p.api.glass(c, x, y, w, h, r, o); },
+          glass: (c, x, y, w, h, r, o) => {
+            if (o && o.fill === deckFill) rec.deck++;
+            // weakest glass frame (card body / tag tile / hub border alpha) this frame — R5 (b): a landed card whose
+            // frame fell back to a faint border once the focus moved on read "disabled"
+            const a = o && typeof o.border === 'string' ? /,\s*([\d.]+)\)$/.exec(o.border) : null;
+            if (a) rec.border = Math.min(rec.border ?? 1, Number(a[1]));
+            return p.api.glass(c, x, y, w, h, r, o);
+          },
           checkMark: (...a) => { inCheck = true; try { return p.api.checkMark(...a); } finally { inCheck = false; } },
           text: (c, item, x, y, o = {}) => {
             if (c.globalCompositeOperation === 'source-over' && o.fill === p.api.palette.text) {
               rec.title[item.id] = Math.max(rec.title[item.id] ?? 0, c.globalAlpha * (o.alpha ?? 1));
+              // the title's own shadow glow (R5 (b): a shadow halo under the bloom read as a doubled glow)
+              (rec.shadow ??= {})[item.id] = Math.max(rec.shadow[item.id] ?? 0, c.shadowColor && c.shadowBlur ? c.shadowBlur : 0);
             }
             return p.api.text(c, item, x, y, o);
           },

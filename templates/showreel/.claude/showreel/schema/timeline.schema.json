@@ -36,7 +36,7 @@
       "properties": {
         "id": { "$ref": "#/$defs/beatId" },
         "archetype": { "enum": ["cold-open-command", "kinetic-text", "metrics-counter-lock", "lockup-cta", "flow-graph", "layered-stack", "card-carousel", "orbit-network"] },
-        "variant": { "enum": ["terminal", "stack", "punch", "row", "grid", "center", "converge", "chain", "slabs", "fan", "orbit", "chapter"] },
+        "variant": { "enum": ["terminal", "stack", "punch", "row", "grid", "center", "converge", "chain", "cluster", "slabs", "fan", "orbit", "chapter"] },
         "t0": { "$ref": "#/$defs/seconds" },
         "t1": { "$ref": "#/$defs/seconds" },
         "overlapIn": { "$ref": "#/$defs/seconds" },

@@ -33,7 +33,10 @@
     const geo = {};
     S.layouts = () => geo;
     // test probe (R5 ornament): S.hideBranches = true draws the SAME frame without the alternative-route arches
-    // (layout untouched, so the path edges / nodes are identical) — the pixel diff is exactly what the arches draw
+    // (layout untouched, so the path edges / nodes are identical) — the pixel diff is exactly what the arches draw.
+    // Cluster spokes are hidden by the same flag (their diff = exactly what the spokes draw).
+    // Variant "cluster" (ruling f) comes in through the test's timeline/resolved (the test compiles with an
+    // archetypes table that lists it); the wrapper below passes the variant through untouched.
     S.hideBranches = false;
     // test probe (R5 chain ghost slots): S.hideLastNode = true draws the SAME frame without the last path node and
     // the edge into it — before that node pops, the pixel diff is exactly what its ghost slot (+ ghost edge) draws
@@ -43,10 +46,13 @@
       const box = (d) => ({ x: d.x, y: d.y, w: d.w, h: d.h });
       // every drawn edge with its two endpoints (path edges: origin / node i-1 → node i; arches: node a → node b)
       const ends = (pts) => ({ from: pts[0], to: pts[pts.length - 1] });
+      // cluster (ruling f): edges (directed path) must be empty, origin null; links = the undirected hub spokes
       geo[api.beatId] = {
-        px: L.px, nodes: L.nodes.map(box), origin: box(L.origin),
-        edges: L.pathEdges.map((e) => ({ i: e.i, ...ends(e.pts) })),
+        variant, px: L.px, nodes: L.nodes.map(box), origin: L.origin ? box(L.origin) : null,
+        edges: L.pathEdges.map((e) => ({ i: e.i, pts: e.pts, ...ends(e.pts) })),
         arcs: L.fan.map((f) => ({ a: f.a, b: f.b, pts: f.pts, ...ends(f.pts) })),
+        links: L.links.map((l) => ({ a: l.a, b: l.b, undirected: l.undirected, pts: l.pts, ...ends(l.pts) })),
+        hub: L.hub ? { x: L.hub.x, y: L.hub.y } : null,
       };
       return L;
     }, draw(ctx, lt, p, rb, cues) {
@@ -55,8 +61,9 @@
       const m = ctx.getTransform();
       S.xf = { ...(S.xf || {}), [p.beatId]: { a: m.a, b: m.b, c: m.c, d: m.d, e: m.e, f: m.f } };
       let L = p.layout;
-      if (S.hideBranches) L = { ...L, fan: [] };
-      if (S.hideLastNode) L = { ...L, nodes: L.nodes.slice(0, -1), pathEdges: L.pathEdges.slice(0, -1) };
+      // hideBranches drops the ornament lines: converge arches and the cluster's hub spokes
+      if (S.hideBranches) L = { ...L, fan: [], links: [] };
+      if (S.hideLastNode) L = { ...L, nodes: L.nodes.slice(0, -1), pathEdges: L.pathEdges.slice(0, -1), links: L.links.filter((l) => l.b !== L.nodes.length - 1) };
       return flowGraph.draw(ctx, lt, L === p.layout ? p : { ...p, layout: L }, rb, cues);
     } };
     const eng = createEngine({ timeline, resolved, archetypes: { ...ARCHETYPES, [flowGraph.id]: probed }, transitions: TRANSITIONS });

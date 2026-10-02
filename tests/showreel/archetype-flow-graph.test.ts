@@ -27,6 +27,11 @@ import { storyboardFromArrangement, type ArrangementBeat } from './helpers/story
 //       manifest ⊆ resolved (the archetype draws only resolved items).
 //   (d) palette-only colours + engine-only text: hex literals and fillText/strokeText are banned in the file,
 //       so a palette other than violet (the chain film runs on amber) recolours the whole beat.
+//   (f) truthfulness (orchestrator ruling f / PO R5 (f)): converge + chain draw a DIRECTED path (origin → node 0 →
+//       node 1 …), so their fixture films bind README-step facts with a sequence (one collection, ascending);
+//       the unordered mixed-kind sets render as variant "cluster", which draws no directed edge, no origin and no
+//       moving head — only undirected hub spokes. A cluster that drew a path would assert an order the facts lack.
+//   (PO R5 b) no dimmed first node: at the hold every revealed label reads at (near) the brightest label's luma.
 // Gated: SHOWREEL_E2E=1 (+ SHOWREEL_TOOL_DIR). The browser cases boot fixtures/archetypes/flow-graph/page.html, a
 // test copy of engine/page.html that injects the module and exposes the layouts() probe the R5 scale test reads.
 // flow-graph is registered in archetypes/index.mjs (Task 7); the N-matrix renders it through the shipped page.
@@ -37,7 +42,15 @@ const TOOLKIT = path.resolve(HERE, '..', '..', 'templates', 'showreel', '.claude
 const FIX = path.join(HERE, 'fixtures', 'archetypes', 'flow-graph');
 const SRC = path.join(TOOLKIT, 'archetypes', 'flow-graph.mjs');
 const readJ = (p: string) => JSON.parse(readFileSync(p, 'utf8'));
-const ARCH = readJ(path.join(TOOLKIT, 'archetypes', 'archetypes.json'));
+const ARCH_SHIPPED = readJ(path.join(TOOLKIT, 'archetypes', 'archetypes.json'));
+// variant "cluster" (ruling f) is injected here when the shipped table does not list it yet (the contract change
+// lands archetypes.json separately); this table only feeds resolve/compile of THIS file's fixture films
+const ARCH = (() => {
+  const a = JSON.parse(JSON.stringify(ARCH_SHIPPED));
+  const fg = a.archetypes['flow-graph'];
+  if (!fg.variants.includes('cluster')) fg.variants.push('cluster');
+  return a;
+})();
 const PHRASES = readJ(path.join(TOOLKIT, 'phrases.json'));
 const FACTS = readJ(path.join(FIX, 'facts.json'));
 const FPS = 60;
@@ -53,17 +66,23 @@ function moduleGeometry(src: string) {
   const rule = src.match(/ctx\.fillRect\(CX - hw, LEAD_Y \+ (\d+), hw \* 2, (\d+)\)/);
   const edge = src.match(/const edgeT0 = \(i\) => STEP\[i\] - (\d+) \* grid\b/);
   const pop = src.match(/const i = n\.i, pop = edgeT0\(i\)/);
-  if (!lead || !rule || !edge || !pop) throw new Error('flow-graph.mjs: LEAD_Y / lead rule / edgeT0 / node pop changed — update moduleGeometry');
-  return { leadRuleBottom: Number(lead[1]) + Number(rule[1]) + Number(rule[2]), edgeLeadGrids: Number(edge[1]) };
+  const hub = src.match(/const HUB_R = (\d+)\b/);
+  if (!lead || !rule || !edge || !pop || !hub) throw new Error('flow-graph.mjs: LEAD_Y / lead rule / edgeT0 / node pop / HUB_R changed — update moduleGeometry');
+  return { leadRuleBottom: Number(lead[1]) + Number(rule[1]) + Number(rule[2]), edgeLeadGrids: Number(edge[1]), hubR: Number(hub[1]) };
 }
 const GEO = moduleGeometry(readFileSync(SRC, 'utf8'));
+const HUB_R = GEO.hubR;
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Browser = any;
 type Page = any;
 type Entry = { text: string; source: string; bbox: { x: number; y: number; w: number; h: number } | null; onScreen?: boolean };
 
-// min / typical (ceil of 3..6 midpoint = 5) / max step counts, each with near-maxChars facts
+type Variant = 'converge' | 'chain' | 'cluster';
+type BeatId = 'b2' | 'b3' | 'b4';
+type Sets = Record<BeatId, readonly string[]>;
+// min / typical (ceil of 3..6 midpoint = 5) / max step counts, each with near-maxChars facts. These are UNORDERED
+// facts of mixed kinds (no sequence) → the cluster films; the sequential films bind SEQ_SETS below.
 const STEP_SETS = {
   b2: ['f.feature.1', 'f.route.1', 'f.command.2'],
   b3: ['f.feature.2', 'f.stack.item.1', 'f.feature.3', 'f.route.2', 'f.feature.4'],
@@ -77,10 +96,28 @@ const SHORT_SETS: Record<keyof typeof STEP_SETS, string[]> = {
   b3: ['f.stack.item.2', 'f.stack.item.3', 'f.route.3', 'f.feature.6', 'f.command.3'],
   b4: ['f.stack.item.2', 'f.stack.item.3', 'f.stack.item.4', 'f.feature.5', 'f.route.3', 'f.command.3'],
 };
+// sequential films (converge / chain): README ordered steps — one collection, ascending sequence (gaps allowed),
+// command + feature kinds, near-maxChars (readme.steps.1) and short (readme.steps.2)
+const SEQ_SETS: Sets = {
+  b2: ['f.command.11', 'f.feature.12', 'f.command.12'],
+  b3: ['f.feature.11', 'f.command.11', 'f.feature.12', 'f.command.12', 'f.feature.13'],
+  b4: ['f.feature.11', 'f.command.11', 'f.feature.12', 'f.command.12', 'f.feature.13', 'f.command.13'],
+};
+const SEQ_SHORT: Sets = {
+  b2: ['f.command.14', 'f.feature.14', 'f.command.16'],
+  b3: ['f.command.14', 'f.feature.14', 'f.command.15', 'f.command.16', 'f.feature.15'],
+  b4: ['f.command.14', 'f.feature.14', 'f.command.15', 'f.command.16', 'f.feature.15', 'f.command.17'],
+};
+const setsFor = (variant: Variant, short = false): Sets => (variant === 'cluster' ? (short ? SHORT_SETS : STEP_SETS) : short ? SEQ_SHORT : SEQ_SETS);
+// leads: "From start to finish" / "How it flows" claim an order (sequential variants only); the cluster heads its
+// mixed kinds with phrases true of all of them and silent about order
+const LEADS: Record<Variant, { b3: string; b4: string }> = {
+  converge: { b3: 'p.flow.3', b4: 'p.flow.2' }, chain: { b3: 'p.flow.3', b4: 'p.flow.2' }, cluster: { b3: 'p.flow.4', b4: 'p.flow.6' },
+};
 
 type Cue = { name: string; at: number; kind: string; amp: number };
-function storyboard(variant: 'converge' | 'chain', palette: string, b3Cues: Cue[] = [], sets: Record<keyof typeof STEP_SETS, readonly string[]> = STEP_SETS) {
-  const flow = (id: keyof typeof STEP_SETS, lead: string | null, transitionOut: string) => ({
+function storyboard(variant: Variant, palette: string, b3Cues: Cue[] = [], sets: Sets = setsFor(variant)) {
+  const flow = (id: BeatId, lead: string | null, transitionOut: string) => ({
     id, archetype: 'flow-graph', variant, weight: 1.25, bindings: { steps: [...sets[id]] },
     ...(lead ? { phrases: { lead } } : {}), transitionOut,
     ...(id === 'b3' && b3Cues.length ? { cues: b3Cues } : {}),
@@ -90,14 +127,14 @@ function storyboard(variant: 'converge' | 'chain', palette: string, b3Cues: Cue[
     beats: [
       { id: 'b1', archetype: 'cold-open-command', variant: 'terminal', weight: 1, bindings: { command: 'f.command.1' }, transitionOut: 'zoom-through' },
       flow('b2', null, 'cut'),
-      flow('b3', 'p.flow.3', 'cut'),
-      flow('b4', 'p.flow.2', 'zoom-through'),
+      flow('b3', LEADS[variant].b3, 'cut'),
+      flow('b4', LEADS[variant].b4, 'zoom-through'),
       { id: 'b5', archetype: 'lockup-cta', variant: 'center', weight: 1.5, bindings: { name: 'f.app.name.1', command: 'f.command.1' }, transitionOut: 'cut' },
     ],
   };
 }
 
-function build(variant: 'converge' | 'chain', palette: string, b3Cues: Cue[] = [], sets: Record<keyof typeof STEP_SETS, readonly string[]> = STEP_SETS) {
+function build(variant: Variant, palette: string, b3Cues: Cue[] = [], sets: Sets = setsFor(variant)) {
   const sb = storyboard(variant, palette, b3Cues, sets);
   const resolved = resolve(sb, { archetypes: ARCH, facts: FACTS, phrases: PHRASES });
   const timeline = compileTimeline(sb, resolved, ARCH, { fps: FPS });
@@ -183,12 +220,33 @@ describe('flow-graph — static guarantees (C13, review focus 4)', () => {
     expect(src).toMatch(/api\.cue\('converge'\)/);
     expect(src).not.toMatch(/cues(\[[^\]]+\]|\.\w+)\s*\?\?/); // no `cues[x] ?? re-derived schedule` (drifts from the score)
   });
+  // ruling (f), static half: the browser test below proves structure (no edge, no origin, hub ↔ node links) and that
+  // nothing TRAVELS along a spoke — but a STATIC arrowhead / chevron / end dot added to the spoke drawing would pass
+  // both. So the cluster's only line drawer, drawLinks, may stroke each spoke whole (trace(…, 1), one stroke, one
+  // width) and nothing else: no head sprite, packet, arc, fill, gradient (a brightening toward one end) or extra
+  // segment. Negative control: the same guard flags drawEdges (the sequential path: head spot + packets).
+  it('ruling (f): drawLinks strokes each spoke whole and draws no head, packet, marker or one-ended gradient', () => {
+    const body = (name: string) => {
+      const m = src.match(new RegExp(`\\n    function ${name}\\(\\) \\{\\r?\\n([\\s\\S]*?)\\r?\\n    \\}\\r?\\n`));
+      if (!m) throw new Error(`flow-graph.mjs: function ${name}() not found — update this guard`);
+      return m[1]!;
+    };
+    const HEAD = /\b(spot|packet|at|sparks|checkMark|rr|shape|drawNode)\(|\.(arc|fill|fillRect|lineTo|moveTo|createLinearGradient|createRadialGradient|drawImage)\(|api\.brand\(/g;
+    const links = body('drawLinks');
+    expect(links.match(HEAD) ?? [], 'drawLinks: head / packet / marker calls').toEqual([]);
+    expect(links.match(/\btrace\(/g)?.length, 'drawLinks: one trace per spoke').toBe(1);
+    expect(links, 'drawLinks: every spoke traced to its full length (never a partial, growing line)').toMatch(/trace\(ctx, l\.pts, 1\)/);
+    expect(links.match(/\.stroke\(\)/g)?.length, 'drawLinks: one plain stroke per spoke').toBe(1);
+    // negative control: the guard really fires on a drawer that has a moving head and packets
+    expect((body('drawEdges').match(HEAD) ?? []).length, 'drawEdges (sequential path) trips the guard').toBeGreaterThan(0);
+  });
   it('the fixture storyboards resolve and compile: one step.<i> hit per bound step, converge after the last', () => {
-    for (const v of ['converge', 'chain'] as const) {
+    for (const v of ['converge', 'chain', 'cluster'] as const) {
       const { timeline } = build(v, 'violet');
       for (const id of FLOW_BEATS) {
         const m = moments(timeline, id);
         expect(m.steps.length, `${v} ${id}`).toBe(STEP_SETS[id].length);
+        expect(setsFor(v)[id].length, `${v} ${id}: same step count in every variant's set`).toBe(STEP_SETS[id].length);
         expect(m.converge, `${v} ${id}`).toBeGreaterThan(m.lastStep);
         expect(m.hold, `${v} ${id}`).toBeGreaterThan(m.lastStep);
         expect(m.hold, `${v} ${id}`).toBeLessThan(m.converge);
@@ -203,10 +261,25 @@ describe('flow-graph — static guarantees (C13, review focus 4)', () => {
   it('fixture texts are near maxChars (26–28 code points), so (a) exercises the widest legal labels', () => {
     const max = ARCH.archetypes['flow-graph'].slots.steps.maxChars;
     const byId = new Map(FACTS.facts.map((f: any) => [f.id, f.display]));
-    for (const id of FLOW_BEATS) for (const f of STEP_SETS[id]) {
+    for (const id of FLOW_BEATS) for (const f of [...STEP_SETS[id], ...SEQ_SETS[id]]) {
       const n = [...(byId.get(f) as string)].length;
       expect(n, f).toBeLessThanOrEqual(max);
       expect(n, f).toBeGreaterThanOrEqual(max - 2);
+    }
+  });
+  it('ruling (f): a sequential variant (converge / chain) refuses unordered facts; the same facts are valid as cluster', () => {
+    // the mixed-kind sets carry no sequence: drawn as a directed path they would assert an order facts.json lacks
+    for (const v of ['converge', 'chain'] as const) {
+      const sb = storyboard(v, 'violet', [], STEP_SETS);
+      expect(() => resolve(sb, { archetypes: ARCH, facts: FACTS, phrases: PHRASES }), `${v} with unordered facts`).toThrow(/E_SLOT_ORDER/);
+    }
+    expect(() => build('cluster', 'violet')).not.toThrow();
+    // the sequential fixture sets really are ordered (one collection, ascending), so the films below are legal
+    const byId = new Map<string, any>(FACTS.facts.map((f: any) => [f.id, f]));
+    for (const sets of [SEQ_SETS, SEQ_SHORT]) for (const id of FLOW_BEATS) {
+      const fs = sets[id].map((x) => byId.get(x)!);
+      expect(new Set(fs.map((f) => f.collection)).size, `${id} one collection`).toBe(1);
+      for (let k = 1; k < fs.length; k++) expect(fs[k].sequence, `${id} ascending`).toBeGreaterThan(fs[k - 1].sequence);
     }
   });
   it('contact-sheet hold (R5): in the real next 15/30/45/60 s films every flow-graph step has lit by the sheet hold — a cue map ending at 0.6 fails it', async () => {
@@ -219,7 +292,13 @@ describe('flow-graph — static guarantees (C13, review focus 4)', () => {
       expect(flows.length, `${f.N}s has a flow-graph beat`).toBeGreaterThanOrEqual(1);
       for (const b of flows) variants.add(b.variant);
     }
-    expect([...variants].sort(), 'both variants are covered by the real films').toEqual(['chain', 'converge']);
+    // which variants the real films use is the storyboard helper's call (ruling f: sequential only with a README
+    // step list of ≥ 3); every one of them must be a flow-graph variant this module draws. Coverage note: since
+    // arrangements default flow-graph beats to "cluster", these real films are NOT required to contain chain /
+    // converge any more (they did before ruling f); the sequential variants' rendering is covered by this file's
+    // fixture films (SEQ_SETS / SEQ_SHORT), and "sequential only with a ≥ 3-step sequence collection" is enforced
+    // by validate (E_SLOT_ORDER, tested above) and owned by the storyboard helper's tests
+    for (const v of variants) expect(['chain', 'cluster', 'converge'], `real-film variant ${v}`).toContain(v);
     expect(films.flatMap((f) => unlitAtSheetHold(f.timeline))).toEqual([]);
     // negative control: the same films compiled with the previous map end (to = 0.6) leave a step dark at the sheet
     // hold in EVERY film — so the check above really depends on the cue map, and would catch a regression
@@ -243,12 +322,13 @@ describe.skipIf(!E2E)('flow-graph in the browser (SHOWREEL_E2E=1)', () => {
   let exe: string;
   let browser: Browser;
   const cleanups: (() => Promise<void> | void)[] = [];
-  const films: Record<string, { url: string; resolved: any; timeline: any }> = {};
-  const FILMS = [
-    ['converge', 'violet', 'converge', [], STEP_SETS], ['chain', 'amber', 'chain', [], STEP_SETS], ['late', 'violet', 'converge', STEP1_LATE, STEP_SETS],
-    ['shortConverge', 'violet', 'converge', [], SHORT_SETS], ['shortChain', 'amber', 'chain', [], SHORT_SETS],
-  ] as const;
-  const STEP_SETS_FOR = (name: string): Record<string, readonly string[]> => (name.startsWith('short') ? SHORT_SETS : STEP_SETS);
+  const films: Record<string, { url: string; resolved: any; timeline: any; sets: Sets }> = {};
+  const FILMS: [string, string, Variant, Cue[], Sets][] = [
+    ['converge', 'violet', 'converge', [], SEQ_SETS], ['chain', 'amber', 'chain', [], SEQ_SETS], ['late', 'violet', 'converge', STEP1_LATE, SEQ_SETS],
+    ['cluster', 'violet', 'cluster', [], STEP_SETS],
+    ['shortConverge', 'violet', 'converge', [], SEQ_SHORT], ['shortChain', 'amber', 'chain', [], SEQ_SHORT], ['shortCluster', 'amber', 'cluster', [], SHORT_SETS],
+  ];
+  const STEP_SETS_FOR = (name: string): Sets => films[name]!.sets;
 
   beforeAll(async () => {
     if (!process.env.SHOWREEL_TOOL_DIR) throw new Error('SHOWREEL_E2E=1 needs SHOWREEL_TOOL_DIR (e.g. .showreel-dev/.tool)');
@@ -265,7 +345,7 @@ describe.skipIf(!E2E)('flow-graph in the browser (SHOWREEL_E2E=1)', () => {
       copyFileSync(path.join(FIX, 'page.html'), path.join(dir, 'page.html'));
       const srv = await startServer({ toolkitDir: TOOLKIT, toolDir: process.env.SHOWREEL_TOOL_DIR!, buildDir: dir });
       cleanups.push(() => rmSync(dir, { recursive: true, force: true }), () => srv.close());
-      films[name] = { url: srv.url, resolved, timeline };
+      films[name] = { url: srv.url, resolved, timeline, sets };
     }
     // the real next arrangement films (whole film, every archetype) for the contact-sheet hold check
     for (const { N, resolved, timeline } of await nextFilms()) {
@@ -275,7 +355,7 @@ describe.skipIf(!E2E)('flow-graph in the browser (SHOWREEL_E2E=1)', () => {
       copyFileSync(path.join(FIX, 'page.html'), path.join(dir, 'page.html'));
       const srv = await startServer({ toolkitDir: TOOLKIT, toolDir: process.env.SHOWREEL_TOOL_DIR!, buildDir: dir });
       cleanups.push(() => rmSync(dir, { recursive: true, force: true }), () => srv.close());
-      films[`next${N}`] = { url: srv.url, resolved, timeline };
+      films[`next${N}`] = { url: srv.url, resolved, timeline, sets: STEP_SETS };
     }
     browser = await puppeteer.launch({ executablePath: exe, headless: true, args: launchArgs() });
     cleanups.push(() => browser.close());
@@ -310,7 +390,7 @@ describe.skipIf(!E2E)('flow-graph in the browser (SHOWREEL_E2E=1)', () => {
       return [...new Uint8Array(h)].map((x) => x.toString(16).padStart(2, '0')).join('');
     }, t, S);
 
-  for (const variant of ['converge', 'chain'] as const) {
+  for (const variant of ['converge', 'chain', 'cluster'] as const) {
     it(`(a) ${variant}: 3/5/6 near-maxChars steps fit (not null) and stay inside the safe area at progress 0.5, the hold and the last fully-on frame`, async () => {
       const { url, timeline, resolved } = films[variant];
       const page = await openPage(url);
@@ -332,7 +412,7 @@ describe.skipIf(!E2E)('flow-graph in the browser (SHOWREEL_E2E=1)', () => {
             expect(offFrame(drawn, SAFE), `${variant} ${id} ${name} t=${t}`).toEqual([]);
             if (name === 'hold') {
               // the oracle judged real boxes: every step of this beat is on screen at the hold, with a box
-              for (const f of STEP_SETS[id]) expect(drawn.some((e) => e.source === f), `${id} ${f} has a box at the hold`).toBe(true);
+              for (const f of films[variant].sets[id]) expect(drawn.some((e) => e.source === f), `${id} ${f} has a box at the hold`).toBe(true);
             }
           }
         }
@@ -368,7 +448,7 @@ describe.skipIf(!E2E)('flow-graph in the browser (SHOWREEL_E2E=1)', () => {
     // precondition: the override really moved the compiled hit by >= 3 GRID (else the probe proves nothing)
     expect(late.steps[1]! - def.steps[1]!).toBeGreaterThanOrEqual(3 * grid - 1e-6);
     const probe = frameAt(def.steps[1]! + 1 / FPS), after = frameAt(late.steps[1]! + 1 / FPS);
-    const step1 = STEP_SETS.b3[1];
+    const step1 = films.converge.sets.b3[1];
     const has = async (film: string, t: number) => {
       const page = await openPage(films[film]!.url);
       try { return (await renderManifest(page, t)).some((e) => e.source === step1 && e.bbox); } finally { await page.close(); }
@@ -390,9 +470,9 @@ describe.skipIf(!E2E)('flow-graph in the browser (SHOWREEL_E2E=1)', () => {
   //   - converge: nodes + arches span ≥ VFILL_MIN of the frame height (the R5 "thin strip of pills" finding).
   const VFILL_MIN = 0.6;
   it('R5 scale: graph spans ≥ 65% of the frame, short labels grow to the fit, the arches fill the frame height', async () => {
-    for (const name of ['converge', 'chain', 'shortConverge', 'shortChain'] as const) {
+    for (const name of ['converge', 'chain', 'cluster', 'shortConverge', 'shortChain', 'shortCluster'] as const) {
       const { url, timeline } = films[name]!;
-      const short = name.startsWith('short'), chain = name.endsWith('hain');
+      const short = name.startsWith('short'), chain = name.endsWith('hain'), cluster = name.endsWith('luster');
       const page = await openPage(url);
       try {
         for (const id of FLOW_BEATS) {
@@ -411,7 +491,10 @@ describe.skipIf(!E2E)('flow-graph in the browser (SHOWREEL_E2E=1)', () => {
           expect(geo.px, `${name} ${id}: layout px = fitted px`).toBe(fit[id].steps);
           if (short) expect(fit[id].steps, `${name} ${id}: short labels grow to the fit`).toBeGreaterThanOrEqual(40);
           if (chain) expect(geo.arcs.length, `${name} ${id}: chain has no arches`).toBe(0);
-          else {
+          else if (cluster) {
+            expect(geo.arcs.length, `${name} ${id}: cluster has no alternative-route arches`).toBe(0);
+            expect(geo.links.length, `${name} ${id}: one hub spoke per node`).toBe(n);
+          } else {
             expect(geo.arcs.length, `${name} ${id}: ≥ 1 arch per step`).toBeGreaterThanOrEqual(n);
             // vertical density (R5 review): the arches fill the band like spike A's option lists (~70% of the frame
             // height), not a thin strip of pills in a mostly empty frame
@@ -447,7 +530,7 @@ describe.skipIf(!E2E)('flow-graph in the browser (SHOWREEL_E2E=1)', () => {
   const GLYPH_MIN = 0.84, CONTRAST_MIN = 105, CORRIDOR = 12;
   it('R5 rendered: outer labels stay as crisp as the centre at S=6; the ornament draws only its arches', async () => {
     let worstGlyph = { r: Infinity, msg: '' }, worstContrast = { c: Infinity, msg: '' }, worstOff = { off: 0, msg: '' };
-    for (const name of ['converge', 'shortConverge', 'chain', 'shortChain'] as const) {
+    for (const name of ['converge', 'shortConverge', 'chain', 'shortChain', 'cluster', 'shortCluster'] as const) {
       const { url, timeline } = films[name]!;
       const page = await openPage(url);
       try {
@@ -476,7 +559,9 @@ describe.skipIf(!E2E)('flow-graph in the browser (SHOWREEL_E2E=1)', () => {
             if (c < worstContrast.c) worstContrast = { c, msg: `${name} ${id}: ${fmt(l)}` };
           }
           if (name.endsWith('hain')) continue;
-          const arcs = (await page.evaluate(() => (window as any).SHOWREEL.layouts()))[id].arcs.map((f: any) => f.pts);
+          // the ornament lines: converge = its arches, cluster = its hub spokes (both hidden by hideBranches)
+          const g0 = (await page.evaluate(() => (window as any).SHOWREEL.layouts()))[id];
+          const arcs = (name.endsWith('luster') ? g0.links : g0.arcs).map((f: any) => f.pts);
           const diff: { changed: number; off: number; at: string } = await page.evaluate((t: number, raw: number[][][], D: number, id: string) => {
             const S = (window as any).SHOWREEL, c = document.getElementById('stage') as HTMLCanvasElement, g = c.getContext('2d')!;
             const grab = (hide: boolean) => { S.hideBranches = hide; S.renderAt(t, 1); return g.getImageData(0, 0, c.width, c.height).data; };
@@ -613,7 +698,7 @@ describe.skipIf(!E2E)('flow-graph in the browser (SHOWREEL_E2E=1)', () => {
         || (Math.min(Math.abs(y - (n.y - hh)), Math.abs(y - (n.y + hh))) <= e && Math.abs(x - n.x) <= hw + e);
     };
     let worstGain = { g: Infinity, msg: '' };
-    for (const name of ['converge', 'shortConverge', 'chain', 'shortChain'] as const) {
+    for (const name of ['converge', 'shortConverge', 'chain', 'shortChain', 'cluster', 'shortCluster'] as const) {
       const { url, timeline } = films[name]!;
       const grid = 15 / timeline.music.bpm;
       const page = await openPage(url);
@@ -621,7 +706,12 @@ describe.skipIf(!E2E)('flow-graph in the browser (SHOWREEL_E2E=1)', () => {
         for (const id of FLOW_BEATS) {
           const geo = (await page.evaluate(() => (window as any).SHOWREEL.layouts()))[id];
           const nodes = geo.nodes;
-          expect(geo.edges.length, `${name} ${id}: one path edge per node`).toBe(nodes.length);
+          // cluster: no path (next test); every spoke runs from the hub ring to its node's border
+          expect(geo.edges.length, `${name} ${id}: one path edge per node (cluster: none)`).toBe(geo.variant === 'cluster' ? 0 : nodes.length);
+          for (const l of geo.links) {
+            expect(Math.abs(Math.hypot(l.from[0] - geo.hub.x, l.from[1] - geo.hub.y) - HUB_R), `${name} ${id}: spoke ${l.b} starts on the hub ring`).toBeLessThanOrEqual(0.5);
+            expect(onBorder(l.to, nodes[l.b]), `${name} ${id}: spoke ${l.b} ends on node ${l.b}`).toBe(true);
+          }
           for (const e of geo.edges) {
             const fromOk = e.i === 0 ? Math.hypot(e.from[0] - geo.origin.x, e.from[1] - geo.origin.y) <= 0.5 : onBorder(e.from, nodes[e.i - 1]);
             expect(fromOk, `${name} ${id}: path edge ${e.i} starts on ${e.i ? `node ${e.i - 1}` : 'the origin'}`).toBe(true);
@@ -690,6 +780,229 @@ describe.skipIf(!E2E)('flow-graph in the browser (SHOWREEL_E2E=1)', () => {
     expect(nodesChecked).toBeGreaterThanOrEqual(3 * beats);
     console.log(JSON.stringify({ flowGraphSheetHoldLit: { beats, nodes: nodesChecked, worstGain: Math.round(worstGain.g * 10) / 10, at: worstGain.msg } }));
     expect(worstGain.g, worstGain.msg).toBeGreaterThanOrEqual(LIT_GAIN);
+  }, 300_000);
+
+  // Ruling (f): a cluster asserts no order. Structure: no directed path edge, no origin, one undirected spoke per node,
+  // every spoke hub ↔ node (never node ↔ node, so the links cannot form a chain). Rendered: nothing TRAVELS along a
+  // spoke — its own pixels (frame with − without spokes, hideBranches) are the same at the hold and MOVE_FRAMES later
+  // (a head or packet riding it would move ~0.2 of its length in that time). Negative control on the same oracle: a
+  // converge / chain path edge while its head travels (frame with − without the last node + its edge, hideLastNode)
+  // changes between the two frames. (At the hold the lit path stroke saturates the line itself, so the packets riding
+  // it are not a usable on-line control.) Measured (S=1): spokes worst Δ 12.4; path edge in flight weakest Δ 134.
+  const MOVE_FRAMES = 5;
+  const SPOKE_MOVE_MAX = 20, PATH_MOVE_MIN = 40; // max |Δ luma| along the line between the two frames
+  /** luma contribution of a line along pts (layout space) at t: max |diff| in a 3×3 box at each sample, u ∈ [u0, u1] */
+  const lineProfile = (page: Page, t: number, id: string, pts: number[][], hide: 'hideBranches' | 'hideLastNode', u0: number, u1: number): Promise<number[]> =>
+    page.evaluate((t: number, id: string, pts: number[][], hide: string, u0: number, u1: number) => {
+      const S = (window as any).SHOWREEL, c = document.getElementById('stage') as HTMLCanvasElement, g = c.getContext('2d')!;
+      S.xf = {};
+      const grab = (h: boolean) => { S[hide] = h; S.renderAt(t, 1); return g.getImageData(0, 0, c.width, c.height).data; };
+      const a = grab(false), b = grab(true);
+      S[hide] = false;
+      const m = S.xf[id];
+      if (!m) throw new Error(`no device transform for ${id} at ${t}`);
+      const lum = (d: Uint8ClampedArray, i: number) => 0.2126 * d[i]! + 0.7152 * d[i + 1]! + 0.0722 * d[i + 2]!;
+      const out: number[] = [];
+      const n = pts.length - 1;
+      for (let k = 0; k <= 40; k++) {
+        const u = u0 + ((u1 - u0) * k) / 40, f = u * n, j = Math.min(n - 1, Math.floor(f)), r = f - j;
+        const x = pts[j]![0]! + (pts[j + 1]![0]! - pts[j]![0]!) * r, y = pts[j]![1]! + (pts[j + 1]![1]! - pts[j]![1]!) * r;
+        const dx = Math.round(m.a * x + m.c * y + m.e), dy = Math.round(m.b * x + m.d * y + m.f);
+        let best = 0;
+        for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+          const i = ((dy + oy) * c.width + (dx + ox)) * 4;
+          best = Math.max(best, Math.abs(lum(a, i) - lum(b, i)));
+        }
+        out.push(best);
+      }
+      return out;
+    }, t, id, pts, hide, u0, u1);
+  const moved = (a: number[], b: number[]) => Math.max(...a.map((v, k) => Math.abs(v - b[k]!)));
+  it('ruling (f): cluster draws no directed edge, origin or moving head; converge / chain still draw their directed path', async () => {
+    let worstSpoke = { r: 0, msg: '' }, weakestHead = { r: Infinity, msg: '' };
+    for (const name of ['cluster', 'shortCluster', 'converge', 'chain'] as const) {
+      const { url, timeline } = films[name]!;
+      const page = await openPage(url);
+      try {
+        const all = await page.evaluate(() => (window as any).SHOWREEL.layouts());
+        for (const id of FLOW_BEATS) {
+          const geo = all[id], n = geo.nodes.length, m = moments(timeline, id);
+          if (name.endsWith('luster')) {
+            expect(geo.variant).toBe('cluster');
+            expect(geo.edges, `${name} ${id}: no directed path edge`).toEqual([]);
+            expect(geo.origin, `${name} ${id}: no path origin`).toBeNull();
+            expect(geo.hub, `${name} ${id}: a hub`).toBeTruthy();
+            expect(geo.links.every((l: any) => l.undirected === true && l.a === -1), `${name} ${id}: every link is an undirected hub spoke`).toBe(true);
+            expect(geo.links.map((l: any) => l.b).sort((x: number, y: number) => x - y), `${name} ${id}: one spoke per node, none node ↔ node`).toEqual([...Array(n).keys()]);
+            // rendered: nothing moves along a spoke between the hold and MOVE_FRAMES later
+            for (const l of geo.links) {
+              const p = await lineProfile(page, m.hold, id, l.pts, 'hideBranches', 0.1, 0.9);
+              const q = await lineProfile(page, m.hold + MOVE_FRAMES / FPS, id, l.pts, 'hideBranches', 0.1, 0.9);
+              // (median, not min: the hub end of a short spoke can sit inside the saturated hub core)
+              expect([...p].sort((x, y) => x - y)[p.length >> 1], `${name} ${id}: spoke ${l.b} drawn along its length`).toBeGreaterThan(8);
+              const r = moved(p, q);
+              if (r > worstSpoke.r) worstSpoke = { r, msg: `${name} ${id} spoke ${l.b}: max Δ ${r.toFixed(1)} over ${MOVE_FRAMES} frames` };
+            }
+          } else {
+            expect(geo.variant).toBe(name);
+            expect(geo.links, `${name} ${id}: no spokes`).toEqual([]);
+            expect(geo.origin, `${name} ${id}: path origin`).toBeTruthy();
+            expect(geo.edges.map((e: any) => e.i), `${name} ${id}: directed edges origin → 0 → … → N-1`).toEqual([...Array(n).keys()]);
+            // negative control: the last path edge while its head travels (0.3 GRID into its draw) — the head and the
+            // drawn extent advance along it between the two frames, which the cluster oracle above would catch
+            const t = frameAt(m.steps[n - 1]! - (GEO.edgeLeadGrids - 0.3) * (15 / timeline.music.bpm));
+            const p = await lineProfile(page, t, id, geo.edges[n - 1].pts, 'hideLastNode', 0.1, 0.9);
+            const q = await lineProfile(page, t + MOVE_FRAMES / FPS, id, geo.edges[n - 1].pts, 'hideLastNode', 0.1, 0.9);
+            const r = moved(p, q);
+            if (r < weakestHead.r) weakestHead = { r, msg: `${name} ${id}: path edge ${n - 1} max Δ ${r.toFixed(1)} over ${MOVE_FRAMES} frames` };
+          }
+        }
+      } finally {
+        await page.close();
+      }
+    }
+    console.log(JSON.stringify({ flowGraphRulingF: { worstSpoke: worstSpoke.msg, weakestHead: weakestHead.msg } }));
+    expect.soft(worstSpoke.r, worstSpoke.msg).toBeLessThanOrEqual(SPOKE_MOVE_MAX);
+    expect.soft(weakestHead.r, weakestHead.msg).toBeGreaterThanOrEqual(PATH_MOVE_MIN);
+  }, 300_000);
+
+  // PO R5 (b): "no dimmed first node at hold — a dimmed first node reads as disabled, not traversed". Per flow beat, at
+  // the hold, S=6, each step label's glyph luma = mean of its bbox pixels brighter than the midpoint of the bbox's 20th
+  // and 99th luma percentiles (the strokes, not the pill body). Two oracles:
+  //   - archetype (every fixture film: 3 variants × long / short labels, this file's hold): the glyph luma with the
+  //     engine vignette divided back out per pixel (constants READ from engine/core.mjs) is ≥ FLAT_MIN × the beat's
+  //     brightest — the module draws every revealed node at full title brightness (negative control below: a popped
+  //     but not yet lit node, drawn with the dim fill, fails this bound). The vignette itself is engine-owned:
+  //     28-char labels in three columns must reach ~600 px off-axis, where it alone leaves ≈ 0.80 of the centre.
+  //   - what R5 sees (the real next films at the contact-sheet hold): raw glyph luma ≥ LABEL_LUMA_MIN × the brightest.
+  //     Same oracle on HEAD 2662418 (next 60 s b4 converge): 'Next.js' 213 vs 249 = 0.855 — fails LABEL_LUMA_MIN.
+  // measured after the fix (S=6): raw sheet hold worst 0.913 (60 s b9 cluster 'Stripe payments'); de-vignetted worst
+  // 0.963 (converge b4); the unlit control 0.91–0.94; any lit label dimmed ×0.9 (known-factor control) worst
+  // 0.904 (converge b3), so a ≥ 10% dim is caught; a ≤ 5% dim is not guaranteed to be.
+  // Open items (not this module's to close): the raw floor LABEL_LUMA_MIN = 0.89 awaits PO sign-off, and raw parity
+  // for near-maxChars labels in three columns (≈ 0.80) needs an engine vignette change in engine/core.mjs
+  const FLAT_MIN = 0.95, LABEL_LUMA_MIN = 0.89;
+  const VIG = (() => {
+    const core = readFileSync(path.join(TOOLKIT, 'engine', 'core.mjs'), 'utf8');
+    const g = core.match(/vctx\.createRadialGradient\(W \/ 2, H \/ 2, H \* ([\d.]+), W \/ 2, H \/ 2, H \* ([\d.]+)\)/);
+    const a = core.match(/rg\.addColorStop\(1, 'rgba\(0,0,0,([\d.]+)\)'\)/);
+    if (!g || !a) throw new Error('engine/core.mjs vignette changed — update the PO R5 (b) oracle');
+    return { r0: Number(g[1]), r1: Number(g[2]), a: Number(a[1]) };
+  })();
+  type Core = { source: string; text: string; cx: number; core: number; flat: number };
+  /** dim: after rendering, scale the RGB of one label's bbox by k (a node drawn k× dimmer, for the controls) */
+  const labelCores = (page: Page, t: number, dim: { source: string; k: number } | null = null): Promise<Core[]> => page.evaluate((t: number, V: { r0: number; r1: number; a: number }, dim: { source: string; k: number } | null) => {
+    const S = (window as any).SHOWREEL;
+    S.renderAt(t, 6);
+    const c = document.getElementById('stage') as HTMLCanvasElement, g = c.getContext('2d')!;
+    const W = c.width, H = c.height;
+    if (dim) {
+      const e = S.manifest().find((x: any) => x.bbox && x.onScreen === true && x.source === dim.source);
+      if (!e) throw new Error(`dim control: ${dim.source} not on screen at ${t}`);
+      const x0 = Math.round(e.bbox.x), y0 = Math.round(e.bbox.y), w = Math.max(1, Math.round(e.bbox.w)), h = Math.max(1, Math.round(e.bbox.h));
+      const img = g.getImageData(x0, y0, w, h);
+      for (let i = 0; i < img.data.length; i += 4) for (let j = 0; j < 3; j++) img.data[i + j] = Math.round(img.data[i + j]! * dim.k);
+      g.putImageData(img, x0, y0);
+    }
+    const keep = (px: number, py: number) => 1 - V.a * Math.min(1, Math.max(0, (Math.hypot(px - W / 2, py - H / 2) - V.r0 * H) / ((V.r1 - V.r0) * H)));
+    return S.manifest().filter((e: any) => e.bbox && e.onScreen === true && /^f\./.test(e.source)).map((e: any) => {
+      const x0 = Math.round(e.bbox.x), y0 = Math.round(e.bbox.y), w = Math.max(1, Math.round(e.bbox.w)), h = Math.max(1, Math.round(e.bbox.h));
+      const d = g.getImageData(x0, y0, w, h).data;
+      const P: { l: number; k: number }[] = [];
+      for (let i = 0; i < d.length; i += 4) {
+        const p = i / 4;
+        P.push({ l: 0.2126 * d[i]! + 0.7152 * d[i + 1]! + 0.0722 * d[i + 2]!, k: keep(x0 + (p % w) + 0.5, y0 + Math.floor(p / w) + 0.5) });
+      }
+      const L = P.map((p) => p.l).sort((a, b) => a - b);
+      const q = (f: number) => L[Math.min(L.length - 1, Math.floor(f * L.length))]!;
+      const thr = (q(0.2) + q(0.99)) / 2, gl = P.filter((p) => p.l > thr), n = Math.max(1, gl.length);
+      return { source: e.source, text: e.text, cx: x0 + w / 2, core: gl.reduce((s, p) => s + p.l, 0) / n, flat: gl.reduce((s, p) => s + p.l / p.k, 0) / n };
+    });
+  }, t, VIG, dim);
+  it('PO R5 (b): no dimmed node at the hold — every step label at full brightness (vignette aside), every variant', async () => {
+    let worst = { r: Infinity, msg: '' }, worstFlat = { r: Infinity, msg: '' }, beats = 0;
+    const check = (labels: Core[], expectN: number, where: string, raw: boolean) => {
+      expect(labels.length, `${where}: every step label measured`).toBeGreaterThanOrEqual(expectN);
+      const top = Math.max(...labels.map((l) => l.core)), topF = Math.max(...labels.map((l) => l.flat));
+      for (const l of labels) {
+        const at = `${where}: '${l.text}'@x${Math.round(l.cx)}`;
+        if (raw && l.core / top < worst.r) worst = { r: l.core / top, msg: `${at} core ${l.core.toFixed(0)} vs brightest ${top.toFixed(0)}` };
+        if (l.flat / topF < worstFlat.r) worstFlat = { r: l.flat / topF, msg: `${at} de-vignetted ${l.flat.toFixed(0)} vs brightest ${topF.toFixed(0)}` };
+      }
+      beats++;
+    };
+    for (const name of ['converge', 'chain', 'cluster', 'shortConverge', 'shortChain', 'shortCluster'] as const) {
+      const { url, timeline, sets } = films[name]!;
+      const page = await openPage(url);
+      try {
+        for (const id of FLOW_BEATS) {
+          const labels = (await labelCores(page, moments(timeline, id).hold)).filter((l) => sets[id].includes(l.source));
+          check(labels, sets[id].length, `${name} ${id} hold`, false);
+        }
+      } finally {
+        await page.close();
+      }
+    }
+    // negative control: half a GRID before its cue the last node of each converge beat has popped but is not lit (dim
+    // fill) — the de-vignetted oracle must see it as dimmed, else it could not catch a dimmed node at the hold
+    {
+      const { url, timeline, sets } = films.converge!;
+      const grid = 15 / timeline.music.bpm;
+      const page = await openPage(url);
+      try {
+        for (const id of FLOW_BEATS) {
+          const m = moments(timeline, id), last = sets[id][sets[id].length - 1]!;
+          const labels = (await labelCores(page, frameAt(m.steps[m.steps.length - 1]! - 0.5 * grid))).filter((l) => sets[id].includes(l.source));
+          const unlit = labels.find((l) => l.source === last);
+          expect(unlit, `control ${id}: the unlit last node is on screen`).toBeTruthy();
+          const r = unlit!.flat / Math.max(...labels.map((l) => l.flat));
+          console.log(JSON.stringify({ flowGraphUnlitControl: { id, ratio: Math.round(r * 1000) / 1000 } }));
+          expect(r, `control ${id}: an unlit node reads dimmed to the oracle`).toBeLessThan(FLAT_MIN);
+        }
+      } finally {
+        await page.close();
+      }
+    }
+    // known-factor control: at the hold, each lit label in turn drawn DIM_K× dimmer (its bbox pixels scaled after the
+    // render) must fall below FLAT_MIN — including the brightest label (then judged against the next brightest). This
+    // fixes how much dimming the de-vignetted oracle is guaranteed to catch, independent of the module's unlit style
+    const DIM_K = 0.9;
+    let weakestDim = { r: 0, msg: '' };
+    for (const name of ['converge', 'cluster'] as const) {
+      const { url, timeline, sets } = films[name]!;
+      const page = await openPage(url);
+      try {
+        for (const id of FLOW_BEATS) {
+          const hold = moments(timeline, id).hold;
+          for (const src of sets[id]) {
+            const labels = (await labelCores(page, hold, { source: src, k: DIM_K })).filter((l) => sets[id].includes(l.source));
+            const d = labels.find((l) => l.source === src)!;
+            const r = d.flat / Math.max(...labels.map((l) => l.flat));
+            if (r > weakestDim.r) weakestDim = { r, msg: `${name} ${id} '${d.text}' dimmed ×${DIM_K}: de-vignetted ratio ${r.toFixed(3)}` };
+          }
+        }
+      } finally {
+        await page.close();
+      }
+    }
+    console.log(JSON.stringify({ flowGraphDimControl: { k: DIM_K, weakestCaught: Math.round(weakestDim.r * 1000) / 1000, at: weakestDim.msg } }));
+    expect(weakestDim.r, `a node ×${DIM_K} dimmer must fail the oracle — ${weakestDim.msg}`).toBeLessThan(FLAT_MIN);
+    for (const N of NEXT_DURATIONS) {
+      const { url, timeline, resolved } = films[`next${N}`]!;
+      const page = await openPage(url);
+      try {
+        for (const b of timeline.beats.filter((x: any) => x.archetype === 'flow-graph')) {
+          const ids = resolved.beats[b.id].slots.steps.items.map((it: any) => it.id);
+          const labels = (await labelCores(page, sheetHold(timeline, b.id))).filter((l) => ids.includes(l.source));
+          check(labels, ids.length, `${N}s ${b.id} ${b.variant} sheet hold`, true);
+        }
+      } finally {
+        await page.close();
+      }
+    }
+    console.log(JSON.stringify({ flowGraphHoldLuma: { beats, worstDeVignetted: Math.round(worstFlat.r * 1000) / 1000, atDeVignetted: worstFlat.msg, worstRawSheetHold: Math.round(worst.r * 1000) / 1000, atRaw: worst.msg } }));
+    expect.soft(worstFlat.r, worstFlat.msg).toBeGreaterThanOrEqual(FLAT_MIN);
+    expect.soft(worst.r, worst.msg).toBeGreaterThanOrEqual(LABEL_LUMA_MIN);
   }, 300_000);
 
   it('(b) determinism: 4 timestamps × 2 fresh pages (2 render orders) × S=1 and S=6 → identical RGBA hashes', async () => {

@@ -85,7 +85,7 @@ export const STORYBOARDS = {
       open,
       cards('b2', 'row', near(MIN), 'p.carousel.1'),
       cards('b3', 'row', near(MID)),
-      cards('b4', 'row', near(MAX), 'p.carousel.2'),
+      cards('b4', 'row', near(MAX), 'p.carousel.1'),
       cards('b5', 'fan', near(MIN)),
       cards('b6', 'fan', near(MID), 'p.carousel.3'),
       cards('b7', 'fan', near(MAX), 'p.carousel.1'),
@@ -94,18 +94,19 @@ export const STORYBOARDS = {
   },
   dense: {
     version: 1, durationS: 15, seed: 3, palette: 'amber',
-    beats: [open, cards('b2', 'row', near(MAX), 'p.carousel.2'), cards('b3', 'fan', near(MAX), 'p.carousel.3'), close('b4')],
+    beats: [open, cards('b2', 'row', near(MAX), 'p.carousel.1'), cards('b3', 'fan', near(MAX), 'p.carousel.3'), close('b4')],
   },
   look: {
     version: 1, durationS: 15, seed: 5, palette: 'violet',
-    beats: [open, cards('b2', 'row', typ(MID), 'p.carousel.2'), cards('b3', 'fan', typ(MID), 'p.carousel.3'), close('b4')],
+    beats: [open, cards('b2', 'row', typ(MID), 'p.carousel.1'), cards('b3', 'fan', typ(MID), 'p.carousel.3'), close('b4')],
   },
-  // `r5` = the R5 sheet's card beats: same texts, ≈4.75 s card beats like the 60 s film's
+  // `r5` = the R5 sheet's card beats: same texts, ≈4.75 s card beats like the 60 s film's. Leads that head command
+  // cards use a phrase whose kinds include command (ruling (f) E_PHRASE_KIND: 'What you get' = feature/route only)
   r5: {
     version: 1, durationS: 15, seed: 11, palette: 'violet',
     beats: [
       open,
-      { ...cards('b2', 'row', ['f.feature.21', 'f.feature.22', 'f.feature.23', 'f.command.1', 'f.command.11'], 'p.carousel.2'), weight: 1.75 },
+      { ...cards('b2', 'row', ['f.feature.21', 'f.feature.22', 'f.feature.23', 'f.command.1', 'f.command.11'], 'p.carousel.1'), weight: 1.75 },
       { ...cards('b3', 'fan', ['f.command.21', 'f.command.11', 'f.command.22', 'f.route.21', 'f.route.11'], 'p.carousel.3'), weight: 1.75 },
       close('b4'),
     ],

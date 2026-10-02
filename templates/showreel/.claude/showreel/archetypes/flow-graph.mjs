@@ -5,9 +5,20 @@
 //   converge — the lit path under a canopy of dim alternative routes (arches between the same steps), imploding at the end
 //   chain    — the same path as a clean pipeline (ghost nodes fill in on their cue), no fan; on `converge`
 //              a light runs the whole chain and it LOCKS with a check instead of imploding
+//   cluster  — NON-sequential (ruling f: facts with no README sequence): the steps sit as a constellation in two
+//              rows around a soft hub glow at the frame centre, joined to the hub by plain undirected spokes —
+//              no path, no origin, no arrows/heads/packets, nothing that reads "this, then this". Nodes reveal on
+//              their step cue; on `converge` the constellation implodes into the hub like converge
 // Layout: 3 steps → one row; 4..6 → two rows read as a snake (row 2 runs right → left), so 6 near-maxChars
-// labels still fit the safe area at or above the family minimum (fitSlot fails `check` otherwise).
-// Scale (R5): labels take the LARGEST px the column width allows (up to STEP_MAX_PX) and the columns spread
+// labels still fit the safe area at or above the family minimum (fitSlot fails `check` otherwise). cluster: always
+// two rows (top ⌈N/2⌉, bottom the rest, centred so a shorter bottom row sits staggered under the top one).
+// Hold contrast (PO R5 (b), "no dimmed first node"): the engine vignette (0 inside r = 0.35·H, 0.62 at r = H) caps
+// an off-axis label at (1 − vignette(r))·255, so the outer (first) node read grey next to the centre ones. The
+// archetype cannot lift that cap, so it keeps label glyphs close to the centre instead: rows symmetric about the
+// frame centre, a pill band centred on the frame and only just ≥ 65% of its width, and a minimum pill width
+// (PILL_MIN_W) so short labels sit inward of the band edges rather than at them.
+// Scale (R5): labels take the LARGEST px the column width allows (up to STEP_MAX_PX, and — PO R5 (b) — no more than
+// lets the widest row fit the pill band, floor BAND_PX_MIN) and the columns spread
 // over the whole graph band (GX0..GX1), so short labels read big and the graph always spans most of the frame.
 // Ornament (R5): the alternative routes are dim arches between two DRAWN steps of the same row (top edge → top
 // edge, bottom → bottom), nested over the arch band (BAND_Y0..BAND_Y1) so the graph fills the frame height. Every
@@ -15,8 +26,10 @@
 // nothing that imitates a missing label. Chain ghost slots (future nodes) are port dots only, for the same reason.
 // Timing: node i lights on step.<i>; a still taken before the last step cue (the contact-sheet hold sits there
 // when the cue map's `to` reaches past it) shows that node unlit with its edge in flight — a cue-map matter.
-// Accepted vignette floor: the engine vignette still dims the outermost lit label a little (worst measured glyph
-// ratio vs the centre label ≈ 0.86, pinned ≥ 0.84 in the R5 rendered test); lifting it further needs engine changes.
+// Accepted vignette floor: within the ≥ 65% width floor the outermost label still sits off-axis, so the vignette
+// leaves it ≈ 0.91 of the centre label on the real films' sheet hold (HEAD 2662418: 0.855), and 28-char labels in
+// three columns ≈ 0.80; the module itself draws every lit label at full brightness (PO R5 (b) test, de-vignetted).
+// Parity needs an engine-side vignette change, not an archetype one.
 // Slots: steps (3–6 facts; route/command render mono) · lead (flow phrase, optional, screen-fixed header).
 // Colours come only from params.palette (no literals); the soft-light dots are per-dot radial gradients, not a
 // reused sprite (see SPR); draw() is a pure function of localT and the cues (D9/D10).
@@ -25,11 +38,17 @@
 const TEXT_MAX_W = 620, STEP_MAX_PX = 48, STEP_W = 700, STEP_TRACK = 0.4;
 const PAD_K = 0.7, PAD_MIN = 20;          // pill side padding = PAD_K·px, at least PAD_MIN
 const GAP_MIN = 48, GAP_MAX = 400;      // 3 columns of 28 mono chars still fit at 28 px (display minimum)
-// pill band (one row / snake: room on the right for the turn edge). Kept inside x ≈ 290..1630 (still ≥ 65% of the
-// frame): the engine vignette (0 inside r = 0.35·H, 0.62 at r = H) takes ~20% off a white label ~660 px off-axis
-const GX0 = 290, GX1 = [1630, 1590];
-const ROW_Y1 = 600, ROW_Y2 = [420, 770];  // node centre rows: one row / two-row snake
+// pill band, centred on the frame, 1270 px (the R5 scale floor is 65% of 1920 = 1248): every px further out loses
+// label brightness to the engine vignette (0 inside r = 0.35·H, 0.62 at r = H). The snake's turn edge bulges
+// ~100 px right of GX1, still well inside the safe area
+const GX0 = 325, GX1 = 1595;
+const PILL_MIN_W = 340;                   // short labels: a wider pill keeps the glyphs inward of the band edges
+const BAND_GAP = 80, BAND_PX_MIN = 40;    // px cap so the widest row fits the band (see layout), never below 40
+const ROW_Y1 = 600, ROW_Y2 = [400, 680];  // node centre rows: one row / two-row snake (symmetric about y = 540)
+const CL_Y = [400, 680];                  // cluster rows, the hub between them at the frame centre
+const HUB_R = 16, HALO_R = 430;           // cluster hub ring / soft halo radius
 const LEAD_Y = 170, LEAD_MAX_PX = 40;
+const VARIANTS = ['converge', 'chain', 'cluster'];
 // arch band (converge): the alternative-route arches reach ~65–70% of the frame height like spike A's option
 // lists, staying below the lead header's rule (LEAD_Y + 29) and above BAND_Y1. ARCH_K = apex heights as fractions
 // of the room between the node row and the band edge (nested: the higher arch lands nearer the node centres)
@@ -69,20 +88,28 @@ export default {
     const items = rb.slots.steps.items;
     const lead = rb.slots.lead?.items[0] ?? null;
     const N = items.length;
-    const chain = variant === 'chain';
+    if (!VARIANTS.includes(variant)) throw new Error(`flow-graph: no variant "${variant}" (variants: ${VARIANTS.join(', ')})`);
+    const chain = variant === 'chain', cluster = variant === 'cluster';
     // the compiler emits step.<i> per step + converge (C14): a missing one fails the boot, never a made-up time
     for (const name of [...items.map((_, i) => `step.${i}`), 'converge']) api.cue(name);
-    const rows = N <= 3 ? 1 : 2;
+    const rows = cluster || N > 3 ? 2 : 1;
     const cols = rows === 1 ? N : Math.ceil(N / 2);
     const TEXT_L = Math.ceil(api.safeRect.x0), TEXT_R = Math.floor(api.safeRect.x1);
-    const span = TEXT_R - TEXT_L, gx1 = GX1[rows - 1];
+    const span = TEXT_R - TEXT_L;
     const twMax = Math.min(TEXT_MAX_W, Math.floor((span - (cols - 1) * (2 * PAD_MIN + GAP_MIN)) / cols));
-    const px = api.fitSlot('steps', { maxW: twMax, maxPx: STEP_MAX_PX, weight: STEP_W, track: STEP_TRACK });
-    const leadPx = lead ? api.fitSlot('lead', { maxW: 1300, maxPx: LEAD_MAX_PX, weight: 700, track: 4 }) : 0;
     const m = api.makeCanvas('cache', 8, 8).ctx;
-
-    // snake placement: row 0 left → right, row 1 right → left (short turn edge on the right)
-    const place = (i) => (i < cols ? { row: 0, col: i } : { row: 1, col: cols - 1 - (i - cols) });
+    // snake placement: row 0 left → right, row 1 right → left (short turn edge on the right); cluster: both rows
+    // left → right (no path runs through them)
+    const place = (i) => (i < cols ? { row: 0, col: i } : { row: 1, col: cluster ? i - cols : cols - 1 - (i - cols) });
+    // PO R5 (b): the largest px at which the widest columns still fit the pill band (GX0..GX1) with BAND_GAP between
+    // them — past it the row spills toward the frame edge, where the engine vignette greys the outer label. Never
+    // below BAND_PX_MIN (short labels stay big, R5 scale); fitSlot below still enforces the family minimum
+    const col48 = Array.from({ length: cols }, () => 0);
+    items.forEach((it, i) => { const c = place(i).col; col48[c] = Math.max(col48[c], api.measure(m, it, { size: STEP_MAX_PX, weight: STEP_W, track: STEP_TRACK }).width); });
+    const bandPx = (GX1 - GX0 - (cols - 1) * BAND_GAP) / (col48.reduce((s, w) => s + w, 0) / STEP_MAX_PX + 2 * PAD_K * cols);
+    const maxPx = Math.max(BAND_PX_MIN, Math.min(STEP_MAX_PX, Math.floor(bandPx)));
+    const px = api.fitSlot('steps', { maxW: twMax, maxPx, weight: STEP_W, track: STEP_TRACK });
+    const leadPx = lead ? api.fitSlot('lead', { maxW: 1300, maxPx: LEAD_MAX_PX, weight: 700, track: 4 }) : 0;
     const tws = items.map((it) => Math.min(twMax, api.measure(m, it, { size: px, weight: STEP_W, track: STEP_TRACK }).width));
     const colTw = Array.from({ length: cols }, () => 0);
     items.forEach((_, i) => { const c = place(i).col; colTw[c] = Math.max(colTw[c], tws[i]); });
@@ -91,37 +118,66 @@ export default {
     const padRoom = Math.floor((span + 2 * PAD_MIN - twSum - (cols - 1) * GAP_MIN) / (2 * cols));
     const PADX = Math.max(PAD_MIN, Math.min(Math.round(PAD_K * px), padRoom));
     const PH = Math.round(px * 2), RAD = Math.round(PH * 0.28);
-    const pillSum = twSum + 2 * PADX * cols;
-    // columns spread over the pill band: the graph spans most of the frame whatever the label lengths
-    const gap = cols > 1 ? Math.max(GAP_MIN, Math.min(GAP_MAX, (gx1 - GX0 - pillSum) / (cols - 1))) : 0;
+    // pill width: label + padding, at least PILL_MIN_W — unless that would push the columns past the text band at
+    // GAP_MIN (then plain label + padding, which padRoom above already fits)
+    const fitSum = (mw) => colTw.reduce((s, w) => s + Math.max(mw, w + 2 * PADX), 0);
+    const minW = fitSum(PILL_MIN_W) + (cols - 1) * GAP_MIN <= span + 2 * PAD_MIN ? PILL_MIN_W : 0;
+    const pillW = (tw) => Math.round(Math.max(minW, tw + 2 * PADX));
+    const colPw = colTw.map(pillW);
+    const pillSum = colPw.reduce((s, w) => s + w, 0);
+    // columns spread over the pill band: the graph spans most of the frame whatever the label lengths (cluster: the
+    // full band — its two columns at N = 3 would otherwise stop at GAP_MAX, a narrow constellation)
+    const gap = cols > 1 ? Math.max(GAP_MIN, Math.min(cluster ? Infinity : GAP_MAX, (GX1 - GX0 - pillSum) / (cols - 1))) : 0;
     const total = pillSum + (cols - 1) * gap;
-    let x = (total > gx1 - GX0 ? 960 : (GX0 + gx1) / 2) - total / 2;
-    const colX = colTw.map((w) => { const cx = x + w / 2 + PADX; x += w + 2 * PADX + gap; return cx; });
-    const rowY = rows === 1 ? [ROW_Y1] : ROW_Y2;
+    let x = (total > GX1 - GX0 ? 960 : (GX0 + GX1) / 2) - total / 2;
+    const colX = colPw.map((w) => { const cx = x + w / 2; x += w + gap; return cx; });
+    // cluster bottom row shorter than the top: centred on its own (same gap), so it sits staggered under the top
+    const bot = items.map((_, i) => i).filter((i) => cluster && i >= cols);
+    const botX = new Map();
+    if (bot.length && bot.length < cols) {
+      const ws = bot.map((i) => pillW(tws[i]));
+      let bx = 960 - (ws.reduce((s, w) => s + w, 0) + (bot.length - 1) * gap) / 2;
+      bot.forEach((i, k) => { botX.set(i, bx + ws[k] / 2); bx += ws[k] + gap; });
+    }
+    const rowY = cluster ? CL_Y : rows === 1 ? [ROW_Y1] : ROW_Y2;
     const nodes = items.map((item, i) => {
       const { row, col } = place(i);
-      return { item, i, row, col, x: colX[col], y: rowY[row], w: Math.round(tws[i] + 2 * PADX), h: PH, tw: tws[i] };
+      return { item, i, row, col, x: botX.get(i) ?? colX[col], y: rowY[row], w: pillW(tws[i]), h: PH, tw: tws[i] };
     });
 
-    // origin (a glowing diamond, no text) just left of the first node
-    const origin = { x: nodes[0].x - nodes[0].w / 2 - 44, y: nodes[0].y, w: 0, h: 0 };
+    // origin (a glowing diamond, no text) just left of the first node — sequential variants only
+    const origin = cluster ? null : { x: nodes[0].x - nodes[0].w / 2 - 44, y: nodes[0].y, w: 0, h: 0 };
     const kindInto = (i) => (i === 0 ? 'h' : nodes[i].row !== nodes[i - 1].row ? 'turn' : 'h');
     const dirOf = (i) => (nodes[i].row === 0 ? 1 : -1);
-    const pathEdges = nodes.map((n, i) => ({ i, pts: edgeBetween(i === 0 ? origin : nodes[i - 1], n, kindInto(i), dirOf(i)) }));
+    // directed path edges (origin → node 0 → node 1 …): sequential variants only — a cluster has no order to draw
+    const pathEdges = cluster ? [] : nodes.map((n, i) => ({ i, pts: edgeBetween(i === 0 ? origin : nodes[i - 1], n, kindInto(i), dirOf(i)) }));
+    // cluster: one UNDIRECTED spoke per node, hub ring → the node's border facing the hub (top row: bottom edge,
+    // bottom row: top edge). Straight, drawn uniformly along its length (no head, no packet), so it reads "belongs
+    // to", never "comes after"
+    const hub = cluster ? { x: 960, y: (CL_Y[0] + CL_Y[1]) / 2 } : null;
+    const links = !cluster ? [] : nodes.map((n) => {
+      const B = [n.x, n.y + (n.row === 0 ? 1 : -1) * (PH / 2)], dx = B[0] - hub.x, dy = B[1] - hub.y, d = Math.hypot(dx, dy) || 1;
+      const A = [hub.x + (dx / d) * HUB_R, hub.y + (dy / d) * HUB_R];
+      return { a: -1, b: n.i, undirected: true, pts: curve(A, [A[0] + (B[0] - A[0]) / 3, A[1] + (B[1] - A[1]) / 3], [A[0] + (2 * (B[0] - A[0])) / 3, A[1] + (2 * (B[1] - A[1])) / 3], B) };
+    });
 
     // converge: alternative routes between consecutive steps of the same row — nested arches from node i-1's
     // top (bottom) edge to node i's, outward from the row (one row: both sides; a snake row: away from the other
     // row). Both ends sit on drawn pills, so no line ever ends in empty space; no box, no text (nothing invented).
     const rnd = api.rng(api.seed);
     const fan = [];
-    if (!chain) {
+    if (variant === 'converge') {
       const top = BAND_Y0[lead ? 1 : 0], bot = BAND_Y1;
-      const room = Math.min(rowY[0] - top, bot - rowY[rows - 1]);
+      // one row: symmetric arches (the smaller room both ways); snake: row 0 arches up into the top room, row 1
+      // arches down into the bottom room
+      const room1 = Math.min(rowY[0] - top, bot - rowY[rows - 1]);
+      const roomOf = (s) => (rows === 1 ? room1 : s < 0 ? rowY[0] - top : bot - rowY[1]);
       nodes.forEach((b, i) => {
         if (i === 0 || nodes[i - 1].row !== b.row) return;
         const a = nodes[i - 1], dir = dirOf(i);
         const sides = rows === 1 ? [-1, 1] : b.row === 0 ? [-1] : [1];
         sides.forEach((s, si) => ARCH_K.forEach((f, k) => {
+          const room = roomOf(s);
           const h = (f * room - PH / 2) / 0.75, q = 0.62 - 0.24 * k; // port offset from the node centre (× w/2)
           const A = [a.x + dir * q * (a.w / 2), a.y + s * (PH / 2)], B = [b.x - dir * q * (b.w / 2), b.y + s * (PH / 2)];
           fan.push({ a: i - 1, b: i, rank: k + si * ARCH_K.length, ph: rnd(), pts: curve(A, [A[0], A[1] + s * h], [B[0], B[1] + s * h], B) });
@@ -143,7 +199,9 @@ export default {
     const ys = [...nodes.flatMap((d) => [d.y - d.h / 2, d.y + d.h / 2]), ...fan.flatMap((f) => f.pts.map((p) => p[1]))];
     const gc = (Math.min(...ys) + Math.max(...ys)) / 2;
     const leadW = lead ? api.measure(m, lead, { size: leadPx, weight: 700, track: 4 }).width - 4 : 0;
-    return { chain, N, rows, px, PH, PADX, RAD, nodes, origin, pathEdges, fan, SPR, gc, lead, leadPx, leadW };
+    // cluster hub halo: a soft brand glow, transparent at the rim (no ring edge that could read as a shape)
+    SPR.halo = [[0, api.rgba(P.primary, 0.32)], [0.45, api.rgba(P.secondary, 0.12)], [1, api.rgba(P.secondary, 0)]];
+    return { chain, cluster, N, rows, px, PH, PADX, RAD, nodes, origin, pathEdges, links, hub, fan, SPR, gc, lead, leadPx, leadW };
   },
 
   draw(ctx, lt, p, rb, cues) {
@@ -158,6 +216,9 @@ export default {
     const CV0 = CV - 2 * grid;                         // implosion window ends exactly on the cue
     const edgeT0 = (i) => STEP[i] - 2 * grid, EDGE_D = 2 * grid;
     const pathColor = (k, a = 1) => mix(P.primary, P.secondary, clamp(k / Math.max(1, N)), a);
+    // node tint: by path position on a sequential graph; by x across the band on a cluster (a spatial gradient, so
+    // the colours never suggest a progression the facts do not have)
+    const nodeColor = (i, a = 1) => (L.cluster ? mix(P.primary, P.secondary, clamp((L.nodes[i].x - GX0) / (GX1 - GX0)), a) : pathColor(i, a));
     const spot = (c, stops, x, y, r, a) => {
       if (!(r > 0) || !(a > 0)) return;
       const g = c.createRadialGradient(x, y, 0, x, y, r);
@@ -262,7 +323,7 @@ export default {
       const w = n.w * (1 + 0.04 * flash), h = n.h;
       shape(ctx, w, h, L.RAD);
       if (lit > 0.01) {
-        ctx.shadowColor = pathColor(i, 0.9); ctx.shadowBlur = (26 + 40 * flash) * Math.min(1, 1.4 - F.s * 0.2);
+        ctx.shadowColor = nodeColor(i, 0.9); ctx.shadowBlur = (26 + 40 * flash) * Math.min(1, 1.4 - F.s * 0.2);
         const fg = ctx.createLinearGradient(-w / 2, 0, w / 2, 0);
         // a dark tinted body keeps the label readable under bloom; colour lives in the border + glow (+ the landing flash)
         // flash term capped low so the freshly lit label stays crisp under the landing flash (ring + glow carry it)
@@ -303,6 +364,7 @@ export default {
     }
 
     function drawOrigin() {
+      if (!L.origin) return;
       const a = ease.outBack(clamp(lt / (2 * grid))) * F.vis; if (a <= 0.01) return;
       const [x, y] = Pt(L.origin.x, L.origin.y);
       ctx.save(); ctx.translate(x, y); ctx.rotate(Math.PI / 4); ctx.scale(a * F.ns, a * F.ns);
@@ -311,7 +373,40 @@ export default {
       ctx.save(); ctx.globalCompositeOperation = 'lighter'; spot(ctx, L.SPR.white, x, y, 26 * F.ns, 0.55 * F.vis); ctx.restore();
     }
 
+    // ── cluster: soft hub glow + ring (swells as nodes light), undirected spokes ──
+    function drawHub() {
+      if (!L.hub || F.vis < 0.01) return;
+      const a = ease.outCubic(clamp((lt - edgeT0(0)) / (3 * grid))) * F.vis; if (a <= 0.01) return;
+      let lf = 0, kick = 0;
+      for (const n of L.nodes) { lf += sm(STEP[n.i], STEP[n.i] + grid, lt) / N; const d = lt - STEP[n.i]; if (d > 0) kick += Math.exp(-d * 6); }
+      kick = Math.min(1, kick);
+      const [x, y] = Pt(L.hub.x, L.hub.y);
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      spot(ctx, L.SPR.halo, x, y, HALO_R * F.ns * (0.85 + 0.15 * lf), a * (0.55 + 0.45 * lf));
+      spot(ctx, L.SPR.primary, x, y, (60 + 30 * kick) * F.ns, a * (0.45 + 0.3 * lf));
+      spot(ctx, L.SPR.white, x, y, 22 * F.ns, a * (0.55 + 0.45 * kick));
+      ctx.restore();
+      ctx.save(); ctx.globalAlpha = a; ctx.lineWidth = 2.5 * F.ns;
+      ctx.strokeStyle = api.brand(ctx, x - HUB_R, 0, x + HUB_R, 0, P.primary, P.secondary);
+      ctx.beginPath(); ctx.arc(x, y, HUB_R * F.ns, 0, 7); ctx.stroke(); ctx.restore();
+    }
+    // a spoke fades in whole with its node (never drawn on from one end) and brightens as the node lights
+    function drawLinks() {
+      if (!L.links.length || F.vis < 0.01) return;
+      ctx.save(); ctx.lineCap = 'round';
+      for (const l of L.links) {
+        const on = clamp((lt - edgeT0(l.b)) / grid); if (on <= 0.001) continue;
+        const lit = sm(STEP[l.b], STEP[l.b] + grid, lt);
+        ctx.globalAlpha = on * F.vis * (1 - 0.4 * F.dim); ctx.lineWidth = (1.5 + lit) * F.ns;
+        ctx.strokeStyle = mix(P.dim, P.primary, 0.4 + 0.4 * lit, 0.35 + 0.35 * lit);
+        ctx.beginPath(); trace(ctx, l.pts, 1); ctx.stroke();
+      }
+      ctx.restore();
+    }
+
     function drawGraph() {
+      drawHub();
+      drawLinks();
       drawEdges();
       // convergence streaks UNDER the nodes: every node drags a bright trail into the point
       if (F.c > 0.02 && F.c < 0.999) {

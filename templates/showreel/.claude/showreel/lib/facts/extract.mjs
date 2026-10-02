@@ -65,10 +65,15 @@ export async function extractFacts(hostRoot) {
       source: { file: '.', locator: 'glob:tests', extractor: 'count', rule: TEST_RULE } });
   }
 
+  // collection: a source-declared one (README ordered steps: readme.steps.<n>) wins over the per-kind default;
+  // order = position within the collection (for an ordered list: its sequence). sequence is set ONLY by a source
+  // that read an explicitly ordered list (ruling f) — extraction order is never a sequence.
   const facts = [];
+  const orderIn = new Map();
   for (const kind of KIND_ORDER) {
     byKind.get(kind).forEach((c, i) => {
-      const listed = Object.prototype.hasOwnProperty.call(COLLECTION, kind);
+      const collection = c.collection ?? (Object.prototype.hasOwnProperty.call(COLLECTION, kind) ? COLLECTION[kind] : null);
+      if (collection !== null) orderIn.set(collection, c.sequence ?? (orderIn.get(collection) ?? 0) + 1);
       facts.push({
         id: `f.${kind}.${i + 1}`,
         kind,
@@ -76,8 +81,9 @@ export async function extractFacts(hostRoot) {
         display: c.display,
         unit: kind === 'count' ? c.unit : null,
         source: c.source,
-        collection: listed ? COLLECTION[kind] : null,
-        order: listed ? i + 1 : null,
+        collection,
+        order: collection !== null ? orderIn.get(collection) : null,
+        sequence: c.sequence ?? null,
         hash: hashOf(c),
       });
     });

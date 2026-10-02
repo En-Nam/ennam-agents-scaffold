@@ -1,13 +1,17 @@
-// The digest the agent reads to write the storyboard: [{id, kind, display, unit}],
-// ≤ 150 entries and ≤ 20k chars (~5k tokens). Over budget → round-robin across kinds so
-// every kind stays represented; facts.json itself is never truncated.
+// The digest the agent reads to write the storyboard: [{id, kind, display, unit}] plus
+// {collection, sequence} on facts of an explicitly ordered source (ruling f: the only facts a
+// sequential flow-graph may bind), ≤ 150 entries and ≤ 20k chars (~5k tokens). Over budget →
+// round-robin across kinds so every kind stays represented; facts.json itself is never truncated.
 
 export const MAX_ENTRIES = 150;
 export const MAX_CHARS = 20000;
 
 /** → {digest, truncated} — digest keeps facts-array order; truncated = facts dropped. */
 export function makeDigest(facts, maxEntries = MAX_ENTRIES, maxChars = MAX_CHARS) {
-  const entries = facts.map((f) => ({ id: f.id, kind: f.kind, display: f.display, unit: f.unit }));
+  const entries = facts.map((f) => ({
+    id: f.id, kind: f.kind, display: f.display, unit: f.unit,
+    ...(f.sequence != null ? { collection: f.collection, sequence: f.sequence } : {}),
+  }));
   const groups = new Map();
   entries.forEach((e, i) => {
     if (!groups.has(e.kind)) groups.set(e.kind, []);

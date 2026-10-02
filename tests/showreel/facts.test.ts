@@ -85,30 +85,34 @@ describe('facts — fixture extraction (exact ids/kinds/displays)', () => {
       ['f.feature.2', 'feature', 'One-tap checkout'],
       ['f.feature.3', 'feature', 'Order tracking'],
       ['f.feature.4', 'feature', 'Stripe payments'],
+      // README "Getting started" ordered list: a prose step is a feature (ruling f).
+      ['f.feature.5', 'feature', 'Open localhost:3000'],
       // Whitelisted deps only (zod is not), dependencies + devDependencies, whitelist order.
       ['f.stack.item.1', 'stack.item', 'Next.js'],
       ['f.stack.item.2', 'stack.item', 'React'],
       ['f.stack.item.3', 'stack.item', 'Tailwind CSS'],
       ['f.stack.item.4', 'stack.item', 'TypeScript'],
-      // dev/build/start/test only (lint is not), then bin.
-      ['f.command.1', 'command', 'npm run dev'],
-      ['f.command.2', 'command', 'npm run build'],
-      ['f.command.3', 'command', 'npm run start'],
-      ['f.command.4', 'command', 'npm run test'],
-      ['f.command.5', 'command', 'npx @acme/acme-shop'],
+      // README code-span steps first (README precedes package.json; "npm run dev"/"npm run test" deduped there),
+      // then package.json dev/build/start/test only (lint is not), then bin.
+      ['f.command.1', 'command', 'npm install'],
+      ['f.command.2', 'command', 'npm run dev'],
+      ['f.command.3', 'command', 'npm run test'],
+      ['f.command.4', 'command', 'npm run build'],
+      ['f.command.5', 'command', 'npm run start'],
+      ['f.command.6', 'command', 'npx @acme/acme-shop'],
       // Route groups stripped, [id] kept, _private folders skipped, lexicographic file order.
       ['f.route.1', 'route', '/products/[id]'],
       ['f.route.2', 'route', '/checkout'],
       ['f.route.3', 'route', '/'],
       ['f.count.1', 'count', '3'],
       ['f.count.2', 'count', '4'],
-      ['f.count.3', 'count', '5'],
-      ['f.count.4', 'count', '4'],
+      ['f.count.3', 'count', '6'],
+      ['f.count.4', 'count', '5'],
       // build/ and showreel/ test files are NOT counted.
       ['f.count.5', 'count', '2'],
     ]);
     expect(f.facts.filter((x) => x.kind === 'count').map((x) => [x.value, x.unit])).toEqual([
-      [3, 'routes'], [4, 'integrations'], [5, 'commands'], [4, 'features'], [2, 'tests'],
+      [3, 'routes'], [4, 'integrations'], [6, 'commands'], [5, 'features'], [2, 'tests'],
     ]);
     expect(f.minimumGate).toEqual({ passed: true, missing: [] });
     expect(f.brand).toEqual({ name: 'acme-shop', palette: 'violet', wordmark: 'f.app.name.1' });
@@ -122,13 +126,18 @@ describe('facts — fixture extraction (exact ids/kinds/displays)', () => {
       ['f.app.name.1', 'app.name', 'inventory-api'],
       ['f.app.tagline.1', 'app.tagline', 'Track stock across warehouses in real time!'],
       ['f.app.tagline.2', 'app.tagline', 'Stock levels you can trust.'],
+      // README "Quick start" ordered list: the prose step is a feature (ruling f).
+      ['f.feature.1', 'feature', 'Open /docs in a browser'],
       // [project].dependencies (not optional-deps, not [tool.ruff] name), then requirements.txt names.
       ['f.stack.item.1', 'stack.item', 'FastAPI'],
       ['f.stack.item.2', 'stack.item', 'SQLAlchemy'],
       ['f.stack.item.3', 'stack.item', 'Pydantic'],
       ['f.stack.item.4', 'stack.item', 'pytest'],
       ['f.stack.item.5', 'stack.item', 'Uvicorn'],
-      ['f.command.1', 'command', 'inventory'],
+      // README steps: a code span and a bare command line are commands; then [project.scripts].
+      ['f.command.1', 'command', 'pip install -e .'],
+      ['f.command.2', 'command', 'uvicorn inventory.main:app'],
+      ['f.command.3', 'command', 'inventory'],
       // inventory/items.py: APIRouter(prefix="/items") + @router.get("/{id}") → the served path.
       ['f.route.1', 'route', 'GET /items/{id}'],
       ['f.route.2', 'route', 'GET /health'],
@@ -136,11 +145,12 @@ describe('facts — fixture extraction (exact ids/kinds/displays)', () => {
       ['f.route.4', 'route', 'GET /items/{item_id}'],
       ['f.count.1', 'count', '4'],
       ['f.count.2', 'count', '5'],
-      ['f.count.3', 'count', '1'],
+      ['f.count.3', 'count', '3'],
+      ['f.count.4', 'count', '1'],
       // tests/test_items.py + tests/unit/test_stock.py; conftest and .venv excluded.
-      ['f.count.4', 'count', '2'],
+      ['f.count.5', 'count', '2'],
     ]);
-    expect(readFacts(root).facts.filter((x) => x.kind === 'count').map((x) => x.unit)).toEqual(['routes', 'integrations', 'commands', 'tests']);
+    expect(readFacts(root).facts.filter((x) => x.kind === 'count').map((x) => x.unit)).toEqual(['routes', 'integrations', 'commands', 'features', 'tests']);
   });
 
   it('dotnet-mvc: .sln name, csproj PackageReference/Sdk whitelist, attribute + conventional routes; obj ignored', async () => {
@@ -259,7 +269,8 @@ describe('facts — fixture extraction (exact ids/kinds/displays)', () => {
     expect(features).not.toContain('dev-to-qa checkout question');
     // "Stripe payments" is still a feature — but only because the README's Features list claims it,
     // never because a decision memory exists.
-    expect(features).toEqual(['Cart service', 'One-tap checkout', 'Order tracking', 'Stripe payments']);
+    // ("Open localhost:3000" is a README "Getting started" step — a README claim too, ruling f.)
+    expect(features).toEqual(['Cart service', 'One-tap checkout', 'Order tracking', 'Stripe payments', 'Open localhost:3000']);
     const sources = readFacts(root).facts.filter((x) => x.kind === 'feature').map((x) => x.source.file);
     expect(sources.filter((f) => f.includes('/decisions/'))).toEqual([]);
     expect(readFacts(root).facts.find((x) => x.display === 'Stripe payments')!.source.file).toBe('README.md');
@@ -549,9 +560,13 @@ describe('facts — digest budget', () => {
     const byId = new Map(f.facts.map((x) => [x.id, x]));
     expect(out.digest.filter((d: Fact) => d.kind === 'count')).toHaveLength(5);
     for (const d of out.digest) {
-      expect(Object.keys(d).sort()).toEqual(['display', 'id', 'kind', 'unit']);
-      const src = byId.get(d.id)!;
+      const src = byId.get(d.id)! as Fact & { collection: string | null; sequence: number | null };
+      // collection + sequence ride along ONLY on ordered-step facts (ruling f: what a sequential flow may bind)
+      expect(Object.keys(d).sort()).toEqual(src.sequence === null
+        ? ['display', 'id', 'kind', 'unit']
+        : ['collection', 'display', 'id', 'kind', 'sequence', 'unit']);
       expect([d.kind, d.display, d.unit]).toEqual([src.kind, src.display, src.unit]);
+      if (src.sequence !== null) expect([d.collection, d.sequence]).toEqual([src.collection, src.sequence]);
     }
     expect(line.length).toBeLessThan(25000);
   });
@@ -561,7 +576,112 @@ describe('facts — digest budget', () => {
     const { out } = await runFacts(root);
     const f = readFacts(root);
     expect(out.truncated).toBe(0);
-    expect(out.digest).toEqual(f.facts.map((x) => ({ id: x.id, kind: x.kind, display: x.display, unit: x.unit })));
+    type Seq = Fact & { collection: string | null; sequence: number | null };
+    expect(out.digest).toEqual((f.facts as Seq[]).map((x) => ({
+      id: x.id, kind: x.kind, display: x.display, unit: x.unit,
+      ...(x.sequence !== null ? { collection: x.collection, sequence: x.sequence } : {}),
+    })));
+    expect(out.digest.filter((d: { sequence?: number }) => d.sequence !== undefined)).toHaveLength(3);
+  });
+});
+
+// Orchestrator ruling (f): a sequential flow-graph (chain/converge) draws arrows = "this, then this". That claim is
+// only true for items the README itself lists in order, so ONLY ordered lists under a steps-like H2/H3 get a
+// sequence; bullets, other headings and extraction order (package.json script order, file order) never do.
+describe('facts — ordered steps (sequence, ruling f)', () => {
+  type SeqFact = Fact & { collection: string | null; order: number | null; sequence: number | null };
+  const seqOf = (f: FactsJson) => (f.facts as SeqFact[]).filter((x) => x.sequence !== null)
+    .map((x) => [x.id, x.display, x.collection, x.sequence]);
+  const readmeRepo = (readme: string[]) => {
+    const root = tempRepo('js-next');
+    write(root, 'README.md', ['# Acme', '', 'Does things.', '', ...readme, ''].join('\n'));
+    return root;
+  };
+
+  it('js-next: the "Getting started" ordered list → readme.steps.1 with item positions; nothing else is sequenced', async () => {
+    const root = tempRepo('js-next');
+    await runFacts(root);
+    const f = readFacts(root);
+    expect(seqOf(f)).toEqual([
+      ['f.feature.5', 'Open localhost:3000', 'readme.steps.1', 3],
+      ['f.command.1', 'npm install', 'readme.steps.1', 1],
+      ['f.command.2', 'npm run dev', 'readme.steps.1', 2],
+      ['f.command.3', 'npm run test', 'readme.steps.1', 4],
+    ]);
+    const all = f.facts as SeqFact[];
+    // every fact carries the key; package.json scripts (an extraction order, not a claimed order) stay null
+    expect(all.every((x) => 'sequence' in x)).toBe(true);
+    expect(all.filter((x) => x.source.file === 'package.json').every((x) => x.sequence === null)).toBe(true);
+    // the "## Setup" BULLET list is not a sequence (and not a feature either)
+    expect(all.some((x) => x.display.includes('npm install (not'))).toBe(false);
+    // order within an ordered collection is its sequence; per-kind collections keep 1..n
+    for (const x of all.filter((y) => y.sequence !== null)) expect(x.order, x.id).toBe(x.sequence);
+    expect(all.filter((x) => x.collection === 'commands').map((x) => x.order)).toEqual([1, 2, 3]);
+    expect(all.find((x) => x.id === 'f.command.1')!.source).toMatchObject({ file: 'README.md', extractor: 'readme-steps' });
+  });
+
+  it('python-fastapi: a bare command line is a command step; a prose step is a feature', async () => {
+    const root = tempRepo('python-fastapi');
+    await runFacts(root);
+    expect(seqOf(readFacts(root))).toEqual([
+      ['f.feature.1', 'Open /docs in a browser', 'readme.steps.1', 3],
+      ['f.command.1', 'pip install -e .', 'readme.steps.1', 1],
+      ['f.command.2', 'uvicorn inventory.main:app', 'readme.steps.1', 2],
+    ]);
+  });
+
+  it('bullet lists, non-steps headings, H4 headings and a "Features" ordered list get NO sequence', async () => {
+    const root = readmeRepo([
+      '## Installation', '', '- `npm ci`', '- `npm run dev`', '',
+      '## Features', '', '1. Live sync', '2. Offline mode', '',
+      '## Contributing', '', '1. Fork the repo', '2. Open a PR', '',
+      '#### Install', '', '1. `make deploy`', '2. `make clean`', '',
+    ]);
+    await runFacts(root);
+    const f = readFacts(root);
+    expect(seqOf(f)).toEqual([]);
+    // the ordered Features list stays what it was: features without an order claim
+    expect((f.facts as SeqFact[]).filter((x) => x.source.file === 'README.md' && x.kind === 'feature').map((x) => [x.display, x.sequence]))
+      .toEqual([['Live sync', null], ['Offline mode', null]]);
+  });
+
+  it('several step lists → readme.steps.1, .2 …; "1)" items, an unindented fence splits a list, prose ends it', async () => {
+    const root = readmeRepo([
+      '## Quick start', '', '1) `npm ci`', '2) npm run build', '', '   indented continuation', '3) Make sure Node 22 is installed', '',
+      '```bash', 'npm run dev', '```', '',
+      '1. `npm run dev`', '', 'Then enjoy.', '',
+      '1. Restart the server', '', // prose ended the previous list; still under Quick start → a new list
+      '## Usage', '', '1. **Sign in** — with your team account', '2. Invite a teammate', '',
+    ]);
+    await runFacts(root);
+    expect(seqOf(readFacts(root)).map(([, display, collection, sequence]) => [display, collection, sequence])).toEqual([
+      // features first (facts.json is grouped by kind), then commands
+      ['Make sure Node 22 is installed', 'readme.steps.1', 3],
+      ['Restart the server', 'readme.steps.3', 1],
+      ['Sign in', 'readme.steps.4', 1],
+      ['Invite a teammate', 'readme.steps.4', 2],
+      ['npm ci', 'readme.steps.1', 1],
+      ['npm run build', 'readme.steps.1', 2],
+      ['npm run dev', 'readme.steps.2', 1],
+    ]);
+  });
+
+  it('re-run is byte-stable with steps present (ids, sequences and order do not churn)', async () => {
+    const root = tempRepo('js-next');
+    await runFacts(root);
+    const first = readFileSync(factsPath(root));
+    await runFacts(root);
+    expect(readFileSync(factsPath(root)).equals(first)).toBe(true);
+    expect(validate(SCHEMA, readFacts(root))).toEqual([]);
+  });
+
+  it('schema: sequence is an integer >= 1 or null on text facts, always null on counts', () => {
+    const f = { version: 1, minimumGate: { passed: true, missing: [] }, brand: { name: 'a', palette: 'violet', wordmark: null }, facts: [] as unknown[] };
+    const text = { id: 'f.command.1', kind: 'command', value: 'x', display: 'x', unit: null, source: { file: 'README.md', locator: 'line:1', extractor: 't', rule: 't' }, hash: 'sha256:0000000000000000' };
+    const count = { ...text, id: 'f.count.1', kind: 'count', value: 1, display: '1', unit: 'routes' };
+    expect(validate(SCHEMA, { ...f, facts: [{ ...text, sequence: 2 }, { ...text, sequence: null }, text, { ...count, sequence: null }] })).toEqual([]);
+    expect(validate(SCHEMA, { ...f, facts: [{ ...text, sequence: 0 }] })).not.toEqual([]);
+    expect(validate(SCHEMA, { ...f, facts: [{ ...count, sequence: 1 }] })).not.toEqual([]);
   });
 });
 

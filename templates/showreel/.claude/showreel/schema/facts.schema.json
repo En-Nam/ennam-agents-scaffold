@@ -43,6 +43,7 @@
     "hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{16}$" },
     "collection": { "type": ["string", "null"] },
     "order": { "type": ["integer", "null"], "minimum": 1 },
+    "sequence": { "$comment": "set only for items of an explicitly ordered source (README ordered steps); never extraction order", "type": ["integer", "null"], "minimum": 1 },
     "countFact": {
       "type": "object",
       "additionalProperties": false,
@@ -56,6 +57,7 @@
         "source": { "$ref": "#/$defs/source" },
         "collection": { "$ref": "#/$defs/collection" },
         "order": { "$ref": "#/$defs/order" },
+        "sequence": { "type": "null" },
         "hash": { "$ref": "#/$defs/hash" }
       }
     },
@@ -72,6 +74,7 @@
         "source": { "$ref": "#/$defs/source" },
         "collection": { "$ref": "#/$defs/collection" },
         "order": { "$ref": "#/$defs/order" },
+        "sequence": { "$ref": "#/$defs/sequence" },
         "hash": { "$ref": "#/$defs/hash" }
       }
     }

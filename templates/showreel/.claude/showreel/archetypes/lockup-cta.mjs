@@ -31,6 +31,18 @@ const tagSnapW = (cam) => Math.floor((2 * (1824 / 2 - cam.shakeMax - TAG_DRIFT))
 // engine bloom spreads the band ~30 px into their translucent glass), so the light never lifts the background a
 // glyph sits on.
 const KEEP_DIL = 12, KEEP_BOX = 36, KEEP_BLUR = 10, KEEP_FEATHER = 24;
+// PO R5 (c): the command chip is the line the viewer copies, so the light never touches it (nor the CTA pill): their
+// keep-out is padded by KEEP_CHIP — past the engine bloom's reach (quarter-res blur ≈ 20 px σ at full res, so ~3σ),
+// plus the pill's layer drift — and feathered like the title box, so the band fades out well before the chip.
+const KEEP_CHIP = 84;
+// PO R5 (a): the title's resting outer-glow alpha once the slam has settled (was 0.30 throughout).
+// …its resting face opacity (was 1), and the title faces' strength in the sweep re-light (was the full face, ×2 at
+// 0.7: the hold frame IS the sweep cue). The slam frames keep the full face + flash.
+// FACE_REST is a visible change, flagged for PO sign-off: the face's pure-white top stop + the engine bloom clip on
+// their own — halo and re-light cut alone leave 31–34 % of the wordmark ink flat white at the hold (HEAD 38 %), and
+// only face headroom gets below the test's 20 % (0.85 → 28 %, 0.8 → 24 %, 0.75 → 19.8 %, 0.7 → 14.7 %; the
+// acme-shop shape). 0.7 is the first step with real margin; the cost is a slightly paler resting wordmark.
+const HALO_REST = 0.16, FACE_REST = 0.7, TITLE_RELIGHT = 0.12;
 
 export default {
   id: 'lockup-cta',
@@ -115,14 +127,15 @@ export default {
       kg.fillStyle = P.text;
       // title: its whole box (letter gaps at display size are wide enough for the band to lift the background),
       // pill-shaped and feathered outside the KEEP_BOX pad so the band fades out around it instead of a hard slab
+      kg.filter = `blur(${KEEP_FEATHER / 2}px)`;
       if (withTitle) {
         const pad = KEEP_BOX + KEEP_FEATHER, h = asc + desc + 2 * pad;
-        kg.filter = `blur(${KEEP_FEATHER / 2}px)`;
         api.rr(kg, left - pad, titleBase - asc - pad, full + 2 * pad, h, h / 2); kg.fill();
-        kg.filter = 'none';
       }
-      if (cta) { const w = ctaW + ctaPx * 2.4 + 2 * KEEP_BOX, h = ctaH + 2 * KEEP_BOX; api.rr(kg, CX - w / 2, ctaY - h / 2, w, h, h / 2); kg.fill(); }
-      if (command) { const w = pillW + 2 * KEEP_BOX, h = pillH + 2 * KEEP_BOX; api.rr(kg, CX - w / 2, pillY - h / 2, w, h, h / 2); kg.fill(); }
+      const chip = (w0, h0, y) => { const w = w0 + 2 * (KEEP_CHIP + KEEP_FEATHER), h = h0 + 2 * (KEEP_CHIP + KEEP_FEATHER); api.rr(kg, CX - w / 2, y - h / 2, w, h, h / 2); kg.fill(); };
+      if (cta) chip(ctaW + ctaPx * 2.4, ctaH, ctaY);
+      if (command) chip(pillW, pillH, pillY);
+      kg.filter = 'none';
       const k = api.makeCanvas('cache', api.W / 2, api.H / 2);
       k.ctx.filter = `blur(${KEEP_BLUR / 2}px)`; k.ctx.drawImage(ko.canvas, 0, 0); k.ctx.drawImage(ko.canvas, 0, 0); k.ctx.filter = 'none';
       return k;
@@ -157,6 +170,7 @@ export default {
     const CALM = SLAM + 0.8;
     const PILL0 = SLAM + 1.2;
     const ENT = SWEEP + 6 * grid, MARK2 = ENT + 2 * grid;
+    const settle = ease.inOutQuad(clamp((lt - CALM) / 0.8)); // the title's impact glow → its calmer resting grade
     const pulseAt = (t0, decay) => (lt >= t0 ? Math.exp(-(lt - t0) * decay) : 0);
     const cueHit = (t0, decay) => pulseAt(t0, decay);
     const nL = L.letters.length;
@@ -189,7 +203,10 @@ export default {
         if (pass === 'glow') {
           // no sweep boost: brightening the halo fills the letter gaps and costs the title its contrast (the
           // sweep re-lights the faces instead — drawSweepRelight)
-          const a = (0.30 + 0.06 * Math.sin(lt * 2.2 + n) + 0.45 * Math.exp(-Math.max(0, st.dt) * 6) + 0.45 * pulseAt(ENT, 6) + 0.6 * pulseAt(MARK2, 7)) * st.fall * st.fall;
+          // PO R5 (a): the resting halo settles a notch lower once the slam has rung out (crisper edges at the
+          // hold); the slam / ENTER / mark-ignite pulses ride on top unchanged, so the impact frames stay hot
+          const rest = lerp(0.30, HALO_REST, settle) + lerp(0.06, 0.03, settle) * Math.sin(lt * 2.2 + n);
+          const a = (rest + 0.45 * Math.exp(-Math.max(0, st.dt) * 6) + 0.45 * pulseAt(ENT, 6) + 0.6 * pulseAt(MARK2, 7)) * st.fall * st.fall;
           c.globalCompositeOperation = 'lighter';
           c.globalAlpha = clamp(a, 0, 1.4);
           c.drawImage(Lt.glow.canvas, spX, spY);
@@ -201,7 +218,9 @@ export default {
           // the face IS the title text: placed via api.blit so the name gets its frame box (C16 safe area +
           // on-screen coverage); the glow pass above is bloom and stays a plain drawImage
           c.beginPath(); c.rect(Lt.sx, slotTop, Lt.sw, slotBot - slotTop); c.clip();
+          c.globalAlpha = pass === 'relight' ? TITLE_RELIGHT : lerp(1, FACE_REST, settle);
           api.blit(c, Lt.face.canvas, spX, spY);
+          if (pass === 'relight') { c.restore(); continue; }
           const fl = 0.5 * Math.exp(-Math.max(0, st.dt) * 22) * (st.dt >= 0 ? 1 : 0);
           if (fl > 0.02) { c.globalCompositeOperation = 'lighter'; c.globalAlpha = fl; api.blit(c, Lt.face.canvas, spX, spY); }
         }
@@ -332,9 +351,9 @@ export default {
       const t0 = SNAP + 4 * grid, q = ease.outBack(clamp((lt - t0) / 0.4));
       if (q <= 0.01) return;
       const w = L.ctaW + L.ctaPx * 2.4, h = L.ctaH, x = CX - w / 2, y = L.ctaY - h / 2;
-      const hit = cueHit(SWEEP, 5);
+      // no sweep-cued glow pulse: the light sweep leaves the CTA pill untouched (PO R5 c)
       c.save(); c.translate(CX, L.ctaY); c.scale(q, q); c.translate(-CX, -L.ctaY);
-      api.glass(c, x, y, w, h, h / 2, { fill: rgba(P.primary, 0.16), border: rgba(P.primary, 0.8), glowColor: rgba(P.primary, 0.5 + 0.3 * hit), glowBlur: 30 });
+      api.glass(c, x, y, w, h, h / 2, { fill: rgba(P.primary, 0.16), border: rgba(P.primary, 0.8), glowColor: rgba(P.primary, 0.5), glowBlur: 30 });
       api.text(c, L.cta, CX, L.ctaY + L.ctaPx * 0.36, { size: L.ctaPx, weight: 700, track: 1, align: 'center', fill: WH, alpha: clamp((lt - t0) / 0.2) });
       c.restore();
     }
@@ -344,7 +363,7 @@ export default {
       const q = clamp((lt - PILL0) / 0.5); if (q <= 0) return;
       const h = L.pillH, y = L.pillY - h / 2;
       const w = L.pillW * ease.outBack(clamp((lt - PILL0) / 0.45)), x = CX - w / 2;
-      const hit = cueHit(SWEEP, 6) + 1.4 * pulseAt(ENT, 7);
+      const hit = 1.4 * pulseAt(ENT, 7); // ENTER only: the light sweep never touches the command chip (PO R5 c)
       c.save();
       const pd = lt - ENT, press = pd < 0 ? 1 - 0.035 * ease.inQuad(clamp((pd + 0.14) / 0.14)) : 1 + 0.045 * Math.exp(-pd * 11) * Math.cos(pd * 26);
       c.translate(CX, L.pillY); c.scale(press, press); c.translate(-CX, -L.pillY);
@@ -373,16 +392,18 @@ export default {
       c.translate(CX, 540); c.scale(br, br); c.translate(-CX, -540);
     }
     // relight = the sweep's re-lit copy: title faces only (their glow re-lit on top of the sweep's glow boost
-    // blows the letters out into one white smear)
+    // blows the letters out into one white smear), and never the CTA pill or the command chip (PO R5 c)
     function drawLockup(c, relight = false) {
       const lay = (d, fn) => { c.save(); c.translate(Math.sin(lt * 0.7) * d, Math.cos(lt * 0.55) * d * 0.7); fn(); c.restore(); };
       c.save();
       lockupXform(c);
       lay(4, () => drawMark(c));
-      lay(1.5, () => { if (!relight) drawTitle(c, 'glow'); drawTitle(c, 'face'); });
+      lay(1.5, () => { if (!relight) drawTitle(c, 'glow'); drawTitle(c, relight ? 'relight' : 'face'); });
       lay(TAG_DRIFT, () => { drawRule(c); drawTagline(c); });
-      lay(4, () => drawCta(c));
-      lay(5.5, () => drawPill(c));
+      if (!relight) {
+        lay(4, () => drawCta(c));
+        lay(5.5, () => drawPill(c));
+      }
       c.restore();
     }
 

@@ -6,6 +6,7 @@
 // Rolling values are integers 0..number recorded as counter:<id>. Pure function of localT (D9/D10).
 // Containment (R5): every lock flourish (halo, corner flare, rings, sparks, rim flash, check) is clipped to its
 // own card, so a lock never lights a pixel outside that card — neighbours stay clean, the pop stays inside.
+// Readability (PO R5 d): the sparks burst off the number+unit block and are cut out of it — no debris in the digits.
 
 const ROW_MAX = [0, 420, 400, 340, 280];   // number max px by counter count (row) — width/height fit can lower it
 const GRID_MAX = [0, 420, 400, 300, 300];  // (grid) — 340 px cards: the height fit is the real cap
@@ -13,6 +14,8 @@ const AREA_W = 1680, GAP = 40, RADIUS = 26;
 const UNIT_K = 0.13, UNIT_MIN = 40;         // unit px = max(UNIT_MIN, number px × UNIT_K) before its own fit
 // number cap (0.72 px) + unit line below it (≈ 1.95 unit px) must fit the card minus its frame-corner margin
 const V_MARGIN = 80;
+// lock spark burst (api.sparks options; heading a0/a1 set per emitter)
+const SPARK = { sMin: 200, sMax: 900, pow: 1.4, drag: 4, grav: 260, lifeMin: 0.25, lifeMax: 0.6, alpha: 0.8 };
 const pxForHeight = (ch, hasUnit) => Math.floor(hasUnit
   ? Math.min((ch - V_MARGIN) / (0.72 + 1.95 * UNIT_K), (ch - V_MARGIN - 1.95 * UNIT_MIN) / 0.72)
   : (ch - V_MARGIN) / 0.72);
@@ -161,7 +164,40 @@ export default {
       // check badge inside the top-right corner bracket
       const cr = N > 2 ? 20 : 26;
       if (dl >= 0.03) api.checkMark(ctx, x + w - 30 - cr, y + 30 + cr, cr, clamp((dl - 0.03) / 0.35), P.mint);
-      if (dl >= 0) api.sparks(ctx, dl, cx, numCy, 36, 20 + i, { a0: 0, a1: 6.2832, sMin: 200, sMax: 900, pow: 1.4, drag: 4, grav: 260, lifeMin: 0.25, lifeMax: 0.6, alpha: 0.8 }, [HI, P.secondary, P.mint], hash);
+      // lock debris (PO R5 d): sparks burst OFF the value, never across it — they leave from the edges of the
+      // number+unit block, and that block (lock punch included) is cut out of the spark layer, so the locked
+      // digits read clean from the impact frame on
+      if (dl >= 0 && dl <= SPARK.lifeMax) {
+        const pad = L.px * 0.1, pk = 1.08; // pk = the punch's peak scale about (cx, numCy)
+        const mn = api.measure(ctx, cd.item, { size: L.px, weight: 800 });
+        let hw = (mn.width / 2) * pk + pad;
+        const by0 = numCy - (numCy - (cd.numBase - mn.ascent)) * pk - pad;
+        let by1 = numCy + (cd.numBase + mn.descent - numCy) * pk + pad;
+        if (cd.item.unit) {
+          const mu = api.measure(ctx, cd.item, { what: 'unit', size: cd.unitPx, weight: 600, track: 2 });
+          hw = Math.max(hw, mu.width / 2 + pad);
+          by1 = cd.unitBase + mu.descent + pad;
+        }
+        const bx0 = cx - hw, bw = 2 * hw, bh = by1 - by0, cols = [HI, P.secondary, P.mint];
+        ctx.save();
+        ctx.beginPath(); ctx.rect(x, y, w, h); ctx.rect(bx0, by0, bw, bh); ctx.clip('evenodd');
+        // [origin x, origin y, mean heading, spread, count]: 5 up off the top edge, 5 down off the bottom, 2 per
+        // side — each origin jittered along its edge (one hash slot per emitter) and its heading tilted, so the
+        // burst reads as an organic radial spray, not a pattern of ticks
+        const jit = (k) => hash((20 + i) * 31 + k * 1.37);
+        const EMIT = [];
+        for (let k = 0; k < 5; k++) {
+          const ft = (k + 0.1 + 0.8 * jit(k)) / 5, fb = (k + 0.1 + 0.8 * jit(k + 5)) / 5;
+          EMIT.push([bx0 + bw * ft, by0, -Math.PI / 2 + (ft - 0.5) * 1.2, 1.15, 3]);
+          EMIT.push([bx0 + bw * fb, by1, Math.PI / 2 - (fb - 0.5) * 1.2, 1.15, 3]);
+        }
+        for (let k = 0; k < 2; k++) {
+          const fl = (k + 0.15 + 0.7 * jit(k + 10)) / 2, fr = (k + 0.15 + 0.7 * jit(k + 12)) / 2;
+          EMIT.push([bx0, by0 + bh * fl, Math.PI, 0.95, 2], [bx0 + bw, by0 + bh * fr, 0, 0.95, 2]);
+        }
+        EMIT.forEach(([ox, oy, a, s, k], e) => api.sparks(ctx, dl, ox, oy, k, (20 + i) * 16 + e, { ...SPARK, a0: a - s, a1: a + s }, cols, hash));
+        ctx.restore();
+      }
       ctx.restore(); // card clip
       ctx.restore();
     });

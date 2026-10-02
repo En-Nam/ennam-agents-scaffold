@@ -3,25 +3,33 @@
 // place by 0.45 of the beat), then the cue-map hits `card.<i>` (C14) select them in turn — focus band, check pop,
 // edge flash — like a carousel selection, and a light sweep (cue `settle`) re-lights every card once the set is
 // complete. A missing cue throws (no made-up times).
-//   row — glass cards slide in from the right into ghost slots; rows of up to 3 (N ≥ 4 → two rows)
+//   row — glass chip cards slide in from the right into ghost slots; two columns (N = 3…6 → 2…3 rows)
 //   fan — a deck at a glowing pivot swings open like a hand of cards; each card swings out to land
 // Slots: cards (3–6 feature / route / command facts; route + command render mono) · lead (phrase, optional).
 // Every colour comes from params.palette (no literals — static test); text only via api.text (D8). A card's
 // text is drawn only once the card has landed in its final place, so no text is ever drawn off-frame while
 // cards fly in (C16 no-clipping). Pure function of localT (D9/D10): times come from cues / api.grid only.
 
-const ROW_CW = 560, ROW_MIN_CW = 360, ROW_GAP = 40, ROW_HGAP = 28, ROW_PAD = 40, ROW_TAG = 56;
-const FAN_PX = 260, FAN_CY = 548, FAN_R0 = 180, FAN_R1 = 1560, FAN_RT = 880, FAN_TEXT = 76, FAN_SPREAD = 32, FAN_STEP = 12;
+// row cards are chips: [tag tile][title] on one line, check mark in the top-right corner. ROW_TX = title inset
+// (pad + tile + gap), ROW_RPAD = right inset clearing the check mark; text width = card width − ROW_TX − ROW_RPAD.
+const ROW_CW = 646, ROW_MIN_CW = 300, ROW_GAP = 28, ROW_HGAP = 28, ROW_PAD = 32, ROW_TAG = 56, ROW_TX = 110, ROW_RPAD = 56;
+// the fan's pivot sits near the left edge so the titles (956 px out along each card) land near the frame centre
+const FAN_PX = 60, FAN_CY = 548, FAN_R0 = 180, FAN_R1 = 1480, FAN_RT = 800, FAN_TEXT = 76, FAN_SPREAD = 32, FAN_STEP = 12;
 const DEG = Math.PI / 180;
 // every card in place by 0.45 of the beat and fully at rest: LAND_SETTLE ≥ the longest landing motion (text wipe
 // 0.32 s; corners + progress bar 0.3 s; pop decayed) so nothing is still settling at 0.45
 const LAND_BY = 0.45, LAND_SETTLE = 0.32, LAND_REST = 0.3;
 
-/** row variant: cards per row (N ≤ 3 → one row; else two, the first one longer) */
+/**
+ * row variant: cards per row — two columns (3 → 2+1, 4 → 2+2, 5 → 2+2+1, 6 → 2+2+2). PO R5 (b): the engine's
+ * post-FX vignette (core.mjs, radial from 0.35 H) darkens everything past ≈ 380 px from the frame centre, so in a
+ * row of three the outer titles sat out at the frame edges and read grey ("disabled") next to the middle one. Two
+ * columns of chips keep every title's glyphs near the centre, where the vignette is flat.
+ */
 function rowsOf(N) {
-  if (N <= 3) return [N];
-  const a = Math.ceil(N / 2);
-  return [a, N - a];
+  const rows = [];
+  for (let left = N; left > 0; left -= 2) rows.push(Math.min(2, left));
+  return rows;
 }
 
 /**
@@ -74,20 +82,20 @@ export default {
 
     // row (default)
     const rows = rowsOf(N);
-    const ch = rows.length === 1 ? 360 : 290;
+    const ch = rows.length === 3 ? 150 : 180;
     const leadPx = lead ? api.fitSlot('lead', { maxW: 1400, maxPx: 56, weight: 700, track: 1 }) : 0;
-    const maxPx = rows.length === 1 ? 54 : 50;
-    const slotPx = api.fitSlot('cards', { maxW: ROW_CW - 2 * ROW_PAD, maxPx, weight: 600 });
-    const sizes = kindSizes(api, m, items, kinds, ROW_CW - 2 * ROW_PAD, maxPx, slotPx);
+    const maxPx = 50, textMax = ROW_CW - ROW_TX - ROW_RPAD;
+    const slotPx = api.fitSlot('cards', { maxW: textMax, maxPx, weight: 600 });
+    const sizes = kindSizes(api, m, items, kinds, textMax, maxPx, slotPx);
     const px = Math.max(...sizes);
     const textWs = items.map((it, i) => api.measure(m, it, { size: sizes[i], weight: 600 }).width);
-    // each card hugs its own title (spike s2 wizard chips; never wider than ROW_CW, the width fitSlot sized the
-    // text for): the engine's vignette darkens the frame edges, so fixed 560 px cards pushed a short first title
-    // out to the left edge where white text reads grey (R5: the first card's title greyer than the rest)
-    const cws = textWs.map((tw) => Math.max(ROW_MIN_CW, Math.min(ROW_CW, Math.ceil(tw) + 2 * ROW_PAD)));
+    // each chip hugs its own title (spike s2 wizard chips; never wider than ROW_CW, the width fitSlot sized the
+    // text for), so a short title is not pushed out toward the vignetted frame edge by a fixed-width card
+    const cws = textWs.map((tw) => Math.max(ROW_MIN_CW, Math.min(ROW_CW, Math.ceil(tw) + ROW_TX + ROW_RPAD)));
     const head = lead ? 150 + leadPx : 60;
     const blockH = rows.length * ch + (rows.length - 1) * ROW_GAP;
-    const top = Math.round(head + Math.max(0, (1080 - 70 - head - blockH) / 2));
+    // the block is centred on the frame centre (where the vignette is flat) unless the lead needs the room
+    const top = Math.round(Math.max(head, Math.min(540 - blockH / 2, 1080 - 70 - blockH)));
     const cards = [];
     rows.forEach((n, r) => {
       const i0 = cards.length, ws = cws.slice(i0, i0 + n);
@@ -167,7 +175,10 @@ export default {
       const fl = Math.max(0.6 * pulse(land, 7), pulse(sel, 7)); // landing flash, full flash on the selecting cue
       const focus = !settled && i === focusIdx ? 1 : 0;
       const sw = pulse(SETTLE + i * grid * 0.5, 4.5);  // settle re-light, staggered across the set
-      const lit = landed ? 0.35 + 0.65 * Math.max(focus, sw) : 0;
+      const lit = landed ? 0.35 + 0.65 * Math.max(focus, sw) : 0; // glow level: the focus / settle highlight moves
+      // chrome level (frame, corners, tag tile, icon): every landed card stays fully "on" — R5 (b): a card whose
+      // frame and icon fell back to a dim accent once the focus moved on read "disabled", not "traversed"
+      const on = landed ? 0.8 + 0.2 * Math.max(focus, sw) : 0;
       const acc = accents[i % accents.length];
       const r = Math.min(22, h * 0.24);
 
@@ -178,8 +189,10 @@ export default {
         hg.addColorStop(0, mix(P.primary, P.secondary, 0.4, 0.05 + 0.12 * lit + 0.18 * fl)); hg.addColorStop(1, rgba(P.primary, 0));
         c.fillStyle = hg; c.fillRect(x0 + w / 2 - hr, y0 + h / 2 - hr, hr * 2, hr * 2); c.restore();
       }
+      // the frame / tile / icon use the accent lifted toward palette text (mix(acc, P.text, …)): a primary-hue accent
+      // on the same-hue backdrop (violet on violet) otherwise sits at backdrop contrast and reads switched off
       api.glass(c, x0, y0, w, h, r, {
-        fill: rgba(P.ink2, ghost ? 0.5 : 0.7), border: rgba(landed ? acc : P.text, landed ? 0.28 + 0.5 * lit : 0.14),
+        fill: rgba(P.ink2, ghost ? 0.5 : 0.7), border: landed ? mix(acc, P.text, 0.3, 0.3 + 0.55 * on) : rgba(P.text, 0.14),
         glowColor: rgba(P.primary, 0.2 + 0.3 * lit + 0.3 * fl), glowBlur: 30,
       });
       // focus band: the spike's selected-option gradient, held by the active card, flashed on landing
@@ -190,12 +203,12 @@ export default {
         c.fillStyle = api.brand(c, x0, 0, x0 + w, 0, rgba(P.primary, 0.75), rgba(P.secondary, 0.55)); c.fill();
         c.restore();
       }
-      corners(c, x0 + 12, y0 + 12, w - 24, h - 24, Math.min(40, h * 0.22) * ease.outBack(clamp(dl / LAND_REST)) * (landed ? 1 : 0), 0.55 + 0.45 * lit, fl + sw);
+      corners(c, x0 + 12, y0 + 12, w - 24, h - 24, Math.min(40, h * 0.22) * ease.outBack(clamp(dl / LAND_REST)) * (landed ? 1 : 0), 0.55 + 0.45 * on, fl + sw);
 
       // tag tile + kind icon
       const ta = landed ? 1 : 0.35;
-      api.glass(c, tagX, tagY, tagS, tagS, 14, { fill: rgba(acc, 0.12 + 0.14 * lit), border: rgba(acc, 0.5 + 0.4 * lit), alpha: ta, glowColor: landed ? rgba(acc, 0.45) : null, glowBlur: 16 });
-      if (landed) icon(c, cd.kind, tagX + tagS / 2, tagY + tagS / 2, tagS * 0.62, mix(acc, P.text, 0.35));
+      api.glass(c, tagX, tagY, tagS, tagS, 14, { fill: rgba(acc, 0.12 + 0.14 * on), border: mix(acc, P.text, 0.3, 0.5 + 0.4 * on), alpha: ta, glowColor: landed ? rgba(acc, 0.45) : null, glowBlur: 16 });
+      if (landed) icon(c, cd.kind, tagX + tagS / 2, tagY + tagS / 2, tagS * 0.62, mix(acc, P.text, 0.5));
 
       // no placeholder text bars: a shape that stands in for text reads as a missing label (core.mjs placeholder rule)
 
@@ -204,7 +217,8 @@ export default {
         const q = ease.outExpo(clamp(dl / 0.32));
         c.save();
         c.beginPath(); c.rect(tx - 8, base - cd.px * 1.2, (cd.textW + 24) * q + 1, cd.px * 1.8); c.clip();
-        c.shadowColor = rgba(P.primary, 0.6); c.shadowBlur = 10 + 14 * (fl + focus * 0.5);
+        // no shadow glow on the title: the engine's bloom already haloes white type, and a tight primary shadow
+        // under it read as a second, ghosted outline on thin mono strokes (R5 (b): "doubled glow on mono labels")
         api.text(c, cd.item, tx, base + 10 * (1 - q), { size: cd.px, weight: 600, fill: P.text, alpha: clamp(q * 2.5) });
         if (fl > 0.02) { // hot white flash on the glyphs
           c.globalCompositeOperation = 'lighter'; c.shadowBlur = 0;
@@ -293,10 +307,11 @@ export default {
         const geom = (c) => {
           c.translate(cd.cx + ox, cd.cy); c.scale(pop, pop);
           const w = cd.w, h = cd.h, x0 = -w / 2, y0 = -h / 2;
+          // chip: tile and title share the card's vertical centre (baseline 0.36 px below it, as in the fan)
           return {
-            x0, y0, w, h, tx: x0 + ROW_PAD, tagX: x0 + ROW_PAD, tagY: y0 + 34, tagS: ROW_TAG,
-            base: y0 + 34 + ROW_TAG + 30 + L.px * 0.95,
-            bar: { bx: x0 + ROW_PAD, by: y0 + h - 30, bw: w - 2 * ROW_PAD },
+            x0, y0, w, h, tx: x0 + ROW_TX, tagX: x0 + ROW_PAD, tagY: -ROW_TAG / 2 - 4, tagS: ROW_TAG,
+            base: L.px * 0.36 - 4,
+            bar: { bx: x0 + ROW_TX, by: y0 + h - 20, bw: w - ROW_TX - ROW_PAD },
           };
         };
         if (u < 1) { // motion echoes while sliding

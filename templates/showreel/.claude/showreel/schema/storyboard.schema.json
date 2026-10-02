@@ -29,7 +29,7 @@
       "properties": {
         "id": { "type": "string", "pattern": "^b[0-9]{1,2}$" },
         "archetype": { "enum": ["cold-open-command", "kinetic-text", "metrics-counter-lock", "lockup-cta", "flow-graph", "layered-stack", "card-carousel", "orbit-network"] },
-        "variant": { "enum": ["terminal", "stack", "punch", "row", "grid", "center", "converge", "chain", "slabs", "fan", "orbit", "chapter"] },
+        "variant": { "enum": ["terminal", "stack", "punch", "row", "grid", "center", "converge", "chain", "cluster", "slabs", "fan", "orbit", "chapter"] },
         "weight": { "type": "number", "minimum": 0.5, "maximum": 3 },
         "bindings": {
           "type": "object",

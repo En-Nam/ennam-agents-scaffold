@@ -55,11 +55,15 @@
     },
     "flow-graph": {
       "role": "body",
-      "variants": ["converge", "chain"],
+      "variants": ["converge", "chain", "cluster"],
       "minWeight": 1.0,
       "slots": {
         "steps": { "source": "fact", "kinds": ["route", "command", "feature", "stack.item"], "min": 3, "max": 6, "maxChars": 28 },
         "lead": { "source": "phrase", "tags": ["flow"], "min": 0, "max": 1 }
+      },
+      "variantSlots": {
+        "converge": { "steps": { "sequence": true } },
+        "chain": { "steps": { "sequence": true } }
       },
       "cueMaps": [{ "name": "step", "per": "steps", "kind": "snap", "amp": 0.3, "from": 0.15, "to": 0.5 }],
       "defaultCues": [{ "name": "converge", "at": 0.85, "kind": "sweep", "amp": 0.6 }]

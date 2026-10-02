@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validate } from '../../templates/showreel/.claude/showreel/lib/util/schema.mjs';
-import { validateStoryboard } from '../../templates/showreel/.claude/showreel/lib/truth/validate.mjs';
+import { validateStoryboard, slotsFor as slotsOf } from '../../templates/showreel/.claude/showreel/lib/truth/validate.mjs';
 import { resolve } from '../../templates/showreel/.claude/showreel/lib/truth/resolve.mjs';
 import { checkManifest } from '../../templates/showreel/.claude/showreel/lib/truth/manifest.mjs';
 import { offFrame } from '../../templates/showreel/.claude/showreel/lib/truth/safearea.mjs';
@@ -167,7 +167,8 @@ describe('validateStoryboard — mock LLM outputs (AC2)', () => {
   });
 
   it('slot count outside min..max is E_SLOT_COUNT (too many lines; required name missing)', () => {
-    const tooMany = errs(sbWith((b) => { b[1]!.bindings.lines = ['f.feature.1', 'f.feature.2', 'f.stack.item.1', 'f.app.tagline.1']; }));
+    // lead "The essentials" (p.lead.3) is true of all four kinds, so the count is the ONLY error (ruling f)
+    const tooMany = errs(sbWith((b) => { b[1]!.bindings.lines = ['f.feature.1', 'f.feature.2', 'f.stack.item.1', 'f.app.tagline.1']; b[1]!.phrases.lead = 'p.lead.3'; }));
     expect(tooMany).toEqual([expect.objectContaining({ path: '/beats/1/bindings/lines', code: 'E_SLOT_COUNT' })]);
     const missing = errs(sbWith((b) => { delete b[6]!.bindings.name; }));
     expect(missing).toEqual([expect.objectContaining({ path: '/beats/6/bindings/name', code: 'E_SLOT_COUNT' })]);
@@ -382,7 +383,8 @@ describe('M2 archetypes (C13) — slot rules and cue-map override names', () => 
   ].map(([id, kind, display]) => ({ ...clone(FACTS.facts[5]), id, kind, value: display, display }));
   const facts = { ...FACTS, facts: [...FACTS.facts, ...extra] };
   const flow = (mut: (b: Beat) => void = () => {}) => sbWith((b) => {
-    b[1] = { id: 'b2', archetype: 'flow-graph', variant: 'converge', weight: 1, bindings: { steps: ['f.route.1', 'f.route.2', 'f.route.3'] }, phrases: { lead: 'p.flow.1' }, transitionOut: 'column-wipe' };
+    // routes carry no sequence (ruling f), so the unordered "cluster" variant + a phrase that implies no order
+    b[1] = { id: 'b2', archetype: 'flow-graph', variant: 'cluster', weight: 1, bindings: { steps: ['f.route.1', 'f.route.2', 'f.route.3'] }, phrases: { lead: 'p.flow.4' }, transitionOut: 'column-wipe' };
     mut(b[1]);
   });
   const e = (sb: unknown) => errs(sb, ctx({ facts }));
@@ -448,6 +450,162 @@ describe('M2 archetypes (C13) — slot rules and cue-map override names', () => 
     expect(past[0]!.message).toMatch(/step\.0.*step\.2/);
     const noMap = e(flow((b) => { b.cues = [{ name: 'node.0', at: 0.7, kind: 'boom', amp: 1 }]; }));
     expect(noMap).toEqual([expect.objectContaining({ path: '/beats/1/cues/0/name', code: 'E_SCHEMA' })]);
+  });
+});
+
+// Orchestrator ruling (f) — flow-graph truthfulness. chain/converge draw arrows ("this, then this"): a claim only
+// the README's own ordered step list can back. A mock LLM that strings features/stack items/routes into a chain,
+// reorders real steps, or splices two step lists together must be refused, naming the fact; "cluster" (no arrows)
+// takes the same facts without any order claim.
+describe('ruling (f) — E_SLOT_ORDER: sequential flow-graph variants bind ONE ordered step list, ascending', () => {
+  const step = (id: string, kind: string, display: string, collection: string | null, sequence: number | null) =>
+    ({ ...clone(FACTS.facts[5]), id, kind, value: display, display, collection, sequence });
+  const facts = { ...FACTS, facts: [...FACTS.facts,
+    step('f.command.3', 'command', 'npm ci', 'readme.steps.1', 1),
+    step('f.command.4', 'command', 'npm run dev', 'readme.steps.1', 2),
+    step('f.feature.3', 'feature', 'Open localhost:3000', 'readme.steps.1', 3),
+    step('f.command.5', 'command', 'npm test', 'readme.steps.1', 5), // gap at 4 (an untitled item): allowed
+    step('f.command.6', 'command', 'make deploy', 'readme.steps.2', 1),
+    step('f.route.2', 'route', '/cart', 'routes', null),
+    step('f.route.3', 'route', '/account', 'routes', null),
+  ] };
+  const e = (sb: unknown) => errs(sb, ctx({ facts }));
+  const flow = (variant: string, steps: string[], lead: string | null = null) => sbWith((b) => {
+    b[1] = { id: 'b2', archetype: 'flow-graph', variant, weight: 1, bindings: { steps }, phrases: lead ? { lead } : {}, transitionOut: 'cut' };
+  });
+  const ORDERED = ['f.command.3', 'f.command.4', 'f.feature.3', 'f.command.5'];
+
+  it('the fixture facts are C3-valid (sequence is part of the schema)', () => {
+    expect(validate(schema('facts'), facts)).toEqual([]);
+  });
+
+  it('chain and converge accept one collection in ascending sequence, gaps allowed', () => {
+    for (const v of ['chain', 'converge']) {
+      expect(e(flow(v, ORDERED)), v).toEqual([]);
+      expect(e(flow(v, ['f.command.3', 'f.feature.3', 'f.command.5'])), v).toEqual([]);
+    }
+  });
+
+  it('feature / stack.item facts without a sequence in a chain → E_SLOT_ORDER naming each fact', () => {
+    for (const v of ['chain', 'converge']) {
+      const out = e(flow(v, ['f.feature.1', 'f.stack.item.1', 'f.feature.2']));
+      expect(out.map((x) => [x.path, x.code]), v).toEqual([
+        ['/beats/1/bindings/steps/0', 'E_SLOT_ORDER'], ['/beats/1/bindings/steps/1', 'E_SLOT_ORDER'], ['/beats/1/bindings/steps/2', 'E_SLOT_ORDER'],
+      ]);
+      expect(out[1]!.message).toContain('"f.stack.item.1"');
+      expect(out[1]!.message).toContain('b2');
+      expect(out[1]!.message).toContain('"steps"');
+      expect(out[1]!.message).toContain('cluster');
+    }
+    // one unordered fact among real steps is still refused, at its own index
+    expect(e(flow('chain', ['f.command.3', 'f.route.1', 'f.command.4']))).toEqual([expect.objectContaining({ path: '/beats/1/bindings/steps/1', code: 'E_SLOT_ORDER' })]);
+  });
+
+  it('real steps out of order (or repeated) → E_SLOT_ORDER naming the fact that breaks the order', () => {
+    const swapped = e(flow('chain', ['f.command.4', 'f.command.3', 'f.feature.3']));
+    expect(swapped).toEqual([expect.objectContaining({ path: '/beats/1/bindings/steps/1', code: 'E_SLOT_ORDER' })]);
+    expect(swapped[0]!.message).toMatch(/"f\.command\.3" \(sequence 1\) does not follow "f\.command\.4" \(sequence 2\)/);
+    const repeated = e(flow('converge', ['f.command.3', 'f.command.4', 'f.command.4']));
+    expect(repeated).toEqual([expect.objectContaining({ path: '/beats/1/bindings/steps/2', code: 'E_SLOT_ORDER' })]);
+  });
+
+  it('steps from two different ordered lists in one chain → E_SLOT_ORDER naming the foreign fact', () => {
+    const mixed = e(flow('chain', ['f.command.3', 'f.command.4', 'f.command.6']));
+    expect(mixed).toEqual([expect.objectContaining({ path: '/beats/1/bindings/steps/2', code: 'E_SLOT_ORDER' })]);
+    expect(mixed[0]!.message).toContain('"f.command.6"');
+    expect(mixed[0]!.message).toContain('readme.steps.2');
+  });
+
+  it('cluster (no arrows, no order claim) accepts unordered facts, mixed lists and any order', () => {
+    expect(e(flow('cluster', ['f.feature.1', 'f.stack.item.1', 'f.route.1']))).toEqual([]);
+    expect(e(flow('cluster', ['f.command.6', 'f.command.4', 'f.command.3']))).toEqual([]);
+  });
+
+  it('the rule lives in archetypes.json: steps is sequential in converge + chain, never in cluster', () => {
+    const fg = ARCHETYPES.archetypes['flow-graph'];
+    expect(fg.variants).toEqual(['converge', 'chain', 'cluster']);
+    const seq = (v: string) => Boolean(fg.variantSlots?.[v]?.steps?.sequence);
+    expect([seq('converge'), seq('chain'), seq('cluster')]).toEqual([true, true, false]);
+    // cluster keeps the step cue map (cue maps are per archetype, not per variant)
+    expect(fg.cueMaps.map((m: { name: string; per: string }) => [m.name, m.per])).toEqual([['step', 'steps']]);
+  });
+});
+
+describe('ruling (f) — E_PHRASE_KIND: a phrase must be true of every fact it heads', () => {
+  const e = (sb: unknown, c = ctx()) => errs(sb, c);
+  const FACT_KINDS: string[] = schema('facts').$defs.textFact.properties.kind.enum.concat(['count']);
+  const list: { id: string; tags: string[]; kinds?: string[]; variants?: string[]; text: string }[] = PHRASES.phrases;
+
+  it('"Under the hood" over product features → E_PHRASE_KIND naming the phrase and the fact', () => {
+    const out = e(sbWith((b) => { b[1]!.phrases.lead = 'p.lead.2'; })); // b2 lines: f.feature.1, f.feature.2
+    expect(phraseText('p.lead.2')).toBe('Under the hood');
+    expect(out.map((x) => [x.path, x.code])).toEqual([['/beats/1/phrases/lead', 'E_PHRASE_KIND'], ['/beats/1/phrases/lead', 'E_PHRASE_KIND']]);
+    expect(out[0]!.message).toContain('"p.lead.2"');
+    expect(out[0]!.message).toContain('"f.feature.1"');
+    expect(out[1]!.message).toContain('"f.feature.2"');
+    // …and is fine over the stack (b5 lines: f.stack.item.1)
+    expect(e(sbWith((b) => { b[4]!.phrases = { lead: 'p.lead.2' }; }))).toEqual([]);
+  });
+
+  it('one wrong kind in a mixed beat is enough ("Built in" over a feature + a stack item)', () => {
+    const out = e(sbWith((b) => { b[1]!.bindings.lines = ['f.feature.1', 'f.stack.item.1']; b[1]!.phrases.lead = 'p.lead.4'; }));
+    expect(out).toEqual([expect.objectContaining({ path: '/beats/1/phrases/lead', code: 'E_PHRASE_KIND' })]);
+    expect(out[0]!.message).toContain('"f.stack.item.1"');
+  });
+
+  it('a variant-scoped phrase outside its variants → E_PHRASE_KIND ("Step by step" over a cluster)', () => {
+    const extra = ['/cart', '/account'].map((d, i) => ({ ...clone(FACTS.facts[5]), id: `f.route.${i + 2}`, value: d, display: d }));
+    const c = ctx({ facts: { ...FACTS, facts: [...FACTS.facts, ...extra] } });
+    const cluster = (lead: string) => sbWith((b) => {
+      b[1] = { id: 'b2', archetype: 'flow-graph', variant: 'cluster', weight: 1, bindings: { steps: ['f.route.1', 'f.route.2', 'f.route.3'] }, phrases: { lead }, transitionOut: 'cut' };
+    });
+    const out = e(cluster('p.flow.1'), c);
+    expect(out.map((x) => x.code)).toContain('E_PHRASE_KIND');
+    expect(out.find((x) => /variants/.test(x.message))!.message).toContain('"p.flow.1"');
+    expect(e(cluster('p.flow.4'), c)).toEqual([]);
+  });
+
+  it('a phrase with no kinds annotation is refused (it cannot be proven true of anything)', () => {
+    const phrases = clone(PHRASES);
+    delete phrases.phrases.find((p: { id: string }) => p.id === 'p.lead.1').kinds;
+    const out = e(STORYBOARD, ctx({ phrases }));
+    expect(out).toEqual([expect.objectContaining({ path: '/beats/1/phrases/lead', code: 'E_PHRASE_KIND' })]);
+    expect(out[0]!.message).toContain('"p.lead.1"');
+  });
+
+  it('a phrase already refused for its tag is not double-reported (one root cause, one error)', () => {
+    expect(e(sbWith((b) => { b[6]!.phrases.cta = 'p.open.1'; })).map((x) => x.code)).toEqual(['E_SLOT_KIND']);
+  });
+
+  it('every shipped phrase is annotated: non-empty kinds of real fact kinds; variants (when set) are real variants of an archetype its tags fit', () => {
+    for (const p of list) {
+      expect(Array.isArray(p.kinds) && p.kinds.length > 0, p.id).toBe(true);
+      for (const k of p.kinds!) expect(FACT_KINDS, `${p.id} kind ${k}`).toContain(k);
+      if (p.variants === undefined) continue;
+      expect(p.variants.length, p.id).toBeGreaterThan(0);
+      const fitting = Object.values<any>(ARCHETYPES.archetypes)
+        .filter((a) => a.variants.some((v: string) => Object.values<any>(slotsOf(a, v)).some((s) => s.source === 'phrase' && s.tags.some((t: string) => p.tags.includes(t)))))
+        .flatMap((a) => a.variants);
+      for (const v of p.variants) expect(fitting, `${p.id} variant ${v}`).toContain(v);
+    }
+  });
+
+  it('KEEP LITERAL (Rule 9): the named annotations of the ruling hold', () => {
+    const by = (id: string) => list.find((p) => p.id === id)!;
+    expect(by('p.lead.2').kinds).toEqual(['stack.item']); // 'Under the hood' is never a feature lead
+    expect(by('p.flow.1').text).toBe('Step by step');
+    expect([...by('p.flow.1').variants!].sort()).toEqual(['chain', 'converge']);
+  });
+
+  it('>= 3 flow phrases may head a cluster, and none of them implies an order', () => {
+    const forCluster = list.filter((p) => p.tags.includes('flow') && (!p.variants || p.variants.includes('cluster')));
+    expect(forCluster.length).toBeGreaterThanOrEqual(3);
+    for (const p of forCluster) expect(p.text, p.id).not.toMatch(/step|then|first|next|start|finish|flow|order/i);
+    // the order-implying flow phrases are all limited to the sequential variants
+    for (const p of list.filter((x) => x.tags.includes('flow') && /step|start|finish|flow/i.test(x.text))) {
+      expect(p.variants, p.id).toBeDefined();
+      expect(p.variants, p.id).not.toContain('cluster');
+    }
   });
 });
 
