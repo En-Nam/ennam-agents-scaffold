@@ -24,7 +24,7 @@ Makes a 1920x1080@60 H.264 + AAC film of **this** repo, exactly 15, 30, 45 or 60
 
 1. Parse the duration: `15`, `30`, `45` or `60`; no argument → `30`. Anything else → ask the user to pick one of the four. Do not guess.
 2. Give the cost/time note above in one or two lines.
-3. Delegate to the **motion-designer** agent with the duration. It follows its fixed procedure (preflight → facts → storyboard → 3–5 QA rounds → transition critic → render --final → verify) and returns the report.
+3. Delegate to the **motion-designer** agent with the duration. It follows its fixed procedure (preflight → facts → storyboard → 3–5 QA rounds → transition critic → render --final → verify) and returns the report. If you cannot start a subagent (for example a headless run without the Agent tool), Read `.claude/agents/motion-designer.md` and follow its procedure yourself, word for word — same steps, same boundaries, same report — and say in the report that it ran inline.
 4. Relay the agent's report to the user unchanged in substance: film path, QA rounds n/5, critic findings, verify JSON, measured timings, tokens, any GPU notice, the cluster disclosure if present, and anything skipped.
 
 Never edit `.claude/showreel/**`, app code or `showreel/facts.json` to make a film pass. Runbook: `docs/agents-scaffold/showreel.md`.

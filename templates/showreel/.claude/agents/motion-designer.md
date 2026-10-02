@@ -17,6 +17,7 @@ You skip the full Serena Session Boot Protocol (INDEX → services → comms →
 - No free text anywhere in the storyboard: every string is an enum, a fact id (`f.<kind>.<n>`) from the digest, or a phrase id (`p.<tag>.<n>`) from `.claude/showreel/phrases.json`. Never type copy, numbers or names yourself — the resolver rejects it and the film must not claim anything the code does not.
 - Run every command from the repo root. Each prints ONE JSON line: `{"ok":true,…}` or `{"ok":false,"error":{code,message,fix}}`. On `ok:false`, read `error.fix`; fix the storyboard if the error is about the storyboard, otherwise STOP and report the error verbatim.
 - Never skip a step silently (Rule 12). Anything not done goes in the report under "Skipped".
+- Long commands: run `preflight`, `check --sheet` and `render --final` with the Bash tool timeout set to 600000 ms (first-run `npm ci` and a final render each take minutes). If a command is killed by a timeout (no JSON line printed), do not retry it and do not change anything: STOP and report it under "Skipped" with the elapsed time.
 
 ## Procedure (fixed, linear — do not reorder)
 
@@ -33,14 +34,15 @@ Record a wall-clock start: `node -e "console.log(Date.now())"`.
    - **flow-graph:** the sequential variants (`chain`, `converge` — they draw arrows) ONLY when the digest has a sequence collection (entries with `collection` + `sequence`); bind facts from ONE collection in ascending `sequence`. Otherwise use `cluster`, even if the arrangement says `converge`.
    - **Phrases:** a phrase is allowed only if its `tags` include the slot's tag, its `kinds` include the kind of EVERY fact bound in that beat, and its `variants` (if present) include the beat's variant. Otherwise leave the phrase slot out.
 5. **QA rounds — minimum 3, maximum 5.** Each round:
-   1. `node .claude/showreel/cli.mjs check --sheet`
+   1. `node .claude/showreel/cli.mjs check --sheet` — if it returns `ok:false`, no new sheet was written: skip sub-steps 2–3 this round (report the sheet as "none — check failed: <code>"), fix the error in sub-step 4, and go on.
    2. copy the sheet so each round keeps its own file: `node -e "require('fs').copyFileSync('showreel/build/sheet.png','showreel/build/sheet-r<n>.png')"`
    3. Read `showreel/build/sheet-r<n>.png` and judge it: hierarchy, pacing, repetition, crowding, clipped/tiny text, weak binding choices.
    4. Edit the storyboard (enums, weights, bindings, phrase ids, variants, transitions only). Record what changed and why.
    You may stop early only after round 3 and only if round 3 needed no change. Never exceed 5 rounds. If `check` errors, fixing the error counts as that round's change. Keep `flowVariantReason` if `check` prints it.
-6. **Transition critic** — review every `transitionOut` and beat-to-beat pairing either inline, or by dispatching ONE reviewer subagent that reads the latest sheet + storyboard and returns ONLY a JSON array `[{beatId, issue, enumPatch}]` (enumPatch = enum field changes for that beat, e.g. `{"transitionOut":"cut"}`). Apply accepted patches; run `check` once more if anything changed. Record findings and which were applied/rejected and why.
+6. **Transition critic** — review every `transitionOut` and beat-to-beat pairing inline (the default; required when no subagent tool is available), or by dispatching ONE reviewer subagent that reads the latest sheet + storyboard and returns ONLY a JSON array `[{beatId, issue, enumPatch}]` (enumPatch = enum field changes for that beat, e.g. `{"transitionOut":"cut"}`). Apply accepted patches; run `check` once more if anything changed. Record findings and which were applied/rejected and why.
 7. **Render** — `node .claude/showreel/cli.mjs render --final`. Keep the whole ok JSON (`out`, `timings`, `gpu`, `renderer`, `verify`, `notice?`, `flowVariantReason?`).
 8. **Verify** — `node .claude/showreel/cli.mjs verify`; keep its JSON. Record a wall-clock end with the same `node -e` line.
+   On `E_VERIFY` (from render or verify): re-run the same render command ONCE, as its `error.fix` says; if it fails again, STOP and report both error JSONs verbatim — the film stays at `showreel/build/<name>.unverified.mp4` and is not published.
 9. **Report + checkpoint** — write the final report below, then write your session checkpoint (`checkpoint/motion-designer-<YYYY-MM-DD>`) via Serena MCP if available; if not, say so in the report.
 
 ## Final report (all sections required)
