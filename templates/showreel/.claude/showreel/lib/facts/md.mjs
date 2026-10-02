@@ -39,10 +39,10 @@ export function bullet(line) {
   return m ? m[1] : null;
 }
 
-/** Top-level (unindented) ORDERED list item ("1. x" / "1) x") → raw item text, else null. */
+/** Top-level (unindented) ORDERED list item ("1. x" / "1) x") → {num, text} (num = the number written), else null. */
 export function orderedItem(line) {
-  const m = /^\d+[.)]\s+(.*\S)\s*$/.exec(line);
-  return m ? m[1] : null;
+  const m = /^(\d+)[.)]\s+(.*\S)\s*$/.exec(line);
+  return m ? { num: Number(m[1]), text: m[2] } : null;
 }
 
 /** Remove images, unwrap links, drop emphasis/code markers, collapse whitespace. */

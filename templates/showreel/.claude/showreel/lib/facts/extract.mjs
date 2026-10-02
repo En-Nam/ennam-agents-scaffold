@@ -40,11 +40,16 @@ export async function extractFacts(hostRoot) {
   // app.name: a manifest name wins; the README H1 is the fallback. Exactly one.
   const names = candidates.filter((c) => c.kind === 'app.name');
   const name = names.find((c) => c.source.extractor !== 'readme-h1') ?? names[0];
+  // Dedup by kind + display — but a sequenced step is never dropped (its gap would be a silent hole in the flow):
+  // it is keyed by its own collection + sequence, and an unsequenced duplicate of it yields to it.
+  const base = (c) => `${c.kind}\u0000${c.display}`;
+  const stepTexts = new Set(candidates.filter((c) => c.sequence != null).map(base));
   const seen = new Set();
   const picked = [];
   for (const c of candidates) {
     if (c.kind === 'app.name' && c !== name) continue;
-    const key = `${c.kind}\u0000${c.display}`;
+    if (c.sequence == null && stepTexts.has(base(c))) continue;
+    const key = c.sequence != null ? `${base(c)}\u0000${c.collection}\u0000${c.sequence}` : base(c);
     if (seen.has(key)) continue;
     seen.add(key);
     picked.push(c);

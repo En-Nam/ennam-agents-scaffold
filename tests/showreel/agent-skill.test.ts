@@ -53,12 +53,34 @@ describe('motion-designer agent + /showreel skill', () => {
     expect(agent).toMatch(/sequential variants[\s\S]{0,120}ONLY when the digest has a sequence collection/);
     expect(agent).toContain('Otherwise use `cluster`');
     expect(agent).toContain('flowVariantReason: "no-sequence-source"');
-    expect(agent).toContain('Flow beat shown as a cluster: no ordered setup/usage list found in README, so no step order is claimed.');
+    expect(agent).toContain('Flow beat shown as a cluster: no ordered setup/usage list of 3 or more steps found in README, so no step order is claimed.');
+  });
+
+  // Orchestrator item: in a headless run the agent only sees a partial self-count of its own turns; relaying it
+  // (or a guess) put a wrong token figure in the report. The authoritative number is the harness usage.
+  it('Tokens: never an estimate or partial self-count — exact "not measured by the agent" line pointing at the harness usage', () => {
+    const report = agent.slice(agent.indexOf('## Final report'));
+    expect(report).toContain('"not measured by the agent — read the harness usage (e.g. claude -p --output-format json modelUsage)"');
+    expect(report).toMatch(/ONLY when you can read the session's authoritative usage/);
+    expect(report).toContain('never relay a partial self-count');
+    expect(report).not.toMatch(/write "not measured" —/);
+  });
+
+  // Orchestrator item: a headless / untrusted-workspace run has no Serena MCP; hand-writing .serena/memories
+  // bypasses Serena's index (CLAUDE.md Serena MCP Protocol). The report must say the checkpoint was not written.
+  it('checkpoint: Serena unavailable → report "checkpoint not written — <why>"; never hand-writes .serena/memories', () => {
+    const step9 = agent.slice(agent.indexOf('9. **Report + checkpoint**'), agent.indexOf('## Final report'));
+    expect(step9).toContain('checkpoint not written — <why>');
+    expect(step9).toMatch(/NEVER hand-write `\.serena\/memories\/` files/);
+    const report = agent.slice(agent.indexOf('## Final report'));
+    expect(report).toContain('**Checkpoint:**');
+    expect(report).toContain('"checkpoint not written — <why>"');
+    expect(report).toMatch(/Never hand-written into `\.serena\/memories\/`/);
   });
 
   it('report carries every required field (Rule 12)', () => {
     const report = agent.slice(agent.indexOf('## Final report'));
-    for (const field of ['QA rounds: n/5', 'sheet path', 'Transition critic', 'verify JSON', 'Timings (measured)', 'Tokens', 'context-weighted', 'GPU notice', 'Cluster disclosure', 'Skipped']) {
+    for (const field of ['QA rounds: n/5', 'sheet path', 'Transition critic', 'verify JSON', 'Timings (measured)', 'Tokens', 'context-weighted', 'GPU notice', 'Cluster disclosure', 'Checkpoint', 'Skipped']) {
       expect(report, field).toContain(field);
     }
   });
@@ -75,5 +97,16 @@ describe('motion-designer agent + /showreel skill', () => {
     expect(skill).toContain('~111 MB');
     expect(skill).not.toContain('~200 MB');
     expect(skill).toContain('**motion-designer** agent');
+  });
+
+  // Orchestrator item: the only measurements so far come from one dev box; quoting them bare reads as a promise
+  // to every user. Each shipped measured figure must carry its single-machine provenance.
+  it('measured figures in README / SKILL say they come from ONE plugin-heavy Windows machine (RTX 5070 Ti)', () => {
+    const readme = readFileSync(path.resolve(ADDON, '..', 'README.md'), 'utf8');
+    for (const [name, src] of [['README', readme], ['skill', skill]] as const) {
+      const line = src.split('\n').find((l) => l.includes('~111 MB'))!;
+      expect(line, name).toMatch(/plugin-heavy Windows machine with an RTX 5070 Ti/);
+      expect(line, name).toMatch(/typical-user number/);
+    }
   });
 });

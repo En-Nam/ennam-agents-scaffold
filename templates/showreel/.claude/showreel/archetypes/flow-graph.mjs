@@ -27,7 +27,7 @@
 // Timing: node i lights on step.<i>; a still taken before the last step cue (the contact-sheet hold sits there
 // when the cue map's `to` reaches past it) shows that node unlit with its edge in flight — a cue-map matter.
 // Accepted vignette floor: within the ≥ 65% width floor the outermost label still sits off-axis, so the vignette
-// leaves it ≈ 0.91 of the centre label on the real films' sheet hold (HEAD 2662418: 0.855), and 28-char labels in
+// leaves it ≈ 0.91 of the centre label on the real films' sheet hold, and 28-char labels in
 // three columns ≈ 0.80; the module itself draws every lit label at full brightness (PO R5 (b) test, de-vignetted).
 // Parity needs an engine-side vignette change, not an archetype one.
 // Slots: steps (3–6 facts; route/command render mono) · lead (flow phrase, optional, screen-fixed header).
@@ -158,7 +158,7 @@ export default {
     const links = !cluster ? [] : nodes.map((n) => {
       const B = [n.x, n.y + (n.row === 0 ? 1 : -1) * (PH / 2)], dx = B[0] - hub.x, dy = B[1] - hub.y, d = Math.hypot(dx, dy) || 1;
       const A = [hub.x + (dx / d) * HUB_R, hub.y + (dy / d) * HUB_R];
-      return { a: -1, b: n.i, undirected: true, pts: curve(A, [A[0] + (B[0] - A[0]) / 3, A[1] + (B[1] - A[1]) / 3], [A[0] + (2 * (B[0] - A[0])) / 3, A[1] + (2 * (B[1] - A[1])) / 3], B) };
+      return { b: n.i, pts: curve(A, [A[0] + (B[0] - A[0]) / 3, A[1] + (B[1] - A[1]) / 3], [A[0] + (2 * (B[0] - A[0])) / 3, A[1] + (2 * (B[1] - A[1])) / 3], B) };
     });
 
     // converge: alternative routes between consecutive steps of the same row — nested arches from node i-1's
@@ -200,7 +200,7 @@ export default {
     const gc = (Math.min(...ys) + Math.max(...ys)) / 2;
     const leadW = lead ? api.measure(m, lead, { size: leadPx, weight: 700, track: 4 }).width - 4 : 0;
     // cluster hub halo: a soft brand glow, transparent at the rim (no ring edge that could read as a shape)
-    SPR.halo = [[0, api.rgba(P.primary, 0.32)], [0.45, api.rgba(P.secondary, 0.12)], [1, api.rgba(P.secondary, 0)]];
+    if (cluster) SPR.halo = [[0, api.rgba(P.primary, 0.32)], [0.45, api.rgba(P.secondary, 0.12)], [1, api.rgba(P.secondary, 0)]];
     return { chain, cluster, N, rows, px, PH, PADX, RAD, nodes, origin, pathEdges, links, hub, fan, SPR, gc, lead, leadPx, leadW };
   },
 

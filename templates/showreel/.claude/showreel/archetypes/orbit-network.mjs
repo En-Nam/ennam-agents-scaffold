@@ -721,7 +721,7 @@ export default {
     sucked(() => { hud(); hubLabel(); });
     singularity();
     // badges LAST, back to front (R5 legibility): no ring / beam / pulse / spark / relay is ever drawn over a label.
-    // Accepted visual changes vs the M1/HEAD-c4af0fa z-sort (badges interleaved with brain / beams / memory cells):
+    // Accepted visual changes vs a z-sort that interleaves the badges with brain / beams / memory cells:
     //   (a) a badge behind the core (z < 0) now paints over front memory cells and beams — legibility over depth cue;
     //   (b) through the exit collapse the shrinking badges paint over the singularity (rings + white-hot core) until
     //       winFade / sysScale take them out — they read as falling INTO the point, not behind it.

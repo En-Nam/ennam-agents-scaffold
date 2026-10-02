@@ -31,7 +31,7 @@ Record a wall-clock start: `node -e "console.log(Date.now())"`.
 4. **Write `showreel/storyboard.json`** — `{version:1, durationS:N, seed, palette?, beats:[{id:"b1"…, archetype, variant, weight, bindings{slot: factId|[factId]}, phrases{slot: phraseId}, transitionOut, cues?}]}`.
    - Start from `arrangements[N]`; keep its beat count (15→4–5, 30→7–8, 45→10–11, 60→13–14), first beat `cold-open-command`, last beat `lockup-cta`.
    - Bind each slot with digest fact ids whose kind the slot allows, within its min/max.
-   - **flow-graph:** the sequential variants (`chain`, `converge` — they draw arrows) ONLY when the digest has a sequence collection (entries with `collection` + `sequence`); bind facts from ONE collection in ascending `sequence`. Otherwise use `cluster`, even if the arrangement says `converge`.
+   - **flow-graph:** the sequential variants (`chain`, `converge` — they draw arrows) ONLY when the digest has a sequence collection (entries with `collection` + `sequence`) of at least 3 usable steps (the steps slot min, kinds and maxChars); bind facts from ONE collection in ascending `sequence`. Otherwise use `cluster`, even if the arrangement says `converge`.
    - **Phrases:** a phrase is allowed only if its `tags` include the slot's tag, its `kinds` include the kind of EVERY fact bound in that beat, and its `variants` (if present) include the beat's variant. Otherwise leave the phrase slot out.
 5. **QA rounds — minimum 3, maximum 5.** Each round:
    1. `node .claude/showreel/cli.mjs check --sheet` — if it returns `ok:false`, no new sheet was written: skip sub-steps 2–3 this round (report the sheet as "none — check failed: <code>"), fix the error in sub-step 4, and go on.
@@ -43,7 +43,7 @@ Record a wall-clock start: `node -e "console.log(Date.now())"`.
 7. **Render** — `node .claude/showreel/cli.mjs render --final`. Keep the whole ok JSON (`out`, `timings`, `gpu`, `renderer`, `verify`, `notice?`, `flowVariantReason?`).
 8. **Verify** — `node .claude/showreel/cli.mjs verify`; keep its JSON. Record a wall-clock end with the same `node -e` line.
    On `E_VERIFY` (from render or verify): re-run the same render command ONCE, as its `error.fix` says; if it fails again, STOP and report both error JSONs verbatim — the film stays at `showreel/build/<name>.unverified.mp4` and is not published.
-9. **Report + checkpoint** — write the final report below, then write your session checkpoint (`checkpoint/motion-designer-<YYYY-MM-DD>`) via Serena MCP if available; if not, say so in the report.
+9. **Report + checkpoint** — write the final report below, then write your session checkpoint (`checkpoint/motion-designer-<YYYY-MM-DD>`) via Serena MCP if available. If Serena MCP is unavailable (e.g. a headless run or an untrusted workspace), the report must say "checkpoint not written — <why>". NEVER hand-write `.serena/memories/` files (no Write/Edit/shell on them) — not even as a fallback.
 
 ## Final report (all sections required)
 
@@ -52,7 +52,8 @@ Record a wall-clock start: `node -e "console.log(Date.now())"`.
 - **Transition critic:** findings, applied / rejected (why).
 - **Verify:** the verify JSON verbatim.
 - **Timings (measured):** the render `timings` (ms) and total wall clock from your start/end stamps. Never estimate a timing you did not measure.
-- **Tokens:** fresh (new input + output) and context-weighted (sum of context size over turns), per P2. Take them from the session's usage readout; if you cannot read them, write "not measured" — never guess.
+- **Tokens:** fresh (new input + output) and context-weighted (sum of context size over turns), per P2 — ONLY when you can read the session's authoritative usage. Otherwise write exactly: "not measured by the agent — read the harness usage (e.g. claude -p --output-format json modelUsage)". Never estimate tokens and never relay a partial self-count.
 - **GPU notice:** repeat verbatim any `gpuNotice` (preflight) / `notice` (render), e.g. "no GPU detected — motion blur reduced (S=1)". "None" if both were null.
-- **Cluster disclosure:** when `check` or `render` printed `flowVariantReason: "no-sequence-source"`, say: "Flow beat shown as a cluster: no ordered setup/usage list found in README, so no step order is claimed."
+- **Cluster disclosure:** when `check` or `render` printed `flowVariantReason: "no-sequence-source"`, say: "Flow beat shown as a cluster: no ordered setup/usage list of 3 or more steps found in README, so no step order is claimed."
+- **Checkpoint:** written (memory name), or "checkpoint not written — <why>" when Serena MCP is unavailable. Never hand-written into `.serena/memories/`.
 - **Skipped:** anything not done, and why (Rule 12). "Nothing" only if that is true.

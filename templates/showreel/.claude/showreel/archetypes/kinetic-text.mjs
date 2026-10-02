@@ -413,7 +413,7 @@ function drawPunch(ctx, lt, p, first, enterAt, streakAt) {
   const hq = ease.outCubic(clamp((lt - first) / 0.5));
   if (hq > 0) {
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
-    // PO R5 (a): base 0.13 → 0.09 (cooler hold halo), pulse 0.10 → 0.14 (the slam still flares)
+    // PO R5 (a): a low base keeps the hold halo cool; the pulse term keeps the slam flaring
     const hr = Math.max(340, L.heroW * 0.45), al = (0.09 + 0.14 * pulse) * hq;
     api.glowDot(ctx, cx - L.heroW * 0.25, cy, hr, al, api.hexToRgb(P.primary).join(','));
     api.glowDot(ctx, cx + L.heroW * 0.25, cy, hr, al, api.hexToRgb(P.secondary).join(','));
@@ -486,7 +486,7 @@ function drawPunch(ctx, lt, p, first, enterAt, streakAt) {
       ctx.save();
       ctx.beginPath(); ctx.rect(x0 - GP, spY - (ECHO_MAX + 8), xr - x0 + 2 * GP, pc.sh + ECHO_MAX + 8); ctx.clip();
       ctx.globalCompositeOperation = 'lighter';
-      // PO R5 (a): shimmer 0.06 → 0.04 and slam coefficient 0.5 → 0.68 (stronger slam keeps impact > the cooler hold)
+      // PO R5 (a): a small shimmer and a strong slam coefficient keep the impact above the cooler hold
       ctx.globalAlpha = clamp((HOLD_BLOOM + 0.04 * Math.sin(lt * 2.2 + i + j) + 0.68 * heat0 + 0.2 * pulse) * fade, 0, 1);
       ctx.drawImage(pc.glow.canvas, x0 - GP, spY); // bloom, not text: no manifest box (C16 does not judge glow)
       ctx.globalAlpha = 1;
@@ -515,7 +515,7 @@ function drawPunch(ctx, lt, p, first, enterAt, streakAt) {
         }
       } else {
         ctx.save();
-        // PO R5 (a): settled-face halo 0.5/blur 10 → 0.35/blur 6 (softer haloed edges at the hold)
+        // PO R5 (a): a light, tight settled-face halo (soft haloed edges at the hold)
         ctx.shadowColor = rgba(P.primary, 0.35); ctx.shadowBlur = 6;
         api.text(ctx, row.item, x0, base, { ...po, fill: metal(ctx, api, base - pc.asc, base, PUNCH_SILVER), alpha: fade });
         ctx.restore();

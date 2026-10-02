@@ -666,6 +666,68 @@ describe('facts — ordered steps (sequence, ruling f)', () => {
     ]);
   });
 
+  // Release-gate finding: the commonest README layout puts each step's command in an unindented fence under the
+  // item. Splitting there turned one 3-step setup into three 1-step "sequences" (no flow-graph could bind it) —
+  // the README's own numbers say it is ONE sequence 1, 2, 3, and the trailing ':' is layout, not the step name.
+  it('fenced layout "1. Install dependencies:" / fence / "2. …" → ONE collection, sequence = the written numbers, no trailing ":"', async () => {
+    const root = readmeRepo([
+      '## Getting started', '',
+      '1. Install dependencies:', '', '```bash', 'npm ci', '```', '',
+      '2. Configure the database:', '', '```bash', 'cp .env.example .env', '```', '',
+      'Edit the values as needed.', '',
+      '3. Start the server:', '', '```bash', 'npm run dev', '```', '',
+    ]);
+    await runFacts(root);
+    expect(seqOf(readFacts(root)).map(([, display, collection, sequence]) => [display, collection, sequence])).toEqual([
+      ['Install dependencies', 'readme.steps.1', 1],
+      ['Configure the database', 'readme.steps.1', 2],
+      ['Start the server', 'readme.steps.1', 3],
+    ]);
+  });
+
+  it('lazy "1. 1. 1." numbering in one list reads 1, 2, 3 (the rendered numbers); a restart after a fence opens the next collection', async () => {
+    const root = readmeRepo([
+      '## Setup', '', '1. Clone the repo', '1. Install the tools', '1. Run the app', '',
+      '```bash', 'make', '```', '',
+      '1. Sign in', '2. Invite a teammate', '',
+    ]);
+    await runFacts(root);
+    expect(seqOf(readFacts(root)).map(([, display, collection, sequence]) => [display, collection, sequence])).toEqual([
+      ['Clone the repo', 'readme.steps.1', 1],
+      ['Install the tools', 'readme.steps.1', 2],
+      ['Run the app', 'readme.steps.1', 3],
+      ['Sign in', 'readme.steps.2', 1],
+      ['Invite a teammate', 'readme.steps.2', 2],
+    ]);
+  });
+
+  // !skipLevel guard: a steps-like H3 inside a NOT_SHIPPED H2 describes unbuilt work — drawing it as "this, then
+  // this" would claim a flow the product does not have.
+  it('"## Roadmap > ### Setup" ordered list gets NO sequence', async () => {
+    const root = readmeRepo(['## Roadmap', '', '### Setup', '', '1. Self-hosted installer', '2. One-click deploy', '']);
+    await runFacts(root);
+    expect(seqOf(readFacts(root))).toEqual([]);
+  });
+
+  // Release-gate finding: dedup by kind+display silently dropped a sequenced step whose text repeated (a second
+  // list, or an earlier unsequenced source such as a package.json script) — leaving a hole in the flow.
+  it('a step text repeated across two step lists (and as a package.json script) keeps BOTH sequenced steps', async () => {
+    const root = readmeRepo([
+      '## Quick start', '', '1. `npm ci`', '2. `npm run dev`', '',
+      '## Usage', '', '1. `npm run dev`', '2. Open the app', '',
+    ]);
+    await runFacts(root);
+    const f = readFacts(root);
+    expect(seqOf(f).map(([, display, collection, sequence]) => [display, collection, sequence])).toEqual([
+      ['Open the app', 'readme.steps.2', 2],
+      ['npm ci', 'readme.steps.1', 1],
+      ['npm run dev', 'readme.steps.1', 2],
+      ['npm run dev', 'readme.steps.2', 1],
+    ]);
+    // the unsequenced duplicate yields to the sequenced steps (no third "npm run dev")
+    expect((f.facts as SeqFact[]).filter((x) => x.kind === 'command' && x.display === 'npm run dev')).toHaveLength(2);
+  });
+
   it('re-run is byte-stable with steps present (ids, sequences and order do not churn)', async () => {
     const root = tempRepo('js-next');
     await runFacts(root);

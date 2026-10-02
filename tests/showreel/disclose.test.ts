@@ -52,6 +52,15 @@ describe('flowVariantReason (cluster disclosure)', () => {
     expect(disclosure(board('cluster'), facts)).toEqual({});
   });
 
+  // Release-gate decision: a 2-item ordered list carries `sequence` but can never fill a sequential flow
+  // (steps slot min 3), so the cluster drawn instead is just as unordered — staying silent would hide that.
+  it('a 2-item ordered list (below the steps slot min of 3) is no sequence source → still disclosed', async () => {
+    const { facts } = await extractFacts(repo(PLAIN + '\n## Getting started\n\n1. Install the dependencies\n2. Start the dev server\n'));
+    expect(facts.facts.filter((f: { sequence?: number | null }) => f.sequence != null)).toHaveLength(2);
+    expect(flowVariantReason(board('cluster'), facts)).toBe('no-sequence-source');
+    expect(disclosure(board('cluster'), facts)).toEqual({ flowVariantReason: 'no-sequence-source' });
+  });
+
   it('no cluster beat → nothing to disclose (arrow variants are already validated against sequence)', async () => {
     const { facts } = await extractFacts(repo(PLAIN));
     expect(disclosure(board('converge'), facts)).toEqual({});

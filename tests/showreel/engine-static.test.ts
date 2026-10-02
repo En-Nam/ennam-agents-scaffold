@@ -91,6 +91,19 @@ describe('engine static guards (D9 canvas roles, D8 text API)', () => {
     expect(hits).toEqual([]);
   });
 
+  // Release-gate review: shipped comments carried commit hashes and "a → b" value histories — meaningless in a user's
+  // repo (no such commits) and stale on the next tune. Comments keep the reason + the current value; history is git's.
+  it('shipped engine / archetype comments carry no commit hashes, "HEAD <sha>" refs or "(was …)" value histories', async () => {
+    const hits: string[] = [];
+    for (const f of await engineSources()) {
+      readFileSync(f, 'utf8').split('\n').forEach((line, i) => {
+        const c = line.indexOf('//') >= 0 ? line.slice(line.indexOf('//')) : '';
+        if (/HEAD[\s-]*[0-9a-f]{7}|\b(?=[0-9a-f]*[a-f])(?=[0-9a-f]*\d)[0-9a-f]{7,40}\b|\(was\b|\d\s*→\s*\d[\d./]*\s*\(/.test(c)) hits.push(`${rel(f)}:${i + 1}`);
+      });
+    }
+    expect(hits).toEqual([]);
+  });
+
   it('grapheme clusters have ONE implementation (engine/text.mjs, api.clusters): no archetype keeps its own copy', async () => {
     // A fix to combining-mark handling (Vietnamese glyphs) must land once, not per archetype in different shapes.
     expect(offenders(await engineSources(), /function\s+clusters\s*\(/)).toEqual(['engine/text.mjs']);

@@ -9,9 +9,9 @@ Adds the opt-in **`showreel` add-on**: `/showreel [15|30|45|60]` makes a 1920x10
 - **`showreel` profile (add-on)**, composed onto any role: `npx @ennamjsc/agents-scaffold next showreel`. Byte-identical role install plus the add-on files; no CLAUDE.md, settings, hook or MCP change.
   - `.claude/skills/showreel/SKILL.md` — `/showreel [15|30|45|60]` (default 30), with the cost/time disclosure; delegates to the agent.
   - `.claude/agents/motion-designer.md` — one agent, fixed procedure: preflight → facts → storyboard (enums + fact ids + phrase ids only) → 3–5 QA rounds on draft contact sheets → transition critic → `render --final` → `verify` → report (rounds, critic findings, verify JSON, measured timings, tokens, GPU notice, cluster disclosure, anything skipped). Skips the full Serena Session Boot (provisional, pending ratification); still writes its checkpoint.
-  - `.claude/showreel/` — text-only Node toolkit (`node .claude/showreel/cli.mjs preflight|facts|check|render|verify|version`). Dependencies (puppeteer-core, ffmpeg-static, two OFL fonts) are pinned in `.claude/showreel/deps/` and installed on first run with `npm ci` into `.claude/showreel/.tool/` (~111 MB measured). Nothing third-party ships in the npm package.
+  - `.claude/showreel/` — text-only Node toolkit (`node .claude/showreel/cli.mjs preflight|facts|check|render|verify|version`). Dependencies (puppeteer-core, ffmpeg-static, two OFL fonts) are pinned in `.claude/showreel/deps/` and installed on first run with `npm ci` into `.claude/showreel/.tool/` (~111 MB, measured on ONE plugin-heavy Windows machine with an RTX 5070 Ti — not a typical-user number until the clean-environment run is recorded). Nothing third-party ships in the npm package.
   - Doc-first repos (hr, accounting, ba, …) are refused with `E_THIN_REPO`, naming the missing fact kinds.
-  - `check` / `render` add `flowVariantReason: "no-sequence-source"` when a flow beat is drawn as an unordered cluster because the README has no ordered setup/usage list; the agent discloses it.
+  - `check` / `render` add `flowVariantReason: "no-sequence-source"` when a flow beat is drawn as an unordered cluster because the README has no ordered setup/usage list of 3 or more steps; the agent discloses it.
 - **Upgrade handshake** — the agent, the skill and the toolkit upgrade together (`classify.ts` pins `.claude/agents/motion-designer.md` and `.claude/skills/showreel/` to write-or-ask, like `.claude/showreel/`). The agent passes its required version to `preflight --expect`; a skew fails with `E_VERSION` and the `--merge-strategy=overwrite` re-run command.
 
 ### Requirements
@@ -20,7 +20,8 @@ Adds the opt-in **`showreel` add-on**: `/showreel [15|30|45|60]` makes a 1920x10
 
 ### Pending before release
 
-- Film output figures (end-to-end time for a 30 s film, token use) — from the M3 AC7 run; not quoted here until measured.
+- Film output figures (end-to-end time for a 30 s film, token use, $/film) — from the M3 AC7 run; not quoted here until measured. Every figure measured so far (render times, tokens, $/film, first-run size) comes from ONE plugin-heavy Windows machine (RTX 5070 Ti) and is not a typical-user number until the clean-environment run is recorded.
+- Lockup resting wordmark rendered paler (FACE_REST 0.7) as part of R5 (a) bloom pull-back — PO to confirm on the film.
 - Licensing sign-off (GPL ffmpeg download, OFL fonts, H.264) and ratification of the agent's Session Boot exception.
 
 ## v1.15.0 — 2026-10-01

@@ -35,8 +35,8 @@
     // test probe (R5 ornament): S.hideBranches = true draws the SAME frame without the alternative-route arches
     // (layout untouched, so the path edges / nodes are identical) — the pixel diff is exactly what the arches draw.
     // Cluster spokes are hidden by the same flag (their diff = exactly what the spokes draw).
-    // Variant "cluster" (ruling f) comes in through the test's timeline/resolved (the test compiles with an
-    // archetypes table that lists it); the wrapper below passes the variant through untouched.
+    // Variant "cluster" (ruling f) comes in through the test's timeline/resolved (compiled with the shipped
+    // archetypes table); the wrapper below passes the variant through untouched.
     S.hideBranches = false;
     // test probe (R5 chain ghost slots): S.hideLastNode = true draws the SAME frame without the last path node and
     // the edge into it — before that node pops, the pixel diff is exactly what its ghost slot (+ ghost edge) draws
@@ -51,7 +51,7 @@
         variant, px: L.px, nodes: L.nodes.map(box), origin: L.origin ? box(L.origin) : null,
         edges: L.pathEdges.map((e) => ({ i: e.i, pts: e.pts, ...ends(e.pts) })),
         arcs: L.fan.map((f) => ({ a: f.a, b: f.b, pts: f.pts, ...ends(f.pts) })),
-        links: L.links.map((l) => ({ a: l.a, b: l.b, undirected: l.undirected, pts: l.pts, ...ends(l.pts) })),
+        links: L.links.map((l) => ({ b: l.b, keys: Object.keys(l).sort(), pts: l.pts, ...ends(l.pts) })),
         hub: L.hub ? { x: L.hub.x, y: L.hub.y } : null,
       };
       return L;

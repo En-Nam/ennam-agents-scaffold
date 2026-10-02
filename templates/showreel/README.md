@@ -39,7 +39,7 @@ In Claude Code, run `/showreel` (30 s) or `/showreel 15|45|60`. The motion-desig
 
 It never edits the toolkit, your app code or `showreel/facts.json`.
 
-**What the agent reports:** QA rounds n/5 with sheet paths and what changed each round; the critic's findings; the `verify` JSON; measured timings; tokens (fresh and context-weighted); any "no GPU detected" notice; anything it skipped. If a flow beat had to be drawn as an unordered cluster (`flowVariantReason: "no-sequence-source"` in the `check`/`render` output), it says so: no ordered setup/usage list was found in the README, so no step order is claimed.
+**What the agent reports:** QA rounds n/5 with sheet paths and what changed each round; the critic's findings; the `verify` JSON; measured timings; tokens (fresh and context-weighted); any "no GPU detected" notice; anything it skipped. If a flow beat had to be drawn as an unordered cluster (`flowVariantReason: "no-sequence-source"` in the `check`/`render` output), it says so: no ordered setup/usage list of 3 or more steps was found in the README, so no step order is claimed.
 
 **Session Boot exception (provisional):** the motion-designer skips the full Serena Session Boot (the `facts` command already reads Serena in priority order). It still writes its checkpoint.
 
@@ -57,7 +57,7 @@ node .claude/showreel/cli.mjs verify
 
 - **Node >= 22.12** for the toolkit (the scaffold itself needs Node >= 20). Older Node gets an `E_NODE` error with the fix.
 - **Google Chrome or Microsoft Edge** installed, or `SHOWREEL_BROWSER=/path/to/chrome`.
-- **First run downloads ~111 MB** (measured; puppeteer-core, an ffmpeg build, two fonts) into `.claude/showreel/.tool/` with `npm ci`. Behind a proxy set `HTTPS_PROXY`. Your own `package.json` and `node_modules` are never touched.
+- **First run downloads ~111 MB** (puppeteer-core, an ffmpeg build, two fonts; measured on ONE plugin-heavy Windows machine with an RTX 5070 Ti — not a typical-user number until the clean-environment run is recorded) into `.claude/showreel/.tool/` with `npm ci`. Behind a proxy set `HTTPS_PROXY`. Your own `package.json` and `node_modules` are never touched.
 
 ```bash
 node .claude/showreel/cli.mjs preflight    # installs .tool, finds the browser + ffmpeg

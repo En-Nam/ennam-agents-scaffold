@@ -15,6 +15,8 @@ import { extractFacts } from '../../templates/showreel/.claude/showreel/lib/fact
 import { makeDigest } from '../../templates/showreel/.claude/showreel/lib/facts/digest.mjs';
 import { sheetTimes } from '../../templates/showreel/.claude/showreel/render/sheet.mjs';
 import { storyboardFromArrangement, type ArrangementBeat } from './helpers/storyboard';
+import { fakeApi } from './helpers/fake-api';
+import flowGraph from '../../templates/showreel/.claude/showreel/archetypes/flow-graph.mjs';
 
 // v1.16 showreel M2 Task 2 — flow-graph archetype (port of spike s2 part B: install flow graph, the chosen path
 // lights step by step, the graph implodes to a point). What these tests protect:
@@ -42,15 +44,8 @@ const TOOLKIT = path.resolve(HERE, '..', '..', 'templates', 'showreel', '.claude
 const FIX = path.join(HERE, 'fixtures', 'archetypes', 'flow-graph');
 const SRC = path.join(TOOLKIT, 'archetypes', 'flow-graph.mjs');
 const readJ = (p: string) => JSON.parse(readFileSync(p, 'utf8'));
-const ARCH_SHIPPED = readJ(path.join(TOOLKIT, 'archetypes', 'archetypes.json'));
-// variant "cluster" (ruling f) is injected here when the shipped table does not list it yet (the contract change
-// lands archetypes.json separately); this table only feeds resolve/compile of THIS file's fixture films
-const ARCH = (() => {
-  const a = JSON.parse(JSON.stringify(ARCH_SHIPPED));
-  const fg = a.archetypes['flow-graph'];
-  if (!fg.variants.includes('cluster')) fg.variants.push('cluster');
-  return a;
-})();
+// the shipped table, unmodified: the fixture films resolve/compile against exactly what users get
+const ARCH = readJ(path.join(TOOLKIT, 'archetypes', 'archetypes.json'));
 const PHRASES = readJ(path.join(TOOLKIT, 'phrases.json'));
 const FACTS = readJ(path.join(FIX, 'facts.json'));
 const FPS = 60;
@@ -240,7 +235,26 @@ describe('flow-graph — static guarantees (C13, review focus 4)', () => {
     // negative control: the guard really fires on a drawer that has a moving head and packets
     expect((body('drawEdges').match(HEAD) ?? []).length, 'drawEdges (sequential path) trips the guard').toBeGreaterThan(0);
   });
+  // review nit: the layout carried fields nothing reads (a cluster spoke's a: -1 / undirected flag; a hub halo
+  // sprite built for converge / chain, which have no hub) — dead data that reads as a contract it is not.
+  it('layout: cluster spokes are {b, pts} only; the hub halo sprite exists only for cluster', () => {
+    const items = ['Sign in', 'Pick a plan', 'Invite the team'].map((text, i) => ({ id: `f.feature.${i + 1}`, kind: 'feature', text, display: text }));
+    const rb = { slots: { steps: { items } } };
+    const cues = Object.fromEntries([...items.map((_, i) => [`step.${i}`, 0.5 + i]), ['converge', 3.5]]);
+    const api = fakeApi({ archetype: 'flow-graph', cues });
+    const cl = (flowGraph as any).layout(rb, 'cluster', api);
+    expect(cl.links).toHaveLength(3);
+    for (const l of cl.links) expect(Object.keys(l).sort()).toEqual(['b', 'pts']);
+    expect(cl.SPR.halo).toBeDefined();
+    for (const v of ['converge', 'chain']) {
+      const L = (flowGraph as any).layout(rb, v, api);
+      expect(L.links, v).toEqual([]);
+      expect(L.SPR.halo, v).toBeUndefined();
+    }
+  });
   it('the fixture storyboards resolve and compile: one step.<i> hit per bound step, converge after the last', () => {
+    // the shipped table itself lists every variant this file renders (no test-side injection hides a missing one)
+    expect(ARCH.archetypes['flow-graph'].variants).toEqual(['converge', 'chain', 'cluster']);
     for (const v of ['converge', 'chain', 'cluster'] as const) {
       const { timeline } = build(v, 'violet');
       for (const id of FLOW_BEATS) {
@@ -832,7 +846,9 @@ describe.skipIf(!E2E)('flow-graph in the browser (SHOWREEL_E2E=1)', () => {
             expect(geo.edges, `${name} ${id}: no directed path edge`).toEqual([]);
             expect(geo.origin, `${name} ${id}: no path origin`).toBeNull();
             expect(geo.hub, `${name} ${id}: a hub`).toBeTruthy();
-            expect(geo.links.every((l: any) => l.undirected === true && l.a === -1), `${name} ${id}: every link is an undirected hub spoke`).toBe(true);
+            // a spoke is {b, pts} only: it starts on the hub ring (no source node, nothing to read as "from step a")
+            expect(geo.links.every((l: any) => l.keys.join() === 'b,pts'), `${name} ${id}: link objects carry only b + pts`).toBe(true);
+            expect(geo.links.every((l: any) => Math.hypot(l.from[0] - geo.hub.x, l.from[1] - geo.hub.y) <= 20), `${name} ${id}: every link starts at the hub`).toBe(true);
             expect(geo.links.map((l: any) => l.b).sort((x: number, y: number) => x - y), `${name} ${id}: one spoke per node, none node ↔ node`).toEqual([...Array(n).keys()]);
             // rendered: nothing moves along a spoke between the hold and MOVE_FRAMES later
             for (const l of geo.links) {

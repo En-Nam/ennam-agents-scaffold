@@ -35,13 +35,12 @@ const KEEP_DIL = 12, KEEP_BOX = 36, KEEP_BLUR = 10, KEEP_FEATHER = 24;
 // keep-out is padded by KEEP_CHIP — past the engine bloom's reach (quarter-res blur ≈ 20 px σ at full res, so ~3σ),
 // plus the pill's layer drift — and feathered like the title box, so the band fades out well before the chip.
 const KEEP_CHIP = 84;
-// PO R5 (a): the title's resting outer-glow alpha once the slam has settled (was 0.30 throughout).
-// …its resting face opacity (was 1), and the title faces' strength in the sweep re-light (was the full face, ×2 at
-// 0.7: the hold frame IS the sweep cue). The slam frames keep the full face + flash.
-// FACE_REST is a visible change, flagged for PO sign-off: the face's pure-white top stop + the engine bloom clip on
-// their own — halo and re-light cut alone leave 31–34 % of the wordmark ink flat white at the hold (HEAD 38 %), and
-// only face headroom gets below the test's 20 % (0.85 → 28 %, 0.8 → 24 %, 0.75 → 19.8 %, 0.7 → 14.7 %; the
-// acme-shop shape). 0.7 is the first step with real margin; the cost is a slightly paler resting wordmark.
+// PO R5 (a): HALO_REST = the title's resting outer-glow alpha once the slam has settled; FACE_REST = its resting face
+// opacity; TITLE_RELIGHT = the title faces' strength in the sweep re-light (the hold frame IS the sweep cue). The slam
+// frames keep the full face + flash. Why FACE_REST < 1: the face's pure-white top stop + the engine bloom clip on
+// their own — cutting halo and re-light alone still leaves about a third of the wordmark ink flat white at the hold,
+// and only face headroom gets it below the test's 20 % bound. 0.7 is the first value with real margin; the cost is a
+// slightly paler resting wordmark.
 const HALO_REST = 0.16, FACE_REST = 0.7, TITLE_RELIGHT = 0.12;
 
 export default {
@@ -333,7 +332,7 @@ export default {
       if (ra > 0) {
         const R2 = MR * (1.2 + 0.4 * ra);
         c.save(); c.globalAlpha = ra * 0.5; c.setLineDash([2, 11]); c.lineDashOffset = -lt * 9;
-        c.strokeStyle = mix(WH, P.primary, 0.2, 0.7); // cool white hairline (was a fixed lavender literal) c.lineWidth = 2; c.beginPath(); c.arc(0, 0, R2, 0, 6.2832); c.stroke();
+        c.strokeStyle = mix(WH, P.primary, 0.2, 0.7); // cool white hairline c.lineWidth = 2; c.beginPath(); c.arc(0, 0, R2, 0, 6.2832); c.stroke();
         c.setLineDash([]); c.globalAlpha = ra * 0.9; c.lineWidth = 2.4; c.strokeStyle = grad;
         for (let k = 0; k < 3; k++) { const a0 = lt * 0.7 + k * 2.0944; c.beginPath(); c.arc(0, 0, R2, a0, a0 + 0.42); c.stroke(); }
         c.restore();
