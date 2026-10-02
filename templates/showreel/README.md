@@ -57,7 +57,17 @@ node .claude/showreel/cli.mjs verify
 
 - **Node >= 22.12** for the toolkit (the scaffold itself needs Node >= 20). Older Node gets an `E_NODE` error with the fix.
 - **Google Chrome or Microsoft Edge** installed, or `SHOWREEL_BROWSER=/path/to/chrome`.
-- **First run downloads ~111 MB** (puppeteer-core, an ffmpeg build, two fonts; measured on ONE plugin-heavy Windows machine with an RTX 5070 Ti — not a typical-user number until the clean-environment run is recorded) into `.claude/showreel/.tool/` with `npm ci`. Behind a proxy set `HTTPS_PROXY`. Your own `package.json` and `node_modules` are never touched.
+- **First run downloads ~111 MB** (puppeteer-core, an ffmpeg build, two fonts) into `.claude/showreel/.tool/` with `npm ci`. Behind a proxy set `HTTPS_PROXY`. Your own `package.json` and `node_modules` are never touched.
+- **Platforms:** verified on Windows; Linux verified in CI (GitHub `ubuntu-latest`, Chrome, no GPU → `--final` falls back to S=1 with a notice; set `SHOWREEL_NO_SANDBOX=1` where Chrome's sandbox cannot start); macOS untested.
+
+**What a 30 s film costs** — measured on ONE Windows machine (Core Ultra 9 285K, RTX 5070 Ti), one headless `/showreel 30` run each:
+
+| Session | Base context | Fresh tokens | Context-weighted (cache reads) | $ / film (list) | Wall clock |
+|---|---|---|---|---|---|
+| Clean (project settings only, no user plugins) — the typical case | 45.1k | 110k | 1.18M (91.6 %) | $0.99 | 5 min 46 s |
+| Plugin-heavy developer setup | ~64k | 161k | 1.56M (90 %) | $1.47 | 4 min 33 s |
+
+Your numbers will differ with your machine, your Claude Code setup and how many QA rounds the agent needs (3–5).
 
 ```bash
 node .claude/showreel/cli.mjs preflight    # installs .tool, finds the browser + ffmpeg

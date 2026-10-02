@@ -20,7 +20,8 @@ Adds the opt-in **`showreel` add-on**: `/showreel [15|30|45|60]` makes a 1920x10
 
 ### Pending before release
 
-- Film output figures (end-to-end time for a 30 s film, token use, $/film) — from the M3 AC7 run; not quoted here until measured. Every figure measured so far (render times, tokens, $/film, first-run size) comes from ONE plugin-heavy Windows machine (RTX 5070 Ti) and is not a typical-user number until the clean-environment run is recorded.
+- Measured on ONE Windows machine (RTX 5070 Ti), headless `/showreel 30`: clean session (project settings only) 110k fresh tokens, $0.99/film, 5 min 46 s; plugin-heavy setup 161k, $1.47, 4 min 33 s. Gate (P2 as amended): fresh tokens ≤ 500k. Context-weighted 1.18–1.56M is reported, not gating (≈ 90 % cache reads).
+- Platform support: verified on Windows; Linux verified in CI (`showreel-linux` workflow); macOS untested.
 - Lockup resting wordmark rendered paler (FACE_REST 0.7) as part of R5 (a) bloom pull-back — PO to confirm on the film.
 - Licensing sign-off (GPL ffmpeg download, OFL fonts, H.264) and ratification of the agent's Session Boot exception.
 

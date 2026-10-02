@@ -99,14 +99,20 @@ describe('motion-designer agent + /showreel skill', () => {
     expect(skill).toContain('**motion-designer** agent');
   });
 
-  // Orchestrator item: the only measurements so far come from one dev box; quoting them bare reads as a promise
-  // to every user. Each shipped measured figure must carry its single-machine provenance.
-  it('measured figures in README / SKILL say they come from ONE plugin-heavy Windows machine (RTX 5070 Ti)', () => {
+  // PO ruling (M3): clean-environment figures may be quoted as the typical case, but always with their single-
+  // machine provenance and with the plugin-heavy figures beside them; and the platform line must not over-claim
+  // (R4: "verified on Windows; Linux verified in CI; macOS untested" — no blanket cross-platform promise).
+  it('cost figures name ONE Windows machine (RTX 5070 Ti) and show clean + plugin-heavy side by side', () => {
     const readme = readFileSync(path.resolve(ADDON, '..', 'README.md'), 'utf8');
-    for (const [name, src] of [['README', readme], ['skill', skill]] as const) {
-      const line = src.split('\n').find((l) => l.includes('~111 MB'))!;
-      expect(line, name).toMatch(/plugin-heavy Windows machine with an RTX 5070 Ti/);
-      expect(line, name).toMatch(/typical-user number/);
-    }
+    expect(readme).toMatch(/ONE Windows machine \([^)]*RTX 5070 Ti\)/);
+    const rows = readme.split('\n').filter((l) => /^\| (Clean|Plugin-heavy)/.test(l));
+    expect(rows.map((l) => l.split('|')[1]!.trim().split(' ')[0])).toEqual(['Clean', 'Plugin-heavy']);
+    expect(skill).toMatch(/one Windows machine \(RTX 5070 Ti\)/);
+  });
+
+  it('platform support line is exactly the PO wording — no blanket cross-platform claim', () => {
+    const readme = readFileSync(path.resolve(ADDON, '..', 'README.md'), 'utf8');
+    expect(readme).toMatch(/verified on Windows; Linux verified in CI .*; macOS untested\./);
+    expect(readme).not.toMatch(/cross-platform|Windows\/macOS\/Linux/i);
   });
 });

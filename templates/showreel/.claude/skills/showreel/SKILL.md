@@ -16,7 +16,8 @@ Makes a 1920x1080@60 H.264 + AAC film of **this** repo, exactly 15, 30, 45 or 60
 
 ## Tell the user before starting (cost / time)
 
-- **First run** downloads ~111 MB (puppeteer-core, an ffmpeg build, two fonts; measured on one plugin-heavy Windows machine with an RTX 5070 Ti, not yet a typical-user number) into `.claude/showreel/.tool/` with `npm ci`. Needs Node >= 22.12 and Chrome or Edge installed. Not counted in the film time.
+- **First run** downloads ~111 MB (puppeteer-core, an ffmpeg build, two fonts) into `.claude/showreel/.tool/` with `npm ci`. Needs Node >= 22.12 and Chrome or Edge installed. Not counted in the film time.
+- **A 30 s film** measured on one Windows machine (RTX 5070 Ti): about 6 min and $0.99 in a clean Claude Code session (110k fresh tokens), $1.47 with a plugin-heavy setup. Yours will differ.
 - **Rendering** the final film takes minutes (longer for 45/60 s; longer again on a machine with no GPU, where motion blur is reduced). Each QA round renders a draft contact sheet.
 - The agent runs 3–5 QA rounds on your Anthropic account; it reports the tokens it used.
 

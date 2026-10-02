@@ -1,0 +1,72 @@
+# showreel add-on — Linux verification (release prerequisite set by the PO: "verified on Windows; Linux verified
+# in CI; macOS untested"). Read-only: it never publishes; publish.yml (on release) is separate and untouched.
+name: showreel-linux
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'templates/showreel/**'
+      - 'tests/showreel/**'
+      - '.github/workflows/showreel-linux.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: showreel-linux-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      # Ubuntu runners restrict unprivileged user namespaces, so Chrome's sandbox cannot start; the toolkit adds
+      # --no-sandbox ONLY through this documented switch (or as root).
+      SHOWREEL_NO_SANDBOX: '1'
+      SHOWREEL_E2E: '1'
+      SHOWREEL_TOOL_DIR: ${{ github.workspace }}/.showreel-dev/.tool
+      # The runner has Google Chrome but no Microsoft Edge; the Edge launch path stays covered on Windows.
+      SHOWREEL_E2E_ALLOW_MISSING_BROWSER: edge
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install + build the scaffold
+        run: |
+          npm ci
+          npm run build
+
+      - name: Install the toolkit deps (same manifest + lockfile the user's preflight uses)
+        run: |
+          mkdir -p "$SHOWREEL_TOOL_DIR"
+          cp templates/showreel/.claude/showreel/deps/manifest.json "$SHOWREEL_TOOL_DIR/package.json"
+          cp templates/showreel/.claude/showreel/deps/lock.json "$SHOWREEL_TOOL_DIR/package-lock.json"
+          (cd "$SHOWREEL_TOOL_DIR" && npm ci --no-audit --no-fund)
+
+      - name: Browser + renderer on this runner
+        run: |
+          google-chrome --version || true
+          nproc; free -h
+
+      - name: showreel test slice (browser tests on)
+        run: npm test -- showreel
+
+      - name: /showreel-equivalent render (cold preflight, draft + final, verify; GPU-less S=1 fallback asserted)
+        env:
+          SHOWREEL_TOOL_DIR: ''
+        run: node tests/showreel/tools/ci-draft-render.mjs "${{ runner.temp }}/showreel-ci"
+
+      - name: Keep the evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: showreel-linux-evidence
+          path: ${{ runner.temp }}/showreel-ci
+          if-no-files-found: warn
+          retention-days: 14
