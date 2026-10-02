@@ -152,9 +152,11 @@ Reached from the wizard via the **Executive / Leadership** role (sub-selects CEO
 | Profile | Purpose | Extra MCP | Requires Claude Code |
 |---|---|---|---|
 | `automation` | Claude Code automation guidance — `ennam-automation` skill (`/goal`, `/loop`, schedules, headless `claude -p`), a report-only `.claude/loop.md`, runbook. Guidance only: no settings, hooks, MCP or CLAUDE.md section. | — | >= 2.1.246 (warns if older) |
+| `showreel` | `/showreel [15\|30\|45\|60]` skill + `motion-designer` agent + Node toolkit (`.claude/showreel/`): renders a 15–60 s promo film of this repo; every on-screen string comes from code-extracted facts. Needs Node >= 22.12 and Chrome or Edge; first run downloads ~111 MB into `.claude/showreel/.tool/`. Doc-first repos are refused (`E_THIN_REPO`). Runbook: `docs/agents-scaffold/showreel.md`. | — | — |
 
 ```bash
 npx @ennamjsc/agents-scaffold next automation     # any role + automation
+npx @ennamjsc/agents-scaffold next showreel       # any code role + showreel
 ```
 
 An add-on never changes the role it is added to: `hr automation` installs HR exactly as `hr` alone does (same `CLAUDE.md`, doc-first `AGENTS.md`, `people-lifecycle` workflow, settings) plus the add-on's files.
