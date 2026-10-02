@@ -1,10 +1,11 @@
 // `cli.mjs check [--sheet]` (Task 8): validate → resolve → compile (60 fps) → in-browser text fit +
-// glyph coverage → (--sheet) draft contact sheet. Prints ok('check', {beats, hits, sheet?, ms}).
+// glyph coverage → (--sheet) draft contact sheet. Prints ok('check', {beats, hits, sheet?, flowVariantReason?, ms}).
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { ok, ShowreelError } from '../util/out.mjs';
 import { paths } from '../util/paths.mjs';
 import { prepare, fitInPage } from './prepare.mjs';
+import { disclosure } from './disclose.mjs';
 import { openSession, useSession } from '../render/session.mjs';
 import { resolveFfmpeg } from '../render/ffmpeg.mjs';
 import { renderSheet } from '../../render/sheet.mjs';
@@ -20,7 +21,7 @@ export async function run(args, hostRoot) {
     else throw new ShowreelError('E_USAGE', `Unknown argument "${a}" for check.`, USAGE);
   }
   const p = paths(hostRoot);
-  const { resolved, timeline } = prepare(hostRoot, { fps: 60 });
+  const { facts, storyboard, resolved, timeline } = prepare(hostRoot, { fps: 60 });
   const ffmpeg = sheet ? resolveFfmpeg(hostRoot) : null; // fail before launching a browser
   await useSession(await openSession(hostRoot), async (session) => {
     const { page, errors } = await session.page();
@@ -32,6 +33,7 @@ export async function run(args, hostRoot) {
     beats: timeline.beats.length,
     hits: timeline.hits.length,
     ...(sheet ? { sheet: p.sheet } : {}),
+    ...disclosure(storyboard, facts),
     ms: Math.round(performance.now() - start),
   });
 }

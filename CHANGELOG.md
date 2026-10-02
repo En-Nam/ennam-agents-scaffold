@@ -1,5 +1,28 @@
 # Changelog
 
+## v1.16.0 — unreleased (draft — film output figures pending M3 AC7 run)
+
+Adds the opt-in **`showreel` add-on**: `/showreel [15|30|45|60]` makes a 1920x1080@60 H.264 + AAC promo film of the host repo, exactly N seconds, where every on-screen string comes from code-extracted facts or a fixed phrase library. Decision: `mem:decisions/showreel-addon-v1.16`.
+
+### Added
+
+- **`showreel` profile (add-on)**, composed onto any role: `npx @ennamjsc/agents-scaffold next showreel`. Byte-identical role install plus the add-on files; no CLAUDE.md, settings, hook or MCP change.
+  - `.claude/skills/showreel/SKILL.md` — `/showreel [15|30|45|60]` (default 30), with the cost/time disclosure; delegates to the agent.
+  - `.claude/agents/motion-designer.md` — one agent, fixed procedure: preflight → facts → storyboard (enums + fact ids + phrase ids only) → 3–5 QA rounds on draft contact sheets → transition critic → `render --final` → `verify` → report (rounds, critic findings, verify JSON, measured timings, tokens, GPU notice, cluster disclosure, anything skipped). Skips the full Serena Session Boot (provisional, pending ratification); still writes its checkpoint.
+  - `.claude/showreel/` — text-only Node toolkit (`node .claude/showreel/cli.mjs preflight|facts|check|render|verify|version`). Dependencies (puppeteer-core, ffmpeg-static, two OFL fonts) are pinned in `.claude/showreel/deps/` and installed on first run with `npm ci` into `.claude/showreel/.tool/` (~111 MB measured). Nothing third-party ships in the npm package.
+  - Doc-first repos (hr, accounting, ba, …) are refused with `E_THIN_REPO`, naming the missing fact kinds.
+  - `check` / `render` add `flowVariantReason: "no-sequence-source"` when a flow beat is drawn as an unordered cluster because the README has no ordered setup/usage list; the agent discloses it.
+- **Upgrade handshake** — the agent, the skill and the toolkit upgrade together (`classify.ts` pins `.claude/agents/motion-designer.md` and `.claude/skills/showreel/` to write-or-ask, like `.claude/showreel/`). The agent passes its required version to `preflight --expect`; a skew fails with `E_VERSION` and the `--merge-strategy=overwrite` re-run command.
+
+### Requirements
+
+- Toolkit: Node >= 22.12 (the scaffold itself stays >= 20), Google Chrome or Microsoft Edge. GPU-less hosts render with reduced motion blur and say so.
+
+### Pending before release
+
+- Film output figures (end-to-end time for a 30 s film, token use) — from the M3 AC7 run; not quoted here until measured.
+- Licensing sign-off (GPL ffmpeg download, OFL fonts, H.264) and ratification of the agent's Session Boot exception.
+
 ## v1.15.0 — 2026-10-01
 
 Adds the opt-in **`automation` add-on**: guidance that teaches Claude to use Claude Code's own automation (`/goal`, `/loop`, scheduled tasks, headless `claude -p`) the Ennam way. **Guidance only**: the scaffold switches nothing on. Decision: `mem:decisions/automation-profile-v1.15` (composable add-on profile, not a separate `--with-automation` flag, because composition exists since v1.11 — Rule 7).

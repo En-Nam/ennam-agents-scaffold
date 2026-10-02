@@ -4,7 +4,7 @@
 // The film is muxed to showreel/build/<name>.unverified.mp4 and moved onto showreel/<name>.mp4 only
 // after verify passes, so a failed or partial film never replaces a previously verified deliverable.
 // Prints ok('render', {out, mode, samples, fps, frames, crf, timings:{check, score, frames, encode, mux,
-// verify, total}, gpu, renderer, verify, notice?}). Timings are ms. Frames are encoded while they are
+// verify, total}, gpu, renderer, verify, notice?, flowVariantReason?}). Timings are ms. Frames are encoded while they are
 // captured, so `frames` includes ffmpeg back-pressure and `encode` is only the flush after the last frame.
 import { mkdirSync, renameSync, rmSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
@@ -12,6 +12,7 @@ import { performance } from 'node:perf_hooks';
 import { ok, fail, ShowreelError } from '../util/out.mjs';
 import { paths } from '../util/paths.mjs';
 import { prepare, fitInPage, writeJson } from '../check/prepare.mjs';
+import { disclosure } from '../check/disclose.mjs';
 import { renderPolicy, parseRenderArgs, fpsFor, slugify, determinismPoints } from './policy.mjs';
 import { openSession, useSession } from './session.mjs';
 import { resolveFfmpeg } from './ffmpeg.mjs';
@@ -68,7 +69,7 @@ export async function run(args, hostRoot) {
   const timings = {};
 
   // check (no sheet) at the render fps
-  const { facts, resolved, timeline } = prepare(hostRoot, { fps: fpsFor(mode) });
+  const { facts, storyboard, resolved, timeline } = prepare(hostRoot, { fps: fpsFor(mode) });
   const ffmpeg = resolveFfmpeg(hostRoot);
   const out = p.out(slugify(appName(facts)), timeline.durationS, { draft: mode === 'draft' });
   const tmp = unverifiedPath(hostRoot, out);
@@ -133,5 +134,6 @@ export async function run(args, hostRoot) {
     timings, gpu: policy.gpu, renderer: policy.renderer,
     verify: { videoFrames: verify.videoFrames, audioSamples: verify.audioSamples, peakDbfs: verify.peakDbfs, hitsOk: verify.hitsOk, manifestOk: verify.manifestOk, determinismOk: verify.determinismOk },
     ...(policy.notice ? { notice: policy.notice } : {}),
+    ...disclosure(storyboard, facts),
   });
 }

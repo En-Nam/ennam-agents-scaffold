@@ -6,6 +6,7 @@ import { execa } from 'execa';
 import { fileURLToPath } from 'node:url';
 import fg from 'fast-glob';
 import { getProfile } from '../../../packages/cli/src/profiles.js';
+import { VERSION, nodeTooOld } from '../../../templates/showreel/.claude/showreel/lib/util/version.mjs';
 
 // v1.16 — `showreel` is an add-on: one role + showreel must install the role EXACTLY as if
 // alone (no CLAUDE.md / AGENTS.md / settings change — no core change, AC6), plus the
@@ -17,6 +18,14 @@ const CLI_ENTRY = path.join(REPO_ROOT, 'packages', 'cli', 'dist', 'index.js');
 const GOLDEN = path.join(REPO_ROOT, 'tests', 'fixtures', 'claude-shared-block-engineering.golden.md');
 
 let SHOWREEL_FILES: string[] = [];
+// M3 — installed outside .claude/showreel/ but upgraded with it (B4, classify pins).
+const AGENT_AND_SKILL = ['.claude/agents/motion-designer.md', '.claude/skills/showreel/SKILL.md'];
+// Installed copies of the template, byte for byte (everything except the profile README, which is renamed).
+const fromTemplate = () => SHOWREEL_FILES.filter(r => r !== 'docs/agents-scaffold/showreel.md');
+// The toolkit runtime refuses Node < 22.12 (P1); the scaffold's own CI may run Node 20.
+const TOOLKIT_NODE_OK = !nodeTooOld(process.versions.node);
+const runToolkit = (cwd: string, args: string[]) =>
+  execa('node', [path.join(cwd, '.claude', 'showreel', 'cli.mjs'), ...args], { cwd, reject: false });
 
 async function install(cwd: string, profiles: string[]) {
   return execa('node', [CLI_ENTRY, ...profiles, '--merge-strategy=overwrite', '--no-prompts'], { cwd });
@@ -33,11 +42,12 @@ describe('install showreel add-on', () => {
   beforeAll(async () => {
     await execa('npm', ['-w', '@ennamjsc/agents-scaffold', 'run', 'build'], { cwd: REPO_ROOT, shell: true });
     const toolkit = await fg('**/*', { cwd: path.join(REPO_ROOT, 'templates', 'showreel', '.claude', 'showreel'), dot: true, onlyFiles: true });
-    SHOWREEL_FILES = [...toolkit.map(r => `.claude/showreel/${r}`), 'docs/agents-scaffold/showreel.md'].sort();
+    SHOWREEL_FILES = [...toolkit.map(r => `.claude/showreel/${r}`), ...AGENT_AND_SKILL, 'docs/agents-scaffold/showreel.md'].sort();
   });
 
-  it('SHOWREEL_FILES covers the Task 1 skeleton', () => {
+  it('SHOWREEL_FILES covers the toolkit skeleton, the motion-designer agent and the /showreel skill', () => {
     for (const rel of [
+      ...AGENT_AND_SKILL,
       '.claude/showreel/cli.mjs',
       '.claude/showreel/deps/manifest.json',
       '.claude/showreel/deps/lock.json',
@@ -59,6 +69,7 @@ describe('install showreel add-on', () => {
     const expected = (await fg('**/*', { cwd: path.join(REPO_ROOT, 'templates', 'showreel'), dot: true })).map(r => `templates/showreel/${r}`).sort();
     expect(expected.length).toBeGreaterThan(0);
     expect(packed).toEqual(expected);
+    for (const rel of AGENT_AND_SKILL) expect(packed).toContain(`templates/showreel/${rel}`);
   }, 60_000);
 
   for (const roles of [['next'], ['hr'], ['ba', 'pm']]) {
@@ -74,8 +85,8 @@ describe('install showreel add-on', () => {
       for (const rel of aloneFiles) {
         expect(await norm(withAddon, rel), rel).toBe(await norm(alone, rel));
       }
-      // The toolkit lands byte-identical to the template (text-only installer, no rendering).
-      for (const rel of SHOWREEL_FILES.filter(r => r.startsWith('.claude/showreel/'))) {
+      // The toolkit, agent and skill land byte-identical to the template (text-only installer, no rendering).
+      for (const rel of fromTemplate()) {
         expect(await read(withAddon, rel), rel).toBe(await readFile(path.join(REPO_ROOT, 'templates', 'showreel', rel), 'utf8'));
       }
     }, 60_000);
@@ -86,38 +97,73 @@ describe('install showreel add-on', () => {
     expect(stdout).toMatch(/Showreel toolkit installed at \.claude\/showreel\//);
     expect(stdout).toMatch(/node \.claude\/showreel\/cli\.mjs preflight/);
     // Same wording as the README THIRD-PARTY table: puppeteer-core drives the installed browser, nothing Chrome-ish is downloaded.
-    expect(stdout).toContain('~200 MB (puppeteer-core, ffmpeg, fonts)');
+    // Measured first-run download (M3), same wording as the README THIRD-PARTY table: puppeteer-core
+    // drives the installed browser, nothing Chrome-ish is downloaded.
+    expect(stdout).toContain('~111 MB (puppeteer-core, ffmpeg, fonts)');
+    expect(stdout).not.toContain('~200 MB');
     expect(stdout).not.toMatch(/Chrome driver/i);
   });
 
-  // The /showreel skill is M3 (plan). Until a skill/command ships, user-facing text (--list / wizard
-  // description, next steps, README) must point at the entry point that IS installed.
-  it('user-facing text names node .claude/showreel/cli.mjs, never a /showreel command that is not installed', async () => {
-    const shipsSlash = (await fg(['.claude/skills/showreel/**', '.claude/commands/showreel*'], { cwd: path.join(REPO_ROOT, 'templates', 'showreel'), dot: true })).length > 0;
+  // M3 — the /showreel skill ships now, so user-facing text (--list / wizard description, next steps,
+  // README) must name it, and keep the node .claude/showreel/cli.mjs runbook path for manual runs.
+  it('user-facing text names the shipped /showreel skill and the node .claude/showreel/cli.mjs runbook path', async () => {
+    const ships = await fg(['.claude/skills/showreel/SKILL.md'], { cwd: path.join(REPO_ROOT, 'templates', 'showreel'), dot: true });
+    expect(ships).toEqual(['.claude/skills/showreel/SKILL.md']);
     const SLASH = /(^|[\s(`'"—])\/showreel\b/;
     const description = getProfile('showreel').description;
     const readme = await readFile(path.join(REPO_ROOT, 'templates', 'showreel', 'README.md'), 'utf8');
     const { stdout } = await install(await fresh(), ['next', 'showreel']);
-    expect(description).toContain('node .claude/showreel/cli.mjs');
-    if (!shipsSlash) {
-      expect(description).not.toMatch(SLASH);
-      expect(readme).not.toMatch(SLASH);
-      expect(stdout).not.toMatch(SLASH);
+    for (const [where, text] of [['description', description], ['README', readme], ['next steps', stdout]] as const) {
+      expect(text, where).toMatch(SLASH);
+      expect(text, where).toContain('node .claude/showreel/cli.mjs');
+      expect(text, where).not.toContain('~200 MB');
     }
   });
 
-  // B4: the toolkit upgrades as one unit — a locally modified toolkit file is replaced by
-  // --merge-strategy=overwrite. (classify.ts has an explicit `.claude/showreel/` → write-or-ask rule;
-  // the default also yields write-or-ask, so this end-to-end case is what proves the contract —
-  // a skip-if-exists classification would keep the stale file and fail here.)
-  it('a modified .claude/showreel/*.mjs is restored to the template by a re-run with --merge-strategy=overwrite', async () => {
+  // B4: toolkit + agent + skill upgrade as one unit. A stale toolkit file AND a stale motion-designer
+  // agent are both replaced by --merge-strategy=overwrite. Without the classify pins the agent would
+  // be skip-if-exists (generic .claude/agents/ rule) and stay stale — this case would fail.
+  it('upgrade: a stale toolkit file and a stale motion-designer agent are restored by --merge-strategy=overwrite', async () => {
     const cwd = await fresh();
     expect((await install(cwd, ['next', 'showreel'])).exitCode).toBe(0);
-    const rel = '.claude/showreel/lib/render/policy.mjs';
-    const template = await readFile(path.join(REPO_ROOT, 'templates', 'showreel', rel), 'utf8');
-    await writeFile(path.join(cwd, rel), template + '\n// local edit from an older toolkit\n');
+    const stale = ['.claude/showreel/lib/render/policy.mjs', '.claude/agents/motion-designer.md', '.claude/skills/showreel/SKILL.md'];
+    const templates = await Promise.all(stale.map(rel => readFile(path.join(REPO_ROOT, 'templates', 'showreel', rel), 'utf8')));
+    for (const [i, rel] of stale.entries()) {
+      await writeFile(path.join(cwd, rel), templates[i]!.replaceAll(VERSION, '0.9.0') + '\n<!-- older toolkit -->\n');
+    }
     expect((await install(cwd, ['next', 'showreel'])).exitCode).toBe(0);
-    expect(await read(cwd, rel)).toBe(template);
+    for (const [i, rel] of stale.entries()) expect(await read(cwd, rel), rel).toBe(templates[i]);
+  }, 60_000);
+
+  // B4 handshake: the agent/skill pass `--expect <their version>`; a skewed toolkit refuses BEFORE any
+  // side effect and gives the exact scoped re-run command.
+  it.skipIf(!TOOLKIT_NODE_OK)('installed toolkit: preflight --expect <other version> fails E_VERSION with the re-run command, before any side effect', async () => {
+    const cwd = await fresh();
+    expect((await install(cwd, ['next', 'showreel'])).exitCode).toBe(0);
+    const r = await runToolkit(cwd, ['preflight', '--expect', '0.9.0']);
+    expect(r.exitCode).toBe(1);
+    const out = JSON.parse(r.stdout);
+    expect(out.error.code).toBe('E_VERSION');
+    expect(out.error.message).toContain(`Toolkit is ${VERSION} but 0.9.0 is required`);
+    expect(out.error.fix).toContain('showreel --merge-strategy=overwrite');
+    // refused before any side effect: no .tool install, no nested .gitignore written
+    expect(await fg(['.claude/showreel/.tool/**', '.claude/showreel/.gitignore', 'showreel/**'], { cwd, dot: true })).toEqual([]);
+  }, 60_000);
+
+  // D4 / AC5 refusal evidence: a doc-first role has no code facts, so `facts` refuses loudly and
+  // names the missing kinds instead of inventing a film.
+  it.skipIf(!TOOLKIT_NODE_OK)('hr + showreel: facts refuses with E_THIN_REPO naming the missing fact kinds', async () => {
+    const cwd = await fresh();
+    expect((await install(cwd, ['hr', 'showreel'])).exitCode).toBe(0);
+    const r = await runToolkit(cwd, ['facts']);
+    expect(r.exitCode).toBe(1);
+    const out = JSON.parse(r.stdout);
+    expect(out.error.code).toBe('E_THIN_REPO');
+    expect(out.error.message).toMatch(/missing \S/);
+    const facts = JSON.parse(await read(cwd, 'showreel/facts.json'));
+    expect(facts.minimumGate.passed).toBe(false);
+    expect(facts.minimumGate.missing.length).toBeGreaterThan(0);
+    for (const kind of facts.minimumGate.missing) expect(out.error.message).toContain(kind);
   }, 60_000);
 
   it('the shared CLAUDE.md block stays byte-identical to the golden (no core change)', async () => {
