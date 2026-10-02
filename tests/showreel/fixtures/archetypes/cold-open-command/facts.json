@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "minimumGate": { "passed": true, "missing": [] },
+  "brand": { "name": "Acme Shop", "palette": "violet", "wordmark": "f.app.name.1" },
+  "facts": [
+    { "id": "f.app.name.1", "kind": "app.name", "value": "Acme Shop", "display": "Acme Shop", "unit": null, "source": { "file": "package.json", "locator": "name", "extractor": "fixture", "rule": "fixture" }, "hash": "sha256:0000000000000001" },
+    { "id": "f.command.1", "kind": "command", "value": "npm run dev", "display": "npm run dev", "unit": null, "source": { "file": "package.json", "locator": "scripts.dev", "extractor": "fixture", "rule": "fixture" }, "hash": "sha256:0000000000000002" },
+    { "id": "f.app.tagline.1", "kind": "app.tagline", "value": "A storefront for tiny teams", "display": "A storefront for tiny teams", "unit": null, "source": { "file": "README.md", "locator": "tagline", "extractor": "fixture", "rule": "fixture" }, "hash": "sha256:0000000000000003" },
+    { "id": "f.feature.1", "kind": "feature", "value": "Checkout in one tap", "display": "Checkout in one tap", "unit": null, "source": { "file": "README.md", "locator": "features", "extractor": "fixture", "rule": "fixture" }, "hash": "sha256:0000000000000004" }
+  ]
+}

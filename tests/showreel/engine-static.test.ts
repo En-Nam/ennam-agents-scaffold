@@ -436,13 +436,39 @@ describe('one engine fact, one copy (Rule 7): camera bounds, fact kinds, cue loo
   }
 });
 
+// D9 (M2): imageSmoothingQuality 'high' selects Chrome's GPU cubic resampler, which returned one of two
+// results per page for slightly scaled blits (cold-open perspective strips: 2 hashes over 10 fresh pages;
+// 'low'/'medium'/default were stable). Banned engine-wide so no module reintroduces it. Allow-list, not a
+// deny-list: outside comments, EVERY mention of imageSmoothingQuality must be a literal 'low'/'medium' setting
+// (`= 'low'` or `imageSmoothingQuality: 'medium'`), so 'high' via Object.assign, a variable, or bracket
+// notation fails too — not only the one direct `= 'high'` form.
+describe("determinism: no imageSmoothingQuality 'high' anywhere in engine/ or archetypes/", () => {
+  const stripComments = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`\\])\/\/.*$/gm, '$1');
+  const violations = (s: string) => [...stripComments(s).matchAll(/imageSmoothingQuality['"`\]]*\s*[=:]?\s*\S{0,10}/g)]
+    .map((m) => m[0]).filter((m) => !/^imageSmoothingQuality\s*[=:]\s*(['"`])(?:low|medium)\1$/.test(m.replace(/[,;)}\s]+$/, '')));
+  it('the ban is live: every way of reaching "high" is caught; low / medium and comments are not', () => {
+    for (const s of ["ctx.imageSmoothingQuality = 'high'", 'Object.assign(ctx, { imageSmoothingQuality: "high" })',
+      "const Q = 'high'; ctx.imageSmoothingQuality = Q;", "ctx['imageSmoothingQuality'] = 'high';", 'c.imageSmoothingQuality=`high`']) {
+      expect(violations(s), s).toHaveLength(1);
+    }
+    for (const s of ["ctx.imageSmoothingQuality = 'low';", 'g.imageSmoothingQuality = "medium"', "Object.assign(c, { imageSmoothingQuality: 'low' })",
+      "// imageSmoothingQuality 'high' gave two hashes", "/* imageSmoothingQuality = 'high' */ x = 1;"]) {
+      expect(violations(s), s).toEqual([]);
+    }
+  });
+  it('the ban holds over every engine/ and archetypes/ module', async () => {
+    const files = await fg(['engine/**/*.mjs', 'archetypes/**/*.mjs'], { cwd: TOOLKIT, absolute: true });
+    expect(files.length).toBeGreaterThan(10);
+    for (const f of files) expect(violations(readFileSync(f, 'utf8')), rel(f)).toEqual([]);
+  });
+});
+
 describe('palette-only colours (review focus 4): ONE ban over every archetype + transition module', () => {
   // hex (#fff, #8b6bff), a quoted rgb()/rgba()/hsl() literal (incl. a template `rgba(${…})`), a named CSS colour
   const BANS = [/#[0-9a-fA-F]{3,8}\b/g, /['"`](?:rgba?|hsla?)\(/g, /['"`](?:white|black|red|green|blue|yellow|cyan|magenta|orange|purple|gray|grey|transparent)['"`]/gi];
   const literals = (src: string) => BANS.flatMap((re) => src.match(re) ?? []);
-  // pre-v1.16-M2 debt, ratcheted (may shrink, never grow): cold-open-command keeps tinted greys of the M1 port.
-  // Follow-up: move them to palette tokens, then drop this entry.
-  const DEBT: Record<string, number> = { 'archetypes/cold-open-command.mjs': 38 };
+  // No debt left: cold-open-command's 38 M1 literals moved to palette tokens in M2.
+  const DEBT: Record<string, number> = {};
 
   it('the ban is live: it catches every literal form (and not the palette helpers)', () => {
     for (const s of ["fill: '#8b6bff'", "c = '#fff'", "g.fillStyle = 'rgba(255,255,255,0.07)'", 'x = `rgba(${r},0,0,1)`', "'hsl(200, 50%, 50%)'", "s = 'white'", "k = 'Transparent'"]) expect(literals(s), s).toHaveLength(1);
@@ -460,7 +486,7 @@ describe('palette-only colours (review focus 4): ONE ban over every archetype + 
   });
 
   it('M2 archetypes and transitions use the palette ROLES, never a named hue the palette did not pick (P.violet/cyan/amber/magenta/red)', () => {
-    for (const f of ['flow-graph', 'layered-stack', 'card-carousel', 'orbit-network', 'transitions/column-wipe', 'transitions/zoom-through', 'lockup-cta', 'kinetic-text']) {
+    for (const f of ['flow-graph', 'layered-stack', 'card-carousel', 'orbit-network', 'transitions/column-wipe', 'transitions/zoom-through', 'lockup-cta', 'kinetic-text', 'cold-open-command']) {
       const src = readFileSync(path.join(TOOLKIT, 'archetypes', `${f}.mjs`), 'utf8');
       // P.mint is the semantic "done" green (check marks, status dots) — allowed; accent colours use api.accents
       expect(src.match(/\b(?:P|pal|palette)\.(?:violet|cyan|amber|magenta|red)\b/g) ?? [], f).toEqual([]);

@@ -3,6 +3,10 @@
 // schedule; ENTER (cue `enter`) detonates a shockwave and the caption phrase arrives as the status line.
 // The spike's dive/portal is NOT here: leaving the beat is the transition's job (zoom-through).
 // Pure function of localT: every time is anchored to typing / cues / dur (D10); particles are seeded.
+// Every colour comes from the palette roles/neutrals. The window holds no stand-in text (no path pill, no grey
+// "comment" bars): its ornament is chrome (traffic lights, title rule), a cursor glow and a floor-grid reflection.
+// Bokeh drifts BEHIND the glass. Perspective strips use the default resampler: imageSmoothingQuality 'high'
+// made GPU pages come out in one of two hashes (AC3; tests/showreel/archetype-cold-open-command.test.ts).
 //
 // Slots: command (fact, mono, typed) · caption (phrase, optional, status line after ENTER).
 
@@ -42,14 +46,14 @@ export default {
       return cl[j].ch === '-';
     });
     const P = api.palette;
-    const colors = tok.map((t, i) => (t <= 0 ? P.text : flag[i] ? P.dim : t === 1 ? api.mix(P.primary, '#ffffff', 0.2) : P.secondary));
+    const colors = tok.map((t, i) => (t <= 0 ? P.text : flag[i] ? P.dim : t === 1 ? api.mix(P.primary, P.white, 0.2) : P.secondary));
     const glyphs = cl.map(({ s, e, ch }, i) => ({ s, e, space: ch === ' ', x: xs[i], color: colors[i] }));
     const capW = cap ? api.measure(m, cap, { size: capPx, weight: 500 }).width : 0;
     const perim = 2 * (PW - 2 * R) + 2 * (PH - 2 * R) + 2 * Math.PI * R;
     // bokeh table (constant, seeded by index)
     const bokeh = Array.from({ length: 15 }, (_, i) => ({
       x: api.hash(i * 5.1 + 1), y: api.hash(i * 9.7 + 3), r: 34 + api.hash(i * 2.3) * 96, z: 0.4 + api.hash(i * 8.9) * 1.1,
-      c: [P.primary, P.secondary, '#ffffff', P.primary, P.secondary][i % 5], ph: api.hash(i * 3.3) * 6,
+      c: [P.primary, P.secondary, P.white, P.primary, P.secondary][i % 5], ph: api.hash(i * 3.3) * 6,
     }));
     return { cmd, cap, fs, capPx, capW, glyphs, total, cw, perim, bokeh };
   },
@@ -76,19 +80,32 @@ export default {
       g.save(); g.globalAlpha = prog(lt, 0.22 * I, 0.35, ease.outQuad);
       rr(g, 0, 0, PW, PH, R);
       const fg = g.createLinearGradient(0, 0, 0, PH);
-      fg.addColorStop(0, 'rgba(20,24,38,0.95)'); fg.addColorStop(1, 'rgba(8,10,17,0.96)');
+      fg.addColorStop(0, mix(P.panel, P.panel2, 0.5, 0.95)); fg.addColorStop(1, rgba(P.ink2, 0.96));
       g.fillStyle = fg; g.fill();
       g.save(); rr(g, 0, 0, PW, PH, R); g.clip();
-      g.fillStyle = 'rgba(255,255,255,0.035)'; g.fillRect(0, 0, PW, 72);
-      g.fillStyle = 'rgba(255,255,255,0.08)'; g.fillRect(0, 72, PW, 1);
+      g.fillStyle = rgba(P.white, 0.035); g.fillRect(0, 0, PW, 72);
+      g.fillStyle = rgba(P.white, 0.08); g.fillRect(0, 72, PW, 1);
       const ag = g.createRadialGradient(PW * 0.5, BASE - 20, 0, PW * 0.5, BASE - 20, 520);
       ag.addColorStop(0, rgba(P.primary, 0.10 + 0.3 * hot + 0.08 * A)); ag.addColorStop(1, rgba(P.primary, 0));
       g.fillStyle = ag; g.fillRect(0, 0, PW, PH);
       g.globalCompositeOperation = 'lighter';
       g.save(); g.translate(lerp(-400, PW + 400, (lt * 0.28) % 1), 0); g.transform(1, 0, -0.45, 1, 0, 0);
       const sg = g.createLinearGradient(-110, 0, 110, 0);
-      sg.addColorStop(0, 'rgba(255,255,255,0)'); sg.addColorStop(0.5, 'rgba(190,200,255,0.045)'); sg.addColorStop(1, 'rgba(255,255,255,0)');
+      sg.addColorStop(0, rgba(P.white, 0)); sg.addColorStop(0.5, mix(P.white, P.primary, 0.25, 0.045)); sg.addColorStop(1, rgba(P.white, 0));
       g.fillStyle = sg; g.fillRect(-110, 0, 220, PH); g.restore();
+      // the floor grid reflected in the lower glass (ornament: full-width rules + converging rails, scrolling like the floor)
+      const RY = PH * 0.6, rv = prog(lt, 0.3 * I, 0.6, ease.outCubic);
+      if (rv > 0) {
+        const rg = g.createLinearGradient(0, RY, 0, PH);
+        rg.addColorStop(0, rgba(P.primary, 0)); rg.addColorStop(0.45, rgba(P.primary, 0.14 * rv)); rg.addColorStop(1, rgba(P.secondary, 0.34 * rv));
+        g.strokeStyle = rg; g.lineWidth = 1.2; g.beginPath();
+        for (let i = -8; i <= 8; i++) { g.moveTo(PW / 2, RY); g.lineTo(PW / 2 + i * 150, PH + 40); }
+        for (let k = 0; k < 7; k++) {
+          const y = RY + (PH - RY) * Math.pow(((k + lt * 0.8) % 7) / 7, 2);
+          g.moveTo(0, y); g.lineTo(PW, y);
+        }
+        g.stroke();
+      }
       g.restore(); g.restore();
 
       // border: corner brackets race along the edges, then settle to a hairline
@@ -105,7 +122,7 @@ export default {
           g.arcTo(ox, oy, ox, oy + sy * R, R); g.lineTo(ox, oy + sy * (R + lv));
         }
         g.stroke();
-        g.fillStyle = '#fff'; g.shadowColor = '#fff'; g.shadowBlur = 20;
+        g.fillStyle = P.white; g.shadowColor = P.white; g.shadowBlur = 20;
         for (const [ox, oy, sx, sy] of corners) {
           g.beginPath(); g.arc(ox + sx * (R + lh), oy, 3.5, 0, 7); g.arc(ox, oy + sy * (R + lv), 3.5, 0, 7); g.fill();
         }
@@ -113,18 +130,21 @@ export default {
       }
       g.save(); g.globalAlpha = 0.6 * prog(lt, 0.42 * I, 0.3, ease.outQuad); rr(g, 0.75, 0.75, PW - 1.5, PH - 1.5, R); g.strokeStyle = brandG; g.lineWidth = 1.5; g.stroke(); g.restore();
 
-      // header: traffic lights + a faint path bar (no text: every string must be a resolved fact/phrase)
-      [[P.red, 0.36], [P.amber, 0.41], [P.mint, 0.46]].forEach(([c, t0], i) => {
+      // header: traffic lights in the palette roles (window chrome only — no stand-in path pill, no fake text)
+      [[P.hot, 0.36], [P.primary, 0.41], [P.secondary, 0.46]].forEach(([c, t0], i) => {
         const q = prog(lt, t0 * I, 0.32, ease.outBack); if (q <= 0) return;
         g.save(); g.fillStyle = c; g.shadowColor = c; g.shadowBlur = 12;
         g.beginPath(); g.arc(36 + i * 28, 36, 7.5 * q, 0, 7); g.fill(); g.restore();
       });
-      const tp = prog(lt, 0.5 * I, 0.4, ease.outCubic);
-      if (tp > 0) {
-        g.save(); g.globalAlpha = tp * 0.5; rr(g, PW / 2 - 110 * tp, 28, 220 * tp, 16, 8); g.fillStyle = 'rgba(180,188,210,0.25)'; g.fill(); g.restore();
-        g.save(); g.globalAlpha = prog(lt, 0.55 * I, 0.5) * 0.35;
-        for (let i = 0; i < 3; i++) { rr(g, X0, 150 + i * 22 - 10 * (1 - tp), [380, 520, 300][i], 8, 4); g.fillStyle = 'rgba(143,153,182,0.35)'; g.fill(); }
-        g.restore();
+
+      // cursor glow: the caret lights the glass around the prompt line (steady — the caret itself blinks)
+      const gp = prog(lt, 0.34 * I, 0.4, ease.outCubic);
+      if (gp > 0) {
+        const gx = CMD_X + (n < N ? L.glyphs[n].x : L.total), gy = BASE - L.fs * 0.3;
+        const cgl = g.createRadialGradient(gx, gy, 0, gx, gy, 260);
+        cgl.addColorStop(0, rgba(P.primary, (0.12 + 0.08 * A + 0.2 * hot) * gp)); cgl.addColorStop(0.4, rgba(P.primary, (0.04 + 0.06 * hot) * gp)); cgl.addColorStop(1, rgba(P.primary, 0));
+        g.save(); rr(g, 0, 0, PW, PH, R); g.clip();
+        g.globalCompositeOperation = 'lighter'; g.fillStyle = cgl; g.fillRect(gx - 260, gy - 260, 520, 520); g.restore();
       }
 
       // prompt chevron
@@ -169,9 +189,9 @@ export default {
         const k = Math.exp(-a * 15), settle = 1 - Math.exp(-a * 9);
         const base = gl.color;
         g.save();
-        g.shadowColor = base === P.text ? 'rgba(220,230,255,0.5)' : base; g.shadowBlur = (base === P.text ? 4 : 10) + 30 * k + 14 * hot;
+        g.shadowColor = base === P.text ? rgba(P.text, 0.5) : base; g.shadowBlur = (base === P.text ? 4 : 10) + 30 * k + 14 * hot;
         g.translate(CMD_X + gl.x + L.cw / 2, BASE); g.scale(1 + 0.5 * k, 1 + 0.5 * k); g.translate(-L.cw / 2, -11 * k);
-        const fill = mix(mix('#ffffff', base, settle), '#ffffff', heat);
+        const fill = mix(mix(P.white, base, settle), P.white, heat);
         api.text(g, L.cmd, 0, 0, { size: L.fs, weight: 500, fill, slice: [gl.s, gl.e] });
         g.restore();
       }
@@ -189,7 +209,7 @@ export default {
         const ch = L.fs * 1.15, cxp = CMD_X + (n < N ? L.glyphs[n].x : L.total) + 2, cy0 = BASE - L.fs * 0.88;
         g.save();
         const cg = g.createLinearGradient(0, cy0, 0, cy0 + ch);
-        cg.addColorStop(0, mix(P.primary, '#ffffff', 0.25 + 0.7 * hot)); cg.addColorStop(1, mix(P.secondary, '#ffffff', 0.25 + 0.7 * hot));
+        cg.addColorStop(0, mix(P.primary, P.white, 0.25 + 0.7 * hot)); cg.addColorStop(1, mix(P.secondary, P.white, 0.25 + 0.7 * hot));
         g.fillStyle = cg; g.shadowColor = P.primary; g.shadowBlur = 22 + 24 * hot + 20 * A;
         g.globalAlpha = lt < TS ? 0.85 : 1;
         g.fillRect(cxp, cy0, Math.max(6, L.cw - 4), ch); g.restore();
@@ -199,7 +219,7 @@ export default {
       const c0 = E - 0.32, q = ease.inQuad(clamp((lt - c0) / (E - c0)));
       if (q > 0 && dE < 0.6) {
         g.save(); rr(g, 0.75, 0.75, PW - 1.5, PH - 1.5, R);
-        g.lineWidth = 3.5; g.shadowColor = P.secondary; g.shadowBlur = 24; g.strokeStyle = mix(P.secondary, '#ffffff', 0.55);
+        g.lineWidth = 3.5; g.shadowColor = P.secondary; g.shadowBlur = 24; g.strokeStyle = mix(P.secondary, P.white, 0.55);
         g.globalAlpha = dE < 0 ? q : 0.9 * Math.exp(-dE * 9);
         const len = (dE < 0 ? q : 1) * L.perim / 2;
         g.setLineDash([len, L.perim]); g.lineDashOffset = 0; g.stroke();
@@ -208,7 +228,7 @@ export default {
       }
       if (dE >= 0 && dE < 0.5) {
         g.save(); rr(g, 0.75, 0.75, PW - 1.5, PH - 1.5, R);
-        g.lineWidth = 4; g.strokeStyle = '#fff'; g.shadowColor = P.primary; g.shadowBlur = 30; g.globalAlpha = 0.7 * Math.exp(-dE * 9); g.stroke(); g.restore();
+        g.lineWidth = 4; g.strokeStyle = P.white; g.shadowColor = P.primary; g.shadowBlur = 30; g.globalAlpha = 0.7 * Math.exp(-dE * 9); g.stroke(); g.restore();
       }
 
       // status line (caption phrase) + progress, born on ENTER
@@ -223,13 +243,14 @@ export default {
         if (L.cap) {
           const bx = lerp(-160, L.capW + 160, (sa * 1.5) % 1);
           const tg = g.createLinearGradient(X0 + 40 + bx - 130, 0, X0 + 40 + bx + 130, 0);
-          tg.addColorStop(0, '#9aa3bb'); tg.addColorStop(0.5, '#ffffff'); tg.addColorStop(1, '#9aa3bb');
+          const silver = mix(P.dim, P.text, 0.15);
+          tg.addColorStop(0, silver); tg.addColorStop(0.5, P.white); tg.addColorStop(1, silver);
           api.text(g, L.cap, X0 + 40, sy, { size: L.capPx, weight: 500, fill: tg });
         }
         const bw = PW - 2 * X0, bp = 0.07 + 0.36 * ease.outCubic(clamp(sa / 0.6)), by = sy + 50;
-        rr(g, X0, by, bw, 6, 3); g.fillStyle = 'rgba(255,255,255,0.07)'; g.fill();
+        rr(g, X0, by, bw, 6, 3); g.fillStyle = rgba(P.white, 0.07); g.fill();
         rr(g, X0, by, bw * bp, 6, 3); g.fillStyle = api.brand(g, X0, 0, X0 + bw, 0, P.primary, P.secondary); g.shadowColor = P.secondary; g.shadowBlur = 16; g.fill();
-        g.shadowBlur = 24; g.shadowColor = '#fff'; g.fillStyle = '#fff'; g.beginPath(); g.arc(X0 + bw * bp, by + 3, 4.5, 0, 7); g.fill();
+        g.shadowBlur = 24; g.shadowColor = P.white; g.fillStyle = P.white; g.beginPath(); g.arc(X0 + bw * bp, by + 3, 4.5, 0, 7); g.fill();
         g.restore();
       }
     }
@@ -242,7 +263,9 @@ export default {
       const S = api.scratch(0);
       S.ctx.save(); S.ctx.translate(PAD, PAD); drawPanel(S.ctx); S.ctx.restore();
       const D = 1750, co = Math.cos(theta), si = Math.sin(theta), total = PW + 2 * PAD, SW = 6, TH = PH + 2 * PAD;
-      c.save(); c.imageSmoothingQuality = 'high';
+      // AC3: keep the default resampler. imageSmoothingQuality 'high' (cubic on the GPU for these ~1:1 scaled strips)
+      // gave fresh pages one of two RGBA hashes (A/B: 'high' bimodal; 'low' / 'medium' / an unscaled blit stable).
+      c.save();
       for (let u0 = -total / 2; u0 < total / 2; u0 += SW) {
         const u1 = Math.min(u0 + SW, total / 2), um = (u0 + u1) / 2;
         const x0 = cx + (u0 * co * D / (D - u0 * si)) * sc, x1 = cx + (u1 * co * D / (D - u1 * si)) * sc;
@@ -253,7 +276,6 @@ export default {
     }
 
     // ═════════════ environment ═════════════
-    const PR = api.hexToRgb(P.primary), SR = api.hexToRgb(P.secondary);
     function drawFloor(alpha) {
       if (alpha <= 0.002) return;
       const rv = prog(lt, 0.05, 1.0, ease.outCubic), pulse = decay(dE, 6) * 0.7;
@@ -274,19 +296,19 @@ export default {
       const span = rv * 1700;
       for (let k = 0; k < 11; k++) {
         const qd = ((k + lt * 0.8) % 11) / 11, y = HORIZON + depth * Math.pow(qd, 2.2);
-        ctx.strokeStyle = `rgba(${lerp(PR[0], SR[0], qd) | 0},${lerp(PR[1], SR[1], qd) | 0},${lerp(PR[2], SR[2], qd) | 0},${(0.05 + 0.34 * qd) * (1 + pulse)})`;
+        ctx.strokeStyle = mix(P.primary, P.secondary, qd, (0.05 + 0.34 * qd) * (1 + pulse));
         ctx.lineWidth = 0.8 + qd * 1.4; ctx.beginPath(); ctx.moveTo(PCX - span, y); ctx.lineTo(PCX + span, y); ctx.stroke();
       }
       const hw = rv * 1100 * (1 + 0.3 * pulse);
       ctx.globalCompositeOperation = 'lighter';
       const hg = ctx.createLinearGradient(PCX - hw, 0, PCX + hw, 0);
-      hg.addColorStop(0, rgba(P.primary, 0)); hg.addColorStop(0.3, rgba(P.primary, 0.8)); hg.addColorStop(0.5, 'rgba(255,255,255,1)');
+      hg.addColorStop(0, rgba(P.primary, 0)); hg.addColorStop(0.3, rgba(P.primary, 0.8)); hg.addColorStop(0.5, P.white);
       hg.addColorStop(0.7, rgba(P.secondary, 0.8)); hg.addColorStop(1, rgba(P.secondary, 0));
       ctx.fillStyle = hg; ctx.shadowColor = P.primary; ctx.shadowBlur = 24; ctx.fillRect(PCX - hw, HORIZON - 1.2, hw * 2, 2.4); ctx.shadowBlur = 0;
       const cp = prog(lt, 0.12, 0.8, ease.inOutQuart);
       if (cp > 0 && cp < 1) {
         const cx = lerp(-300, W + 300, cp), cg = ctx.createLinearGradient(cx - 420, 0, cx + 30, 0);
-        cg.addColorStop(0, rgba(P.secondary, 0)); cg.addColorStop(1, 'rgba(255,255,255,1)');
+        cg.addColorStop(0, rgba(P.secondary, 0)); cg.addColorStop(1, P.white);
         ctx.fillStyle = cg; ctx.fillRect(cx - 420, HORIZON - 1.5, 450, 3);
       }
       ctx.restore();
@@ -342,7 +364,7 @@ export default {
       const a = prog(lt, 0.12, 0.5, ease.outCubic); if (a <= 0.004) return;
       ctx.save(); ctx.globalAlpha = a;
       const m = 56, d = prog(lt, 0.05, 0.5, ease.outQuart) * 30;
-      ctx.strokeStyle = 'rgba(255,255,255,0.38)'; ctx.lineWidth = 1.5; ctx.beginPath();
+      ctx.strokeStyle = rgba(P.white, 0.38); ctx.lineWidth = 1.5; ctx.beginPath();
       for (const [x, y, sx, sy] of [[m, m, 1, 1], [W - m, m, -1, 1], [W - m, H - m, -1, -1], [m, H - m, 1, -1]]) {
         ctx.moveTo(x + sx * d, y); ctx.lineTo(x, y); ctx.lineTo(x, y + sy * d);
       }
@@ -354,7 +376,7 @@ export default {
       ctx.save(); ctx.globalCompositeOperation = 'lighter';
       const fa = 0.8 * Math.exp(-dE * 8);
       ctx.save(); ctx.translate(ox, oy);
-      [[2400, 0.011, 0.85, '#ffffff', P.secondary], [3200, 0.006, 0.8, mix(P.primary, '#ffffff', 0.3), P.primary]].forEach(([len, th, k, c0, c1]) => {
+      [[2400, 0.011, 0.85, P.white, P.secondary], [3200, 0.006, 0.8, mix(P.primary, P.white, 0.3), P.primary]].forEach(([len, th, k, c0, c1]) => {
         ctx.save(); ctx.scale(1, th);
         const g = ctx.createRadialGradient(0, 0, 0, 0, 0, len / 2);
         const c0h = mix(c0, c0, 0, fa * k);
@@ -363,14 +385,14 @@ export default {
       });
       ctx.restore();
       // shockwave rings
-      [[0, '#ffffff', 13], [0.05, P.primary, 11], [0.11, P.secondary, 8]].forEach(([d, col, wd]) => {
+      [[0, P.white, 13], [0.05, P.primary, 11], [0.11, P.secondary, 8]].forEach(([d, col, wd]) => {
         const a = dE - d; if (a <= 0 || a > 0.95) return;
         const q = ease.outExpo(a / 0.95), rad = 30 + q * 1650;
         ctx.save(); ctx.strokeStyle = col; ctx.lineWidth = wd * (1 - q) + 1.5; ctx.globalAlpha = Math.pow(1 - q, 1.3);
         ctx.shadowColor = col; ctx.shadowBlur = 24; ctx.beginPath(); ctx.arc(ox, oy, rad, 0, 7); ctx.stroke(); ctx.restore();
       });
       // radial speed lines (3 colour batches)
-      const cols = ['#ffffff', P.primary, P.secondary], batches = [[], [], []];
+      const cols = [P.white, P.primary, P.secondary], batches = [[], [], []];
       for (let i = 0; i < 120; i++) {
         const r = hash(i * 1.37 + 5), r2 = hash(i * 2.91 + 2), r3 = hash(i * 4.13 + 9);
         const ang = (i / 120) * 6.2832 + r * 0.05, a = dE - r3 * 0.05;
@@ -387,7 +409,7 @@ export default {
       // debris sparks: drag-decelerated, analytic positions
       ctx.globalAlpha = 1; ctx.lineWidth = 3;
       for (let pass = 0; pass < 2; pass++) {
-        ctx.strokeStyle = pass ? P.secondary : mix(P.primary, '#ffffff', 0.6); ctx.beginPath();
+        ctx.strokeStyle = pass ? P.secondary : mix(P.primary, P.white, 0.6); ctx.beginPath();
         for (let i = pass; i < 90; i += 2) {
           const r = rng(500 + i * 17), ang = r() * 6.2832, v0 = 500 + r() * 1800, k = 3.5 + r() * 2, life = 0.35 + r() * 0.6;
           if (dE > life) continue;
@@ -400,9 +422,9 @@ export default {
       // white-hot flash
       const fl = Math.exp(-dE * 26);
       const g = ctx.createRadialGradient(ox, oy, 0, ox, oy, 560);
-      g.addColorStop(0, `rgba(255,255,255,${0.42 * fl})`); g.addColorStop(0.25, rgba(P.primary, 0.22 * fl)); g.addColorStop(1, rgba(P.primary, 0));
+      g.addColorStop(0, rgba(P.white, 0.42 * fl)); g.addColorStop(0.25, rgba(P.primary, 0.22 * fl)); g.addColorStop(1, rgba(P.primary, 0));
       ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-      ctx.fillStyle = `rgba(255,255,255,${0.1 * Math.exp(-dE * 30)})`; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = rgba(P.white, 0.1 * Math.exp(-dE * 30)); ctx.fillRect(0, 0, W, H);
       ctx.restore();
     }
 
@@ -421,11 +443,11 @@ export default {
 
     drawFloor(prog(lt, 0, 0.2));
     const A = anticipate(lt);
-    if (A > 0 && dE < 0) { ctx.fillStyle = `rgba(2,3,8,${0.34 * A})`; ctx.fillRect(0, 0, W, H); }
+    if (A > 0 && dE < 0) { ctx.fillStyle = rgba(P.ink, 0.34 * A); ctx.fillRect(0, 0, W, H); }
+    drawBokeh(); // behind the glass: a disc must never wash over the terminal body (R5)
     drawHalo(cx, cy, pk, theta);
     drawEchoes(cx, cy, pk);
     placePanel(ctx, cx, cy, pk, theta);
-    drawBokeh();
     drawLeaks();
     drawCrop();
     drawEnterFX(ox, oy);

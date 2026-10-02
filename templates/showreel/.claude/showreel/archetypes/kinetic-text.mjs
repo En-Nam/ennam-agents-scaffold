@@ -141,7 +141,7 @@ function punchLayout(rb, api) {
   // vertical: [lead · rule] above the hero; the hero's visual middle is the slam pivot
   const leadCap = lead ? Math.round(leadPx * 0.74) : 0;
   const gapLH = lead ? Math.max(48, Math.round(maxPx * 0.5)) : 0;
-  const top = Math.round((1080 - (leadCap + gapLH + heroBlock)) / 2);
+  const top = Math.round((api.H - (leadCap + gapLH + heroBlock)) / 2);
   const leadBase = top + leadCap;
   const heroMid = top + leadCap + gapLH + Math.round(heroBlock / 2);
   const ruleY = lead ? Math.round(leadBase + gapLH * 0.46) : Math.round(heroMid + heroBlock / 2 + Math.max(30, maxPx * 0.3));
@@ -149,15 +149,15 @@ function punchLayout(rb, api) {
   // per-line slam cap: the scaled line (incl. echoes above and the chroma split) stays inside the safe area
   // after the camera push + shake (api.cam, the engine's own worst case)
   const { pushMax: CAM_PUSH, shakeMax: CAM_SHAKE } = api.cam;
-  const halfX = (1920 / 2 - SAFE - CAM_SHAKE - 4) / CAM_PUSH;
-  const upY = (heroMid - 1080 / 2) + (1080 / 2 - SAFE - CAM_SHAKE - 4) / CAM_PUSH;
-  const downY = (1080 / 2 - heroMid) + (1080 / 2 - SAFE - CAM_SHAKE - 4) / CAM_PUSH;
+  const halfX = (api.W / 2 - SAFE - CAM_SHAKE - 4) / CAM_PUSH;
+  const upY = (heroMid - api.H / 2) + (api.H / 2 - SAFE - CAM_SHAKE - 4) / CAM_PUSH;
+  const downY = (api.H / 2 - heroMid) + (api.H / 2 - SAFE - CAM_SHAKE - 4) / CAM_PUSH;
   const rows = sized.map((r) => {
     // the row block is centred on heroMid; each piece is centred horizontally
     const base0 = Math.round(heroMid - r.blockH / 2 + r.px * 0.74);
     const pieces = r.pieces.map((q) => {
       const base = base0 + q.dy;
-      return { ...q, base, x0: 1920 / 2 - q.width / 2, ...lineSprites(api, r.item, { ...r.o, slice: [q.s, q.e] }, q.width, q.asc, q.desc) };
+      return { ...q, base, x0: api.W / 2 - q.width / 2, ...lineSprites(api, r.item, { ...r.o, slice: [q.s, q.e] }, q.width, q.asc, q.desc) };
     });
     const first = pieces[0], last = pieces[pieces.length - 1];
     const sMax = Math.min(halfX / (r.width / 2 + CHROMA + CHROMA_SLACK), upY / (heroMid - (first.base - first.asc) + ECHO_MAX), downY / (last.base + last.desc - heroMid));
@@ -562,7 +562,7 @@ export default {
     const lh = Math.round(px * 1.12);
     const leadGap = lead ? leadPx + 46 : 0;
     const blockH = N * lh + leadGap;
-    const top = Math.round((1080 - blockH) / 2);
+    const top = Math.round((api.H - blockH) / 2);
     return { rows, lead, px, leadPx, lh, top, leadY: top + leadPx, firstBase: top + leadGap + Math.round(px * 0.9), track, weight };
   },
 

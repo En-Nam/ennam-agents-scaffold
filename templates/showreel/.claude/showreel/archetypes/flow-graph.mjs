@@ -2,16 +2,19 @@
 // chosen path lights node by node on the cue map `step.<i>` (C14), packets ride the edges, then the whole
 // graph IMPLODES into a single point on cue `converge` (iris + core flare + rays + shock rings). Cue times come
 // only from api.cue (a missing cue fails at boot, never a re-derived schedule).
-//   converge — lanes with skeleton option pills (the paths not taken) + the lit path, imploding at the end
+//   converge — the lit path under a canopy of dim alternative routes (arches between the same steps), imploding at the end
 //   chain    — the same path as a clean pipeline (ghost nodes fill in on their cue), no fan; on `converge`
 //              a light runs the whole chain and it LOCKS with a check instead of imploding
 // Layout: 3 steps → one row; 4..6 → two rows read as a snake (row 2 runs right → left), so 6 near-maxChars
 // labels still fit the safe area at or above the family minimum (fitSlot fails `check` otherwise).
 // Scale (R5): labels take the LARGEST px the column width allows (up to STEP_MAX_PX) and the columns spread
 // over the whole graph band (GX0..GX1), so short labels read big and the graph always spans most of the frame.
-// The paths not taken are drawn as secondary branch stubs (a dim port dot + a fading line, no box, no text),
-// so nothing reads as a missing label; they fan over the branch band (BAND_Y0..BAND_Y1) so the graph fills the
-// frame height too. Chain ghost slots (future nodes) are port dots only, for the same reason.
+// Ornament (R5): the alternative routes are dim arches between two DRAWN steps of the same row (top edge → top
+// edge, bottom → bottom), nested over the arch band (BAND_Y0..BAND_Y1) so the graph fills the frame height. Every
+// edge on screen connects two drawn nodes (or the origin diamond): no lane panels, no stub rows, no pin circles,
+// nothing that imitates a missing label. Chain ghost slots (future nodes) are port dots only, for the same reason.
+// Timing: node i lights on step.<i>; a still taken before the last step cue (the contact-sheet hold sits there
+// when the cue map's `to` reaches past it) shows that node unlit with its edge in flight — a cue-map matter.
 // Accepted vignette floor: the engine vignette still dims the outermost lit label a little (worst measured glyph
 // ratio vs the centre label ≈ 0.86, pinned ≥ 0.84 in the R5 rendered test); lifting it further needs engine changes.
 // Slots: steps (3–6 facts; route/command render mono) · lead (flow phrase, optional, screen-fixed header).
@@ -26,11 +29,11 @@ const GAP_MIN = 48, GAP_MAX = 400;      // 3 columns of 28 mono chars still fit 
 // frame): the engine vignette (0 inside r = 0.35·H, 0.62 at r = H) takes ~20% off a white label ~660 px off-axis
 const GX0 = 290, GX1 = [1630, 1590];
 const ROW_Y1 = 600, ROW_Y2 = [420, 770];  // node centre rows: one row / two-row snake
-const LANE_PAD = 18;
 const LEAD_Y = 170, LEAD_MAX_PX = 40;
-// branch band (converge): the option branches fan out to fill ~60–65% of the frame height like spike A's option
-// lists. Lane glass stays below the lead header's rule (LEAD_Y + 29) and above BAND_Y1; pitch capped at PITCH_MAX
-const BAND_Y0 = [140, LEAD_Y + 50], BAND_Y1 = 980, PITCH_MAX = 110;
+// arch band (converge): the alternative-route arches reach ~65–70% of the frame height like spike A's option
+// lists, staying below the lead header's rule (LEAD_Y + 29) and above BAND_Y1. ARCH_K = apex heights as fractions
+// of the room between the node row and the band edge (nested: the higher arch lands nearer the node centres)
+const BAND_Y0 = [150, LEAD_Y + 60], BAND_Y1 = 970, ARCH_K = [0.42, 0.71, 1];
 const SAMP = 20;                          // samples per edge curve
 const LOCK_O_MAX = 90;                    // chain lock ring: final growth off the last pill's edge
 
@@ -106,29 +109,23 @@ export default {
     const dirOf = (i) => (nodes[i].row === 0 ? 1 : -1);
     const pathEdges = nodes.map((n, i) => ({ i, pts: edgeBetween(i === 0 ? origin : nodes[i - 1], n, kindInto(i), dirOf(i)) }));
 
-    // converge: every path step sits in a lane of option branches (the paths not taken), fanned from the previous
-    // node. A branch is a port dot on the lane's entry side + a fading stub line: clearly secondary, never a box
-    // (an empty box reads as a missing label) and never text (nothing on screen is invented).
+    // converge: alternative routes between consecutive steps of the same row — nested arches from node i-1's
+    // top (bottom) edge to node i's, outward from the row (one row: both sides; a snake row: away from the other
+    // row). Both ends sit on drawn pills, so no line ever ends in empty space; no box, no text (nothing invented).
     const rnd = api.rng(api.seed);
-    const lanes = [], decoys = [], fan = [];
+    const fan = [];
     if (!chain) {
-      // 3 branches per side fill the room between the node row and the band edge (one row: both sides; a snake row
-      // fans outward only), never closer to the node than its pill edge + a port dot
-      const top = BAND_Y0[lead ? 1 : 0] + LANE_PAD + 10, bot = BAND_Y1 - LANE_PAD - 10;
+      const top = BAND_Y0[lead ? 1 : 0], bot = BAND_Y1;
       const room = Math.min(rowY[0] - top, bot - rowY[rows - 1]);
-      const pitch = Math.round(Math.max(PH / 2 + 12, Math.min(PITCH_MAX, room / 3)));
-      nodes.forEach((n, i) => {
-        const dir = dirOf(i);
-        const offs = rows === 1 ? [-1, 1, -2, 2, -3, 3] : n.row === 0 ? [-1, -2, -3] : [1, 2, 3];
-        const mine = offs.map((o, r) => ({
-          lane: i, rank: r, far: Math.abs(o), x: n.x - dir * (n.w / 2 - PADX), y: n.y + o * pitch, w: 0, h: 0,
-          dir, len: Math.round((n.w - 2 * PADX) * (0.5 + 0.45 * rnd())),
+      nodes.forEach((b, i) => {
+        if (i === 0 || nodes[i - 1].row !== b.row) return;
+        const a = nodes[i - 1], dir = dirOf(i);
+        const sides = rows === 1 ? [-1, 1] : b.row === 0 ? [-1] : [1];
+        sides.forEach((s, si) => ARCH_K.forEach((f, k) => {
+          const h = (f * room - PH / 2) / 0.75, q = 0.62 - 0.24 * k; // port offset from the node centre (× w/2)
+          const A = [a.x + dir * q * (a.w / 2), a.y + s * (PH / 2)], B = [b.x - dir * q * (b.w / 2), b.y + s * (PH / 2)];
+          fan.push({ a: i - 1, b: i, rank: k + si * ARCH_K.length, ph: rnd(), pts: curve(A, [A[0], A[1] + s * h], [B[0], B[1] + s * h], B) });
         }));
-        decoys.push(...mine);
-        const ys = [n.y - PH / 2, n.y + PH / 2, ...mine.map((d) => d.y)];
-        const y0 = Math.min(...ys) - LANE_PAD - 10, y1 = Math.max(...ys) + LANE_PAD + 10;
-        lanes.push({ i, x0: n.x - n.w / 2 - LANE_PAD, x1: n.x + n.w / 2 + LANE_PAD, y0, y1, ny: n.y });
-        mine.forEach((d) => fan.push({ lane: i, rank: d.rank, ph: rnd(), pts: edgeBetween(i === 0 ? origin : nodes[i - 1], d, kindInto(i), dir) }));
       });
     }
 
@@ -143,10 +140,10 @@ export default {
       secondary: tint(P.secondary),
     };
 
-    const ys = [...nodes, ...decoys].flatMap((d) => [d.y - d.h / 2, d.y + d.h / 2]);
+    const ys = [...nodes.flatMap((d) => [d.y - d.h / 2, d.y + d.h / 2]), ...fan.flatMap((f) => f.pts.map((p) => p[1]))];
     const gc = (Math.min(...ys) + Math.max(...ys)) / 2;
     const leadW = lead ? api.measure(m, lead, { size: leadPx, weight: 700, track: 4 }).width - 4 : 0;
-    return { chain, N, rows, px, PH, PADX, RAD, nodes, origin, pathEdges, lanes, decoys, fan, SPR, gc, lead, leadPx, leadW };
+    return { chain, N, rows, px, PH, PADX, RAD, nodes, origin, pathEdges, fan, SPR, gc, lead, leadPx, leadW };
   },
 
   draw(ctx, lt, p, rb, cues) {
@@ -159,7 +156,6 @@ export default {
     const STEP = L.nodes.map((_, i) => api.cue(`step.${i}`));
     const CV = api.cue('converge');
     const CV0 = CV - 2 * grid;                         // implosion window ends exactly on the cue
-    const laneT = (i) => Math.max(0, STEP[i] - 4 * grid);
     const edgeT0 = (i) => STEP[i] - 2 * grid, EDGE_D = 2 * grid;
     const pathColor = (k, a = 1) => mix(P.primary, P.secondary, clamp(k / Math.max(1, N)), a);
     const spot = (c, stops, x, y, r, a) => {
@@ -187,7 +183,8 @@ export default {
       for (let j = 1; j <= n; j++) { q = Pt(pts[j][0], pts[j][1]); c2.lineTo(q[0], q[1]); }
       if (n < SAMP && fr > 0) { q = Pt(lerp(pts[n][0], pts[n + 1][0], fr), lerp(pts[n][1], pts[n + 1][1], fr)); c2.lineTo(q[0], q[1]); }
     };
-    const fanT0 = (f) => laneT(f.lane) + f.rank * 0.25 * grid;
+    // an arch leaves node a once node b has popped (b pops as its path edge departs), never toward an absent node
+    const fanT0 = (f) => edgeT0(f.b) + f.rank * 0.25 * grid;
     const pathDraw = (i) => ease.outCubic(clamp((lt - edgeT0(i)) / EDGE_D));
     // chain: the ghost pipeline is laid out before the first step lights
     const ghostT0 = (i) => (STEP[0] - 4 * grid) * (i / Math.max(1, N)), GHOST_D = 3 * grid;
@@ -201,37 +198,12 @@ export default {
       ctx.beginPath(); ctx.arc(CX, CY, lerp(240, 1250, ease.outExpo(u)), 0, 7); ctx.stroke(); ctx.restore();
     }
 
-    // ── lanes: glass columns behind each option list ──
-    function drawLanes() {
-      for (const ln of L.lanes) {
-        // the glass fades in with its contents (first branch stub → node pop), never ahead of them as an empty panel
-        const a = sm(laneT(ln.i) + 1.1 * grid, edgeT0(ln.i) + grid, lt) * F.vis; if (a < 0.01) continue;
-        const [x0, y0] = Pt(ln.x0, ln.y0), [x1, y1] = Pt(ln.x1, ln.y1);
-        ctx.save(); ctx.globalAlpha = a * (1 - 0.3 * F.dim);
-        // the glass is densest on the chosen node's row and thins out over the branch stubs (no empty panel)
-        const ny = Pt(0, ln.ny)[1], far = Math.abs(y0 - ny) > Math.abs(y1 - ny) ? y0 : y1;
-        const lg = ctx.createLinearGradient(0, ny, 0, far + Math.sign(far - ny) * 1e-3);
-        lg.addColorStop(0, mix(P.panel2, P.primary, 0.1, 0.46)); lg.addColorStop(1, mix(P.panel2, P.primary, 0.1, 0.1));
-        const sg = ctx.createLinearGradient(0, ny, 0, far + Math.sign(far - ny) * 1e-3);
-        sg.addColorStop(0, mix(P.text, P.primary, 0.3, 0.16)); sg.addColorStop(1, mix(P.text, P.primary, 0.3, 0.04));
-        rr(ctx, x0, y0, x1 - x0, y1 - y0, 24 * F.ns); ctx.fillStyle = lg; ctx.fill();
-        ctx.lineWidth = 1.5; ctx.strokeStyle = sg; ctx.stroke();
-        // lane index pips (no text: a dot per step position, the lit one in brand colour)
-        const [px0, py0] = Pt((ln.x0 + ln.x1) / 2, ln.y0 + 12);
-        for (let k = 0; k < N; k++) {
-          ctx.beginPath(); ctx.arc(px0 + (k - (N - 1) / 2) * 12 * F.ns, py0, 2.6 * F.ns, 0, 7);
-          ctx.fillStyle = k === ln.i ? pathColor(k) : rgba(P.dim, 0.5); ctx.fill();
-        }
-        ctx.restore();
-      }
-    }
-
     // ── edges: dim fan (batched) → packets → lit path with white-hot head ──
     function drawEdges() {
       if (F.vis < 0.01) return;
       const dimMul = 1 - 0.4 * F.dim;
       ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-      ctx.lineWidth = Math.max(1, 2 * F.ns); ctx.strokeStyle = mix(P.dim, P.primary, 0.3, 0.4 * dimMul * F.vis);
+      ctx.lineWidth = Math.max(1, 2 * F.ns); ctx.strokeStyle = mix(P.dim, P.primary, 0.4, 0.5 * dimMul * F.vis);
       ctx.beginPath();
       for (const f of L.fan) { const dp = ease.outCubic(clamp((lt - fanT0(f)) / (1.2 * grid))); if (dp > 0.001) trace(ctx, f.pts, dp); }
       if (L.chain) L.pathEdges.forEach((e, i) => { const dp = ease.outCubic(clamp((lt - ghostT0(i)) / GHOST_D)); if (dp > 0.001) trace(ctx, e.pts, dp); });
@@ -273,24 +245,6 @@ export default {
     }
 
     function shape(c2, w, h, r) { rr(c2, -w / 2, -h / 2, w, h, r); }
-
-    // option branch (a path not taken): a port dot where its fan edge lands + a stub that fades into the lane.
-    // Secondary by construction: thin, dim, fainter the further it sits from the chosen node, no box, no text.
-    function drawDecoy(d) {
-      const t0 = laneT(d.lane) + d.rank * 0.25 * grid + 1.1 * grid, age = lt - t0; if (age < 0) return;
-      const [x, y] = Pt(d.x, d.y), grow = ease.outCubic(clamp(age / (1.6 * grid)));
-      const a = clamp(age / (0.6 * grid)) * F.vis * (1 - 0.45 * F.dim) * (1.1 - 0.16 * d.far);
-      if (a < 0.01) return;
-      const len = d.len * grow * F.ns, x1 = x + d.dir * len;
-      ctx.save(); ctx.lineCap = 'round';
-      const g = ctx.createLinearGradient(x, 0, x1 + d.dir * 1e-3, 0);
-      g.addColorStop(0, mix(P.dim, P.primary, 0.45, 0.75)); g.addColorStop(1, mix(P.dim, P.primary, 0.45, 0));
-      ctx.globalAlpha = a; ctx.strokeStyle = g; ctx.lineWidth = Math.max(1, 2 * F.ns);
-      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x1, y); ctx.stroke();
-      ctx.beginPath(); ctx.arc(x, y, 5.5 * F.ns, 0, 7); ctx.fillStyle = rgba(P.ink2, 0.9); ctx.fill();
-      ctx.lineWidth = Math.max(1, 1.8 * F.ns); ctx.strokeStyle = mix(P.dim, P.primary, 0.5, 0.8); ctx.stroke();
-      ctx.restore();
-    }
 
     // path node: pops as its edge departs, LIGHTS on step.<i> (flash + ring + sparks)
     function drawNode(n) {
@@ -358,7 +312,6 @@ export default {
     }
 
     function drawGraph() {
-      drawLanes();
       drawEdges();
       // convergence streaks UNDER the nodes: every node drags a bright trail into the point
       if (F.c > 0.02 && F.c < 0.999) {
@@ -368,11 +321,12 @@ export default {
           ctx.lineWidth = (path ? 7 : 4) * F.ns; ctx.strokeStyle = path ? mix(P.secondary, P.text, 0.6, 0.55) : mix(P.primary, P.text, 0.3, 0.4);
           ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
         };
-        L.decoys.forEach((d) => streak(d, false)); L.nodes.forEach((n) => { if (lt >= edgeT0(n.i)) streak(n, true); });
+        // the arch apexes streak too, so the whole canopy is dragged into the point (not just the pills)
+        L.fan.forEach((f) => streak({ x: f.pts[SAMP >> 1][0], y: f.pts[SAMP >> 1][1] }, false));
+        L.nodes.forEach((n) => { if (lt >= edgeT0(n.i)) streak(n, true); });
         ctx.restore();
       }
       drawOrigin();
-      L.decoys.forEach(drawDecoy);
       L.nodes.forEach(drawNode);
     }
 

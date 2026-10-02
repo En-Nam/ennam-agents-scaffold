@@ -10,7 +10,7 @@
 // text is drawn only once the card has landed in its final place, so no text is ever drawn off-frame while
 // cards fly in (C16 no-clipping). Pure function of localT (D9/D10): times come from cues / api.grid only.
 
-const ROW_CW = 560, ROW_GAP = 40, ROW_PAD = 40, ROW_TAG = 56;
+const ROW_CW = 560, ROW_MIN_CW = 360, ROW_GAP = 40, ROW_HGAP = 28, ROW_PAD = 40, ROW_TAG = 56;
 const FAN_PX = 260, FAN_CY = 548, FAN_R0 = 180, FAN_R1 = 1560, FAN_RT = 880, FAN_TEXT = 76, FAN_SPREAD = 32, FAN_STEP = 12;
 const DEG = Math.PI / 180;
 // every card in place by 0.45 of the beat and fully at rest: LAND_SETTLE ≥ the longest landing motion (text wipe
@@ -80,19 +80,22 @@ export default {
     const slotPx = api.fitSlot('cards', { maxW: ROW_CW - 2 * ROW_PAD, maxPx, weight: 600 });
     const sizes = kindSizes(api, m, items, kinds, ROW_CW - 2 * ROW_PAD, maxPx, slotPx);
     const px = Math.max(...sizes);
+    const textWs = items.map((it, i) => api.measure(m, it, { size: sizes[i], weight: 600 }).width);
+    // each card hugs its own title (spike s2 wizard chips; never wider than ROW_CW, the width fitSlot sized the
+    // text for): the engine's vignette darkens the frame edges, so fixed 560 px cards pushed a short first title
+    // out to the left edge where white text reads grey (R5: the first card's title greyer than the rest)
+    const cws = textWs.map((tw) => Math.max(ROW_MIN_CW, Math.min(ROW_CW, Math.ceil(tw) + 2 * ROW_PAD)));
     const head = lead ? 150 + leadPx : 60;
     const blockH = rows.length * ch + (rows.length - 1) * ROW_GAP;
     const top = Math.round(head + Math.max(0, (1080 - 70 - head - blockH) / 2));
     const cards = [];
     rows.forEach((n, r) => {
-      const rowW = n * ROW_CW + (n - 1) * ROW_GAP;
+      const i0 = cards.length, ws = cws.slice(i0, i0 + n);
+      let x = (api.W - (ws.reduce((s, w) => s + w, 0) + (n - 1) * ROW_HGAP)) / 2;
       for (let c = 0; c < n; c++) {
-        const i = cards.length;
-        const x = Math.round((1920 - rowW) / 2 + c * (ROW_CW + ROW_GAP)), y = top + r * (ch + ROW_GAP);
-        cards.push({
-          item: items[i], kind: kinds[i], px: sizes[i], x, y, w: ROW_CW, h: ch, cx: x + ROW_CW / 2, cy: y + ch / 2,
-          textW: api.measure(m, items[i], { size: sizes[i], weight: 600 }).width,
-        });
+        const i = i0 + c, w = ws[c], y = top + r * (ch + ROW_GAP), cx = Math.round(x);
+        cards.push({ item: items[i], kind: kinds[i], px: sizes[i], x: cx, y, w, h: ch, cx: cx + w / 2, cy: y + ch / 2, textW: textWs[i] });
+        x += w + ROW_HGAP;
       }
     });
     return { variant: 'row', N, cards, lead, leadPx, leadY: lead ? 104 + leadPx : 0, px, ch, floorY: top + blockH + 44 };

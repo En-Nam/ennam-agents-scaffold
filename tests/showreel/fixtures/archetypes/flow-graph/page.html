@@ -32,8 +32,8 @@
     // the test also pins geo[id].px === fit()[id].steps, which would catch a stale or lazily re-run layout.
     const geo = {};
     S.layouts = () => geo;
-    // test probe (R5 boxless branches): S.hideBranches = true draws the SAME frame without the branch stubs
-    // (layout untouched, so lanes / fan edges / nodes are identical) — the pixel diff is exactly what branches draw
+    // test probe (R5 ornament): S.hideBranches = true draws the SAME frame without the alternative-route arches
+    // (layout untouched, so the path edges / nodes are identical) — the pixel diff is exactly what the arches draw
     S.hideBranches = false;
     // test probe (R5 chain ghost slots): S.hideLastNode = true draws the SAME frame without the last path node and
     // the edge into it — before that node pops, the pixel diff is exactly what its ghost slot (+ ghost edge) draws
@@ -41,11 +41,21 @@
     const probed = { ...flowGraph, layout(rb, variant, api) {
       const L = flowGraph.layout(rb, variant, api);
       const box = (d) => ({ x: d.x, y: d.y, w: d.w, h: d.h });
-      geo[api.beatId] = { px: L.px, nodes: L.nodes.map(box), decoys: L.decoys.map(box) };
+      // every drawn edge with its two endpoints (path edges: origin / node i-1 → node i; arches: node a → node b)
+      const ends = (pts) => ({ from: pts[0], to: pts[pts.length - 1] });
+      geo[api.beatId] = {
+        px: L.px, nodes: L.nodes.map(box), origin: box(L.origin),
+        edges: L.pathEdges.map((e) => ({ i: e.i, ...ends(e.pts) })),
+        arcs: L.fan.map((f) => ({ a: f.a, b: f.b, pts: f.pts, ...ends(f.pts) })),
+      };
       return L;
     }, draw(ctx, lt, p, rb, cues) {
+      // test probe (R5 ornament): the device transform the beat draws under (engine camera push / shake / roll),
+      // so the test maps layout geometry to frame pixels exactly
+      const m = ctx.getTransform();
+      S.xf = { ...(S.xf || {}), [p.beatId]: { a: m.a, b: m.b, c: m.c, d: m.d, e: m.e, f: m.f } };
       let L = p.layout;
-      if (S.hideBranches) L = { ...L, decoys: [] };
+      if (S.hideBranches) L = { ...L, fan: [] };
       if (S.hideLastNode) L = { ...L, nodes: L.nodes.slice(0, -1), pathEdges: L.pathEdges.slice(0, -1) };
       return flowGraph.draw(ctx, lt, L === p.layout ? p : { ...p, layout: L }, rb, cues);
     } };

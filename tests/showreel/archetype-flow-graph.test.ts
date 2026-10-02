@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { readFileSync, mkdtempSync, writeFileSync, copyFileSync, rmSync, existsSync, appendFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, writeFileSync, copyFileSync, cpSync, rmSync, existsSync, appendFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,6 +11,10 @@ import { resolve } from '../../templates/showreel/.claude/showreel/lib/truth/res
 import { compileTimeline } from '../../templates/showreel/.claude/showreel/lib/compile/timeline.mjs';
 import { offFrame } from '../../templates/showreel/.claude/showreel/lib/truth/safearea.mjs';
 import { checkManifest } from '../../templates/showreel/.claude/showreel/lib/truth/manifest.mjs';
+import { extractFacts } from '../../templates/showreel/.claude/showreel/lib/facts/extract.mjs';
+import { makeDigest } from '../../templates/showreel/.claude/showreel/lib/facts/digest.mjs';
+import { sheetTimes } from '../../templates/showreel/.claude/showreel/render/sheet.mjs';
+import { storyboardFromArrangement, type ArrangementBeat } from './helpers/storyboard';
 
 // v1.16 showreel M2 Task 2 — flow-graph archetype (port of spike s2 part B: install flow graph, the chosen path
 // lights step by step, the graph implodes to a point). What these tests protect:
@@ -38,6 +42,21 @@ const PHRASES = readJ(path.join(TOOLKIT, 'phrases.json'));
 const FACTS = readJ(path.join(FIX, 'facts.json'));
 const FPS = 60;
 const SAFE = { W: 1920, H: 1080, margin: 48 };
+
+/** Module geometry / timing the browser tests bound against, READ from flow-graph.mjs (not literal copies), so a
+ * change to the lead header or the edge lead moves the bounds with it. Throws if a declaration can no longer be
+ * found (the static test below runs this without a browser, so drift fails even when SHOWREEL_E2E is off).
+ *   leadRuleBottom  bottom of the lead header's brand rule: LEAD_Y + its fillRect offset + its height
+ *   edgeLeadGrids   an edge (and its node's pop) starts this many GRIDs before the node's step cue */
+function moduleGeometry(src: string) {
+  const lead = src.match(/const LEAD_Y = (\d+)\b/);
+  const rule = src.match(/ctx\.fillRect\(CX - hw, LEAD_Y \+ (\d+), hw \* 2, (\d+)\)/);
+  const edge = src.match(/const edgeT0 = \(i\) => STEP\[i\] - (\d+) \* grid\b/);
+  const pop = src.match(/const i = n\.i, pop = edgeT0\(i\)/);
+  if (!lead || !rule || !edge || !pop) throw new Error('flow-graph.mjs: LEAD_Y / lead rule / edgeT0 / node pop changed — update moduleGeometry');
+  return { leadRuleBottom: Number(lead[1]) + Number(rule[1]) + Number(rule[2]), edgeLeadGrids: Number(edge[1]) };
+}
+const GEO = moduleGeometry(readFileSync(SRC, 'utf8'));
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Browser = any;
@@ -86,13 +105,14 @@ function build(variant: 'converge' | 'chain', palette: string, b3Cues: Cue[] = [
 }
 
 const frameAt = (t: number) => Math.round(t * FPS) / FPS;
-// C14 override by full name: b3's step.1 (default cue-map at = 0.15 + 0.45 * 1/4 = 0.2625) moved later. Overrides
-// must keep the map in index order (validate + compile refuse a scrambled reveal), so step.2 and step.3 move along
-// (defaults 0.375 / 0.4875; step.4 stays at 0.6)
+// C14 override by full name: b3's step.1 (default cue-map at = 0.15 + 0.35 * 1/4 = 0.2375 → 6.125 s on b3's 3 s
+// window [5.375, 8.375]) moved 3 GRID later (0.375 → 6.5 s). Overrides must keep the map in index order (validate +
+// compile refuse a scrambled reveal), so step.2 and step.3 move along onto the next grid points (0.42 → 6.625 s,
+// 0.46 → 6.75 s), still 1 GRID before step.4, which stays at the map's `to` (0.5 → 6.875 s)
 const STEP1_LATE: Cue[] = [
-  { name: 'step.1', at: 0.42, kind: 'snap', amp: 0.3 },
-  { name: 'step.2', at: 0.47, kind: 'snap', amp: 0.3 },
-  { name: 'step.3', at: 0.53, kind: 'snap', amp: 0.3 },
+  { name: 'step.1', at: 0.375, kind: 'snap', amp: 0.3 },
+  { name: 'step.2', at: 0.42, kind: 'snap', amp: 0.3 },
+  { name: 'step.3', at: 0.46, kind: 'snap', amp: 0.3 },
 ];
 /** key local moments of a flow beat, in global seconds on the frame grid */
 function moments(timeline: any, id: string) {
@@ -111,6 +131,39 @@ function moments(timeline: any, id: string) {
   };
 }
 
+// The real arrangement films (C15) the e2e-full "next" run renders: the same host tree (tests/fixtures/next-project +
+// the js-next app, README and package.json), the same facts extractor and the same deterministic helper at typical
+// counts → the same storyboards (and so the same contact sheets) as .showreel-dev/m2-artifacts/next-<N>s.
+const REPO_ROOT = path.resolve(HERE, '..', '..');
+const ARR: Record<string, ArrangementBeat[]> = readJ(path.join(TOOLKIT, 'archetypes', 'arrangements.json')).arrangements;
+const NEXT_DURATIONS = [15, 30, 45, 60] as const;
+async function nextFilms(archetypes: any = ARCH) {
+  const cwd = mkdtempSync(path.join(os.tmpdir(), 'showreel-flow-graph-next-'));
+  try {
+    cpSync(path.join(REPO_ROOT, 'tests', 'fixtures', 'next-project'), cwd, { recursive: true });
+    for (const rel of ['app', 'lib', 'README.md', 'package.json']) cpSync(path.join(HERE, 'fixtures', 'facts', 'js-next', rel), path.join(cwd, rel), { recursive: true });
+    const { facts } = await extractFacts(cwd);
+    const { digest } = makeDigest(facts.facts);
+    return NEXT_DURATIONS.map((N) => {
+      const sb = storyboardFromArrangement(digest, N, ARR[String(N)]!, archetypes, PHRASES, { count: 'typical' });
+      const resolved = resolve(sb, { archetypes, facts, phrases: PHRASES });
+      return { N, resolved, timeline: compileTimeline(sb, resolved, archetypes, { fps: FPS }) };
+    });
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+}
+/** the contact-sheet "hold" still of a beat (render/sheet.mjs sheetTimes: 0.6 of its solo window) — what R5 reviews */
+const sheetHold = (timeline: any, id: string): number => sheetTimes(timeline).find((s: any) => s.beatId === id && s.still === 'hold').t;
+/** flow-graph steps that have NOT finished lighting (cue + ½ GRID of the 1-GRID ramp) by the contact-sheet hold */
+function unlitAtSheetHold(timeline: any): string[] {
+  const grid = 15 / timeline.music.bpm;
+  return timeline.beats.filter((b: any) => b.archetype === 'flow-graph').flatMap((b: any) => {
+    const hold = sheetHold(timeline, b.id);
+    return moments(timeline, b.id).steps.flatMap((s: number, i: number) => (s + 0.5 * grid <= hold + 1e-9 ? [] : [`${timeline.durationS}s ${b.id} step.${i} at ${s.toFixed(3)} s vs sheet hold ${hold.toFixed(3)} s`]));
+  });
+}
+
 describe('flow-graph — static guarantees (C13, review focus 4)', () => {
   const src = readFileSync(SRC, 'utf8');
   // palette-only colours: one table-driven ban over every archetype module (engine-static.test.ts)
@@ -118,6 +171,12 @@ describe('flow-graph — static guarantees (C13, review focus 4)', () => {
   it('no fillText/strokeText and no canvas creation outside the engine factory', () => {
     expect(src).not.toMatch(/\.(fill|stroke)Text\(/);
     expect(src).not.toMatch(/createElement\(\s*['"]canvas|new\s+OffscreenCanvas|\.getContext\(/);
+  });
+  it('the lead-rule and edge-lead bounds the browser tests use are read from the module (no stale literal copy)', () => {
+    // moduleGeometry throws on drift (module load above); here: the parsed values are real geometry, not NaN/0
+    expect(GEO.leadRuleBottom).toBeGreaterThan(100);   // M2: 170 + 26 + 3 = 199, the rule sits in the header band
+    expect(GEO.leadRuleBottom).toBeLessThan(400);
+    expect(GEO.edgeLeadGrids).toBeGreaterThanOrEqual(1); // M2: 2
   });
   it('reads its step cues from the cue map (step.<i>) and its converge cue, never absolute seconds', () => {
     expect(src).toMatch(/api\.cue\(`step\.\$\{i\}`\)/);
@@ -135,6 +194,11 @@ describe('flow-graph — static guarantees (C13, review focus 4)', () => {
         expect(m.hold, `${v} ${id}`).toBeLessThan(m.converge);
       }
     }
+    // the STEP1_LATE film compiles (index order kept) and really moves step.1 ≥ 3 GRID (the cue-binding probe's premise)
+    const def = moments(build('converge', 'violet').timeline, 'b3'), late = moments(build('converge', 'violet', STEP1_LATE).timeline, 'b3');
+    const grid = 15 / 120;
+    expect(late.steps[1]! - def.steps[1]!).toBeGreaterThanOrEqual(3 * grid - 1e-6);
+    for (let i = 1; i < late.steps.length; i++) expect(late.steps[i]! - late.steps[i - 1]!, `late step.${i}`).toBeGreaterThanOrEqual(grid - 1 / FPS);
   });
   it('fixture texts are near maxChars (26–28 code points), so (a) exercises the widest legal labels', () => {
     const max = ARCH.archetypes['flow-graph'].slots.steps.maxChars;
@@ -144,6 +208,24 @@ describe('flow-graph — static guarantees (C13, review focus 4)', () => {
       expect(n, f).toBeLessThanOrEqual(max);
       expect(n, f).toBeGreaterThanOrEqual(max - 2);
     }
+  });
+  it('contact-sheet hold (R5): in the real next 15/30/45/60 s films every flow-graph step has lit by the sheet hold — a cue map ending at 0.6 fails it', async () => {
+    // The R5 sheet shows each beat at 0.6 of its solo window; a step cued after that is still dark there, so the
+    // sheet shows a half-lit path. The cue map's `to` (0.5) is what keeps the last step before that still.
+    const films = await nextFilms();
+    const variants = new Set<string>();
+    for (const f of films) {
+      const flows = f.timeline.beats.filter((b: any) => b.archetype === 'flow-graph');
+      expect(flows.length, `${f.N}s has a flow-graph beat`).toBeGreaterThanOrEqual(1);
+      for (const b of flows) variants.add(b.variant);
+    }
+    expect([...variants].sort(), 'both variants are covered by the real films').toEqual(['chain', 'converge']);
+    expect(films.flatMap((f) => unlitAtSheetHold(f.timeline))).toEqual([]);
+    // negative control: the same films compiled with the previous map end (to = 0.6) leave a step dark at the sheet
+    // hold in EVERY film — so the check above really depends on the cue map, and would catch a regression
+    const old = JSON.parse(JSON.stringify(ARCH));
+    for (const m of old.archetypes['flow-graph'].cueMaps) if (m.name === 'step') m.to = 0.6;
+    for (const f of await nextFilms(old)) expect(unlitAtSheetHold(f.timeline).length, `${f.N}s with to = 0.6`).toBeGreaterThan(0);
   });
 });
 
@@ -166,6 +248,7 @@ describe.skipIf(!E2E)('flow-graph in the browser (SHOWREEL_E2E=1)', () => {
     ['converge', 'violet', 'converge', [], STEP_SETS], ['chain', 'amber', 'chain', [], STEP_SETS], ['late', 'violet', 'converge', STEP1_LATE, STEP_SETS],
     ['shortConverge', 'violet', 'converge', [], SHORT_SETS], ['shortChain', 'amber', 'chain', [], SHORT_SETS],
   ] as const;
+  const STEP_SETS_FOR = (name: string): Record<string, readonly string[]> => (name.startsWith('short') ? SHORT_SETS : STEP_SETS);
 
   beforeAll(async () => {
     if (!process.env.SHOWREEL_TOOL_DIR) throw new Error('SHOWREEL_E2E=1 needs SHOWREEL_TOOL_DIR (e.g. .showreel-dev/.tool)');
@@ -183,6 +266,16 @@ describe.skipIf(!E2E)('flow-graph in the browser (SHOWREEL_E2E=1)', () => {
       const srv = await startServer({ toolkitDir: TOOLKIT, toolDir: process.env.SHOWREEL_TOOL_DIR!, buildDir: dir });
       cleanups.push(() => rmSync(dir, { recursive: true, force: true }), () => srv.close());
       films[name] = { url: srv.url, resolved, timeline };
+    }
+    // the real next arrangement films (whole film, every archetype) for the contact-sheet hold check
+    for (const { N, resolved, timeline } of await nextFilms()) {
+      const dir = mkdtempSync(path.join(os.tmpdir(), 'showreel-flow-graph-'));
+      writeFileSync(path.join(dir, 'timeline.json'), JSON.stringify(timeline));
+      writeFileSync(path.join(dir, 'resolved.json'), JSON.stringify(resolved));
+      copyFileSync(path.join(FIX, 'page.html'), path.join(dir, 'page.html'));
+      const srv = await startServer({ toolkitDir: TOOLKIT, toolDir: process.env.SHOWREEL_TOOL_DIR!, buildDir: dir });
+      cleanups.push(() => rmSync(dir, { recursive: true, force: true }), () => srv.close());
+      films[`next${N}`] = { url: srv.url, resolved, timeline };
     }
     browser = await puppeteer.launch({ executablePath: exe, headless: true, args: launchArgs() });
     cleanups.push(() => browser.close());
@@ -293,11 +386,10 @@ describe.skipIf(!E2E)('flow-graph in the browser (SHOWREEL_E2E=1)', () => {
   //   - the step pills span ≥ 65% of the frame width, also when every label is short (no narrow cluster);
   //   - short labels take the room the fit allows (≥ 40 px, well above the 28 px display floor), and still sit
   //     inside the safe area at progress 0.5, the hold and the last fully-on frame;
-  //   - the paths not taken are boxless branches (zero-size port geometry), at least one per step, so nothing on
-  //     screen reads as an empty label slot; the chain variant draws none.
-  //   - converge: nodes + branches span ≥ VFILL_MIN of the frame height (measured pre-fix: see VFILL_MIN).
+  //   - converge ornament = alternative-route arches (at least one per step) between drawn nodes; chain draws none.
+  //   - converge: nodes + arches span ≥ VFILL_MIN of the frame height (the R5 "thin strip of pills" finding).
   const VFILL_MIN = 0.6;
-  it('R5 scale: graph spans ≥ 65% of the frame, short labels grow to the fit, paths not taken are boxless branches', async () => {
+  it('R5 scale: graph spans ≥ 65% of the frame, short labels grow to the fit, the arches fill the frame height', async () => {
     for (const name of ['converge', 'chain', 'shortConverge', 'shortChain'] as const) {
       const { url, timeline } = films[name]!;
       const short = name.startsWith('short'), chain = name.endsWith('hain');
@@ -318,16 +410,20 @@ describe.skipIf(!E2E)('flow-graph in the browser (SHOWREEL_E2E=1)', () => {
           expect(x1 - x0, `${name} ${id}: graph width ${Math.round(x1 - x0)} px`).toBeGreaterThanOrEqual(0.65 * SAFE.W);
           expect(geo.px, `${name} ${id}: layout px = fitted px`).toBe(fit[id].steps);
           if (short) expect(fit[id].steps, `${name} ${id}: short labels grow to the fit`).toBeGreaterThanOrEqual(40);
-          if (chain) expect(geo.decoys.length, `${name} ${id}: chain has no branches`).toBe(0);
+          if (chain) expect(geo.arcs.length, `${name} ${id}: chain has no arches`).toBe(0);
           else {
-            expect(geo.decoys.length, `${name} ${id}: ≥ 1 branch per step`).toBeGreaterThanOrEqual(n);
-            // vertical density (R5 review): the lanes + branches fill the band like spike A's option lists (~70% of
-            // the frame height), not a thin strip of pills in a mostly empty frame
-            const ys = [...geo.nodes, ...geo.decoys].flatMap((d: any) => [d.y - d.h / 2, d.y + d.h / 2]);
+            expect(geo.arcs.length, `${name} ${id}: ≥ 1 arch per step`).toBeGreaterThanOrEqual(n);
+            // vertical density (R5 review): the arches fill the band like spike A's option lists (~70% of the frame
+            // height), not a thin strip of pills in a mostly empty frame
+            const ys = [...geo.nodes.flatMap((d: any) => [d.y - d.h / 2, d.y + d.h / 2]), ...geo.arcs.flatMap((f: any) => f.pts.map((p: number[]) => p[1]))];
             const vfill = (Math.max(...ys) - Math.min(...ys)) / SAFE.H;
             expect(vfill, `${name} ${id}: graph fills ${(100 * vfill).toFixed(1)}% of the frame height`).toBeGreaterThanOrEqual(VFILL_MIN);
-            // structural (layout data); the rendered pixels are pinned by the 'R5 rendered' test below
-            for (const d of geo.decoys) expect([d.w, d.h], `${name} ${id}: branch is boxless`).toEqual([0, 0]);
+            // ... and stays clear of the frame edge (the safe area)
+            expect(Math.min(...ys), `${name} ${id}: arch top`).toBeGreaterThanOrEqual(SAFE.margin);
+            expect(Math.max(...ys), `${name} ${id}: arch bottom`).toBeLessThanOrEqual(SAFE.H - SAFE.margin);
+            // ... and never cut through the lead header's brand rule (GEO.leadRuleBottom, read from the module) on
+            // the beats that bind one
+            if (id !== 'b2') expect(Math.min(...ys), `${name} ${id}: arch top clear of the lead rule`).toBeGreaterThan(GEO.leadRuleBottom + 10);
           }
         }
       } finally {
@@ -342,13 +438,15 @@ describe.skipIf(!E2E)('flow-graph in the browser (SHOWREEL_E2E=1)', () => {
   //     lavender bodies left the outer labels grey-on-lavender while the centre stayed crisp. Pinned per label:
   //     glyph luma (top 10% of its manifest bbox) ≥ GLYPH_MIN · the beat's centre-most label, and glyph − body
   //     (body = 10–40th percentile of the bbox) ≥ CONTRAST_MIN. Measured identical at S=1 and S=6 (not motion blur).
-  //   - boxless branches: the same frame drawn with and without the branch stubs (fixture probe hideBranches) —
-  //     every changed pixel column is a thin run (a line + a port dot), never the vertical extent of a box or panel.
+  //   - ornament only on its arches: the same frame drawn with and without the arches (fixture probe hideBranches) —
+  //     every changed pixel lies within CORRIDOR px of an arch curve (its line, glow and riding packets). The R5
+  //     sheet showed lane panels with empty hairline rows + pin circles that read as placeholder content; any panel,
+  //     row, stub or pin drawn off the arches lands outside the corridor and fails this.
   // measured worst cases (fixtures, S=6): pre-fix 0.774 / 74.8 (short 'Next.js' at x≈284, lavender body) → fixed
-  // 0.861 / 118 (28-char label at x≈375); branch runs 13 px (port dot), a box around a branch is ≥ PH tall
-  const GLYPH_MIN = 0.84, CONTRAST_MIN = 105, RUN_MAX = 18;
-  it('R5 rendered: outer labels stay as crisp as the centre at S=6; the paths not taken draw no boxes', async () => {
-    let worstGlyph = { r: Infinity, msg: '' }, worstContrast = { c: Infinity, msg: '' }, worstRun = { run: 0, msg: '' };
+  // 0.861 / 118 (28-char label at x≈375)
+  const GLYPH_MIN = 0.84, CONTRAST_MIN = 105, CORRIDOR = 12;
+  it('R5 rendered: outer labels stay as crisp as the centre at S=6; the ornament draws only its arches', async () => {
+    let worstGlyph = { r: Infinity, msg: '' }, worstContrast = { c: Infinity, msg: '' }, worstOff = { off: 0, msg: '' };
     for (const name of ['converge', 'shortConverge', 'chain', 'shortChain'] as const) {
       const { url, timeline } = films[name]!;
       const page = await openPage(url);
@@ -378,25 +476,34 @@ describe.skipIf(!E2E)('flow-graph in the browser (SHOWREEL_E2E=1)', () => {
             if (c < worstContrast.c) worstContrast = { c, msg: `${name} ${id}: ${fmt(l)}` };
           }
           if (name.endsWith('hain')) continue;
-          const diff: { changed: number; maxRun: number; at: number } = await page.evaluate((t: number) => {
+          const arcs = (await page.evaluate(() => (window as any).SHOWREEL.layouts()))[id].arcs.map((f: any) => f.pts);
+          const diff: { changed: number; off: number; at: string } = await page.evaluate((t: number, raw: number[][][], D: number, id: string) => {
             const S = (window as any).SHOWREEL, c = document.getElementById('stage') as HTMLCanvasElement, g = c.getContext('2d')!;
             const grab = (hide: boolean) => { S.hideBranches = hide; S.renderAt(t, 1); return g.getImageData(0, 0, c.width, c.height).data; };
             const a = grab(false), b = grab(true);
             S.hideBranches = false;
-            let changed = 0, maxRun = 0, at = -1;
-            for (let x = 0; x < c.width; x++) {
-              let run = 0;
-              for (let y = 0; y < c.height; y++) {
-                const i = (y * c.width + x) * 4;
-                const on = Math.max(Math.abs(a[i]! - b[i]!), Math.abs(a[i + 1]! - b[i + 1]!), Math.abs(a[i + 2]! - b[i + 2]!)) > 24;
-                if (on) { changed++; run++; if (run > maxRun) { maxRun = run; at = x; } } else run = 0;
-              }
+            // arch samples in frame pixels: layout space through the transform the beat drew under (engine camera)
+            const m = S.xf[id];
+            const arcs = raw.map((pts) => pts.map(([x, y]) => [m.a * x! + m.c * y! + m.e, m.b * x! + m.d * y! + m.f]));
+            // distance from (x, y) to the nearest arch segment
+            const near = (x: number, y: number) => arcs.some((pts) => pts.some((p, k) => {
+              if (!k) return false;
+              const q = pts[k - 1]!, dx = p[0]! - q[0]!, dy = p[1]! - q[1]!, L2 = dx * dx + dy * dy || 1;
+              const u = Math.max(0, Math.min(1, ((x - q[0]!) * dx + (y - q[1]!) * dy) / L2));
+              return Math.hypot(x - q[0]! - u * dx, y - q[1]! - u * dy) <= D;
+            }));
+            let changed = 0, off = 0, at = '';
+            for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) {
+              const i = (y * c.width + x) * 4;
+              if (Math.max(Math.abs(a[i]! - b[i]!), Math.abs(a[i + 1]! - b[i + 1]!), Math.abs(a[i + 2]! - b[i + 2]!)) <= 24) continue;
+              changed++;
+              if (!near(x, y)) { off++; if (!at) at = `${x},${y}`; }
             }
-            return { changed, maxRun, at };
-          }, m.hold);
-          // the branches are really drawn (else the run check proves nothing) ...
-          expect(diff.changed, `${name} ${id}: branch stubs drawn at the hold`).toBeGreaterThan(200);
-          if (diff.maxRun > worstRun.run) worstRun = { run: diff.maxRun, msg: `${name} ${id}: tallest branch pixel run ${diff.maxRun} px at x=${diff.at}` };
+            return { changed, off, at };
+          }, m.hold, arcs, CORRIDOR, id);
+          // the arches are really drawn (else the corridor check proves nothing) ...
+          expect(diff.changed, `${name} ${id}: arches drawn at the hold`).toBeGreaterThan(200);
+          if (diff.off > worstOff.off) worstOff = { off: diff.off, msg: `${name} ${id}: ${diff.off} of ${diff.changed} ornament pixels off the arches (first at ${diff.at})` };
         }
       } finally {
         await page.close();
@@ -406,8 +513,8 @@ describe.skipIf(!E2E)('flow-graph in the browser (SHOWREEL_E2E=1)', () => {
     // (soft: a failure reports all three worst cases at once)
     expect.soft(worstGlyph.r, `glyph ratio ${worstGlyph.r.toFixed(3)} — ${worstGlyph.msg}`).toBeGreaterThanOrEqual(GLYPH_MIN);
     expect.soft(worstContrast.c, `contrast ${worstContrast.c.toFixed(1)} — ${worstContrast.msg}`).toBeGreaterThanOrEqual(CONTRAST_MIN);
-    // nothing the branches draw is taller than a port dot: no box, panel or placeholder bar
-    expect.soft(worstRun.run, worstRun.msg).toBeLessThanOrEqual(RUN_MAX);
+    // the ornament draws nothing off its arches: no panel, placeholder row, stub or pin
+    expect.soft(worstOff.off, worstOff.msg).toBe(0);
   }, 240_000);
 
   // R5 review (chain enter still): a future node's ghost slot drawn as a dashed rectangle read as an empty label
@@ -425,8 +532,8 @@ describe.skipIf(!E2E)('flow-graph in the browser (SHOWREEL_E2E=1)', () => {
         for (const id of FLOW_BEATS) {
           const m = moments(timeline, id);
           const t = frameAt(m.steps[0]!);
-          // precondition: the last node has not popped yet (pop = its step − 2 GRID), so the diff is its ghost
-          expect(m.steps[m.steps.length - 1]! - 2 * grid, `${name} ${id}: last node still a ghost at step.0`).toBeGreaterThan(t + 1 / FPS);
+          // precondition: the last node has not popped yet (pop = its step − GEO.edgeLeadGrids GRID), so the diff is its ghost
+          expect(m.steps[m.steps.length - 1]! - GEO.edgeLeadGrids * grid, `${name} ${id}: last node still a ghost at step.0`).toBeGreaterThan(t + 1 / FPS);
           const last = (await page.evaluate(() => (window as any).SHOWREEL.layouts()))[id].nodes.at(-1);
           const res: { inRect: number; midCols: number; cols: number } = await page.evaluate((t: number, n: any) => {
             const S = (window as any).SHOWREEL, c = document.getElementById('stage') as HTMLCanvasElement, g = c.getContext('2d')!;
@@ -456,6 +563,134 @@ describe.skipIf(!E2E)('flow-graph in the browser (SHOWREEL_E2E=1)', () => {
       }
     }
   }, 180_000);
+
+  // R5 review (row 2 leftovers): an edge leaving a bright dot with no node at its end, and a node still unlit in the
+  // hold still, read as a broken graph. Pinned, per flow beat, both variants, long + short labels:
+  //   - structure: every path edge runs from the origin diamond / node i-1's border to node i's border, every arch
+  //     from node a's border to node b's border (a, b real nodes) — no edge endpoint in empty space;
+  //   - rendered: the instant an edge starts drawing (its node's pop), the node it runs into is already on screen
+  //     (label in the manifest with a box), so a moving head never travels toward nothing;
+  //   - rendered: at the hold every step node is LIT — the glow band just above / below its pill (middle 60%, arches
+  //     hidden, so only the node's own light counts) is brighter than in the same node's popped-but-unlit state
+  //     half a GRID before its cue, by ≥ LIT_GAIN luma. A node left unlit at the hold reads the unlit level and fails.
+  // The hold here is this file's hold (after the last step cue, before the converge build-up). The contact-sheet
+  // hold (render/sheet.mjs, 0.6 of the solo window) — the still R5 actually reviews — is pinned on the real next
+  // arrangement films in the next test: with the cue map ending at `to` 0.5 of the beat, the last step lands before
+  // it in every film (at 0.6 it landed after it, leaving the last node dark on the sheet).
+  // measured worst (fixtures, S=1): +31.5 luma (shortConverge b3 node 0: 67.3 lit vs 35.7 unlit); an unlit node ≈ 0
+  const LIT_GAIN = 15;
+  /** mean luma of the glow band just above / below node n's pill (middle 60%), arches hidden, at t (S=1). The bands
+   * are laid out in LAYOUT space and every sample is mapped to frame pixels through the transform beat `id` drew
+   * under at t (S.xf: camera push / drift / shake / roll) — the hold and the unlit frame are drawn under different
+   * transforms, so unmapped bands would sample different parts of the node (pill body could enter the band). */
+  const glow = async (page: Page, t: number, n: any, id: string): Promise<number> => page.evaluate((t: number, n: any, id: string) => {
+    const S = (window as any).SHOWREEL, c = document.getElementById('stage') as HTMLCanvasElement, g = c.getContext('2d')!;
+    S.xf = {}; // never a stale transform from an earlier frame
+    S.hideBranches = true; S.renderAt(t, 1); S.hideBranches = false;
+    const m = S.xf[id];
+    if (!m) throw new Error(`no device transform recorded for ${id} at t=${t}`);
+    const map = (x: number, y: number) => [m.a * x + m.c * y + m.e, m.b * x + m.d * y + m.f] as const;
+    const x0 = n.x - 0.3 * n.w, w = Math.round(0.6 * n.w);
+    let s = 0, k = 0;
+    for (const y0 of [n.y - n.h / 2 - 14, n.y + n.h / 2 + 4]) {
+      // device bbox of the mapped band, read once; then one sample per layout pixel of the band
+      const cs = [map(x0, y0), map(x0 + w, y0), map(x0, y0 + 10), map(x0 + w, y0 + 10)];
+      const bx = Math.max(0, Math.floor(Math.min(...cs.map((p) => p[0]))) - 1), by = Math.max(0, Math.floor(Math.min(...cs.map((p) => p[1]))) - 1);
+      const bw = Math.min(c.width, Math.ceil(Math.max(...cs.map((p) => p[0]))) + 2) - bx, bh = Math.min(c.height, Math.ceil(Math.max(...cs.map((p) => p[1]))) + 2) - by;
+      const d = g.getImageData(bx, by, bw, bh).data;
+      for (let v = 0; v < 10; v++) for (let u = 0; u < w; u++) {
+        const [dx, dy] = map(x0 + u + 0.5, y0 + v + 0.5);
+        const px = Math.min(bw - 1, Math.max(0, Math.floor(dx) - bx)), py = Math.min(bh - 1, Math.max(0, Math.floor(dy) - by)), i = (py * bw + px) * 4;
+        s += 0.2126 * d[i]! + 0.7152 * d[i + 1]! + 0.0722 * d[i + 2]!; k++;
+      }
+    }
+    return s / k;
+  }, t, n, id);
+  it('R5 edges + lighting: no edge endpoint without a node; every step node is lit at the hold', async () => {
+    const onBorder = (p: number[], n: any) => {
+      const [x, y] = p as [number, number], hw = n.w / 2, hh = n.h / 2, e = 0.5;
+      return (Math.min(Math.abs(x - (n.x - hw)), Math.abs(x - (n.x + hw))) <= e && Math.abs(y - n.y) <= hh + e)
+        || (Math.min(Math.abs(y - (n.y - hh)), Math.abs(y - (n.y + hh))) <= e && Math.abs(x - n.x) <= hw + e);
+    };
+    let worstGain = { g: Infinity, msg: '' };
+    for (const name of ['converge', 'shortConverge', 'chain', 'shortChain'] as const) {
+      const { url, timeline } = films[name]!;
+      const grid = 15 / timeline.music.bpm;
+      const page = await openPage(url);
+      try {
+        for (const id of FLOW_BEATS) {
+          const geo = (await page.evaluate(() => (window as any).SHOWREEL.layouts()))[id];
+          const nodes = geo.nodes;
+          expect(geo.edges.length, `${name} ${id}: one path edge per node`).toBe(nodes.length);
+          for (const e of geo.edges) {
+            const fromOk = e.i === 0 ? Math.hypot(e.from[0] - geo.origin.x, e.from[1] - geo.origin.y) <= 0.5 : onBorder(e.from, nodes[e.i - 1]);
+            expect(fromOk, `${name} ${id}: path edge ${e.i} starts on ${e.i ? `node ${e.i - 1}` : 'the origin'}`).toBe(true);
+            expect(onBorder(e.to, nodes[e.i]), `${name} ${id}: path edge ${e.i} ends on node ${e.i}`).toBe(true);
+          }
+          for (const f of geo.arcs) {
+            expect(nodes[f.a] && nodes[f.b] && f.a !== f.b, `${name} ${id}: arch ${f.a}→${f.b} joins two nodes`).toBeTruthy();
+            expect(onBorder(f.from, nodes[f.a]) && onBorder(f.to, nodes[f.b]), `${name} ${id}: arch ${f.a}→${f.b} ends on both pills`).toBe(true);
+          }
+          const m = moments(timeline, id);
+          for (let i = 0; i < nodes.length; i++) {
+            // the earliest frame on which edge i (and node i's arches, which start no earlier) is drawn — or the
+            // first solo frame if that is inside the incoming transition (boxes are not recorded while it composites)
+            const solo = m.b.t0 + m.b.overlapIn + 1 / FPS;
+            const t = Math.max(Math.ceil((m.steps[i]! - GEO.edgeLeadGrids * grid) * FPS - 1e-6) / FPS + 1 / FPS, Math.ceil(solo * FPS - 1e-6) / FPS);
+            const man = await renderManifest(page, t);
+            expect(man.some((e) => e.source === STEP_SETS_FOR(name)[id][i] && e.bbox), `${name} ${id}: node ${i} on screen when its edge starts (t=${t})`).toBe(true);
+          }
+          // precondition: the hold is well into every node's light-up (1 GRID ramp from its cue), else "lit" proves nothing
+          for (const s of m.steps) expect(s + 0.5 * grid, `${name} ${id}: hold after the light-up`).toBeLessThanOrEqual(m.hold);
+          for (let i = 0; i < nodes.length; i++) {
+            const lit = await glow(page, m.hold, nodes[i], id), unlit = await glow(page, frameAt(m.steps[i]! - 0.5 * grid), nodes[i], id);
+            const gain = lit - unlit;
+            if (gain < worstGain.g) worstGain = { g: gain, msg: `${name} ${id} node ${i}: glow ${lit.toFixed(1)} at the hold vs ${unlit.toFixed(1)} unlit` };
+          }
+        }
+      } finally {
+        await page.close();
+      }
+    }
+    expect(worstGain.g, worstGain.msg).toBeGreaterThanOrEqual(LIT_GAIN);
+  }, 300_000);
+
+  // The R5 row the PO signs off is the contact-sheet hold of a REAL film (tests/showreel/tools/r5-sheet.mjs), not
+  // this file's fixture hold. Rendered on the next 15/30/45/60 s arrangement films (whole film, shipped archetypes
+  // around the flow beats): at the sheet hold every step node of every flow-graph beat is lit, same LIT_GAIN oracle.
+  // The timing half (cue + ½ GRID ≤ sheet hold) is the static test above, with its to = 0.6 negative control.
+  // measured (S=1): to 0.5 worst +31.3 luma (30s b3 node 0); the same films at to 0.6 → −7.5 (15s b3 node 4, still dark)
+  it('R5 contact-sheet hold: in the real next 15/30/45/60 s films every flow-graph step node is lit at the sheet hold', async () => {
+    let worstGain = { g: Infinity, msg: '' }, beats = 0, nodesChecked = 0;
+    for (const N of NEXT_DURATIONS) {
+      const { url, timeline } = films[`next${N}`]!;
+      const grid = 15 / timeline.music.bpm;
+      const page = await openPage(url);
+      try {
+        const geo = await page.evaluate(() => (window as any).SHOWREEL.layouts());
+        for (const b of timeline.beats.filter((x: any) => x.archetype === 'flow-graph')) {
+          const m = moments(timeline, b.id), hold = sheetHold(timeline, b.id);
+          const nodes = geo[b.id]?.nodes;
+          expect(nodes?.length, `${N}s ${b.id}: one laid-out node per step`).toBe(m.steps.length);
+          // precondition (the static test's claim, per beat): the sheet hold is past every node's light-up
+          for (const s of m.steps) expect(s + 0.5 * grid, `${N}s ${b.id}: sheet hold ${hold} after the light-up`).toBeLessThanOrEqual(hold + 1e-9);
+          for (let i = 0; i < nodes.length; i++) {
+            const lit = await glow(page, hold, nodes[i], b.id), unlit = await glow(page, frameAt(m.steps[i]! - 0.5 * grid), nodes[i], b.id);
+            if (lit - unlit < worstGain.g) worstGain = { g: lit - unlit, msg: `${N}s ${b.id} ${b.variant} node ${i}: glow ${lit.toFixed(1)} at the sheet hold (t=${hold.toFixed(3)}) vs ${unlit.toFixed(1)} unlit` };
+            nodesChecked++;
+          }
+          beats++;
+        }
+      } finally {
+        await page.close();
+      }
+    }
+    // every real film carries at least one flow beat (the 60 s one carries both variants): nothing skipped silently
+    expect(beats, 'flow-graph beats checked across the 4 films').toBeGreaterThanOrEqual(NEXT_DURATIONS.length + 1);
+    expect(nodesChecked).toBeGreaterThanOrEqual(3 * beats);
+    console.log(JSON.stringify({ flowGraphSheetHoldLit: { beats, nodes: nodesChecked, worstGain: Math.round(worstGain.g * 10) / 10, at: worstGain.msg } }));
+    expect(worstGain.g, worstGain.msg).toBeGreaterThanOrEqual(LIT_GAIN);
+  }, 300_000);
 
   it('(b) determinism: 4 timestamps × 2 fresh pages (2 render orders) × S=1 and S=6 → identical RGBA hashes', async () => {
     const A = films.converge, B = films.chain;
@@ -518,6 +753,6 @@ describe.skipIf(!E2E)('flow-graph in the browser (SHOWREEL_E2E=1)', () => {
 // Registered only when E2E is off: a full E2E run must report 0 skipped (Rule 12).
 if (!E2E) {
   describe('flow-graph in the browser (skipped)', () => {
-    it.skip('SKIPPED: set SHOWREEL_E2E=1 (+ SHOWREEL_TOOL_DIR) to run fit/clipping, determinism, coverage, cue binding, R5 scale and the rate check', () => {});
+    it.skip('SKIPPED: set SHOWREEL_E2E=1 (+ SHOWREEL_TOOL_DIR) to run fit/clipping, determinism, coverage, cue binding, R5 scale, the rendered contact-sheet hold and the rate check', () => {});
   });
 }

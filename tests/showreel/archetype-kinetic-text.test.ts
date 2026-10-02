@@ -134,6 +134,12 @@ describe('kinetic-text static guards (palette carry, text API) + fixtures', () =
     // the guard can fail: the pre-fix module hard-coded the echo offsets in the draw
     expect(readFileSync(path.join(FIX, 'kinetic-text-before.mjs'), 'utf8')).not.toMatch(/of ECHOES\)/);
   });
+  it('layouts read the frame size from api.W/api.H (no hard-coded 1920/1080 — a resized stage would mis-centre)', () => {
+    // also the derived half-frame constants (960/540) — a pre-computed centre is the same bug
+    expect(src).not.toMatch(/\b(1920|1080|960|540)\b/);
+    // the guard can fail: the pre-fix module hard-coded the frame size
+    expect(readFileSync(path.join(FIX, 'kinetic-text-before.mjs'), 'utf8')).toMatch(/\b(1920|1080)\b/);
+  });
   it('fixture films validate; worst-case lines are maxChars − 1 … maxChars', () => {
     for (const t of LONG) expect([...t].length, t).toBeGreaterThanOrEqual(MAX_LINE - 1);
     for (const t of LONG) expect([...t].length, t).toBeLessThanOrEqual(MAX_LINE);

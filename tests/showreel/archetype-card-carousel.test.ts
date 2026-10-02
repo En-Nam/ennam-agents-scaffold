@@ -265,21 +265,25 @@ describe.skipIf(!E2E)('card-carousel in the browser (SHOWREEL_E2E=1)', () => {
     }
   }, 300_000);
 
-  it('R5: from 0.45 of the beat on, every card has landed in its final place — no ghost slot / deck / textless card', async () => {
+  it('R5: from 0.45 of the beat on, every card has landed in its final place at full title opacity — no ghost slot / deck / textless card', async () => {
     // Why: the cue map spreads card.<i> over 0.2…0.7 of the beat, so landing ON the cue left the contact-sheet hold
     // (0.6 of the solo window) with 3 of 5 cards + an empty card + a dashed ghost slot — the set read unfinished.
-    // Two checks per frame ≥ 0.45: (1) every card's text is drawn at the place it holds on the last frame (text is
+    // Three checks per frame ≥ 0.45: (1) every card's text is drawn at the place it holds on the last frame (text is
     // drawn only once a card has landed); (2) the ?probe page counts the text-free placeholder draws directly —
-    // dashed ghost-slot strokes (row) and unswung-deck card bodies (fan) — and there must be none. A control at
-    // the beat's enter frame proves the probe sees them (so a ghost left under a landed card would fail here).
-    const probeAt = (page: Page, t: number, id: string): Promise<{ dash: number; deck: number }> =>
+    // dashed ghost-slot strokes (row) and unswung-deck card bodies (fan) — and there must be none; (3) every card
+    // title is drawn in palette text at effective opacity 1 (no title still mid-wipe or dimmed while its siblings
+    // are full — R5: the first title read greyer). A control at the beat's enter frame proves the probe sees the
+    // placeholders (so a ghost left under a landed card would fail here). `r5` = the R5 sheet's card beats — added
+    // as a regression guard: it was already green at c4af0fa (the R5 ghost/deck symptom came from a stale frame).
+    type Probe = { dash: number; deck: number; title: Record<string, number> };
+    const probeAt = (page: Page, t: number, id: string): Promise<Probe> =>
       page.evaluate((t: number, id: string) => {
         const S = (window as any).SHOWREEL;
         S.probe = {};
         S.renderAt(t, 1);
-        return S.probe[id] ?? { dash: -1, deck: -1 }; // -1: the beat was not drawn at all — fails both checks
+        return S.probe[id] ?? { dash: -1, deck: -1, title: {} }; // -1: the beat was not drawn at all — fails all checks
       }, t, id);
-    for (const name of ['matrix', 'dense', 'look']) {
+    for (const name of ['matrix', 'dense', 'look', 'r5']) {
       const film = await serve(name);
       const browser = await launch();
       try {
@@ -298,14 +302,71 @@ describe.skipIf(!E2E)('card-carousel in the browser (SHOWREEL_E2E=1)', () => {
             const pr = await probeAt(page, t, b.id);
             const at = new Map((await manifest(page)).filter((e) => e.bbox).map((e) => [e.source, e.bbox!]));
             const label = `${name}.${b.id} (${b.variant}, N=${ids.length}) local t=${(t - tb.t0).toFixed(3)} (${((t - tb.t0) / (tb.t1 - tb.t0)).toFixed(3)} of beat)`;
-            expect(pr, `${label}: placeholder draws (dashed ghost slot / unswung deck card)`).toEqual({ dash: 0, deck: 0 });
+            expect({ dash: pr.dash, deck: pr.deck }, `${label}: placeholder draws (dashed ghost slot / unswung deck card)`).toEqual({ dash: 0, deck: 0 });
             for (const id of ids) {
+              expect(pr.title[id] ?? 0, `${label}: ${id} title opacity`).toBeGreaterThanOrEqual(0.999);
               const bb = at.get(id);
               expect(bb, `${label}: ${id} not landed`).toBeTruthy();
               const fb = final.get(id)!;
               // in its final place: only the idle drift / kick / fan breathe move it (≤ 24 px), never a fly-in
               expect(Math.abs(bb!.x - fb.x) + Math.abs(bb!.y - fb.y), `${label}: ${id} still moving into place`).toBeLessThanOrEqual(24);
             }
+          }
+        }
+      } finally {
+        await browser.close();
+      }
+    }
+  }, 300_000);
+
+  it('R5: row titles read white on screen from 0.45 on — none pushed out into the edge vignette (first title greyer)', async () => {
+    // Why: the engine's vignette (post-FX, radial from 0.35 H) darkens the frame edges after the scene is drawn, so
+    // white text can only be as bright as its place allows. Fixed 560 px cards put a short first title ("One-tap
+    // checkout", "Saved carts") at the left edge of a wide row: on the R5 hold it read grey next to its siblings.
+    // Cards now hug their own title, so the set sits nearer the centre. Pixels, not inference: on every 8th frame
+    // from 0.45 to the last fully-on frame, the 90th-percentile luminance inside each card title's drawn bbox must
+    // be ≥ 0.88 × the brightest title's in the same frame (the fixed-width layout measured 0.75-0.82 on the first
+    // title; now ≥ 0.95, ≥ 0.91 on the settle-hit frame where the engine's aberration dips every title). Relative,
+    // because a cue hit's post-FX dims the whole frame; the opacity probe above pins the absolute draw.
+    // Proven red against the c4af0fa layout: "look.b2 (0.453 of beat): f.feature.11 title p90 191 vs brightest 255"
+    // (0.749 < 0.88). Absolute edge darkening is the engine vignette's (core.mjs), not this archetype's, to fix.
+    // Films with short/typical titles (look, r5): the 32-char stress films fill every card to ROW_CW, where the
+    // outer titles' ends necessarily reach the vignette — fit, not layout, governs those.
+    const REL_MIN = 0.88;
+    for (const name of ['look', 'r5']) {
+      const film = await serve(name);
+      const browser = await launch();
+      try {
+        const page = await openPage(browser, film.url);
+        const F = 1 / film.timeline.fps;
+        for (const b of cardBeats(STORYBOARDS[name]).filter((x: any) => x.variant === 'row')) {
+          const tb = film.timeline.beats.find((x: any) => x.id === b.id);
+          const ids: string[] = film.resolved.beats[b.id].slots.cards.items.map((it: any) => it.id);
+          const last = beatTimes(film.timeline, b.id).last;
+          const t45 = Math.ceil((tb.t0 + 0.45 * (tb.t1 - tb.t0)) / F) * F;
+          for (let t = t45; t <= last + 1e-9; t += 8 * F) {
+            const lum: Record<string, number> = await page.evaluate((t: number, ids: string[]) => {
+              const S = (window as any).SHOWREEL;
+              S.renderAt(t, 1);
+              const m = S.manifest();
+              const g = (document.getElementById('stage') as HTMLCanvasElement).getContext('2d')!;
+              const out: Record<string, number> = {};
+              for (const id of ids) {
+                const e = m.find((x: any) => x.source === id && x.bbox);
+                if (!e) { out[id] = -1; continue; } // not drawn: fails below
+                const { x, y, w, h } = e.bbox;
+                const d = g.getImageData(Math.round(x), Math.round(y), Math.max(1, Math.round(w)), Math.max(1, Math.round(h))).data;
+                const L: number[] = [];
+                for (let i = 0; i < d.length; i += 4) L.push(0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]);
+                L.sort((p, q) => q - p);
+                out[id] = Math.round(L[Math.floor(L.length * 0.1)]);
+              }
+              return out;
+            }, t, ids);
+            const label = `${name}.${b.id} local t=${(t - tb.t0).toFixed(3)} (${((t - tb.t0) / (tb.t1 - tb.t0)).toFixed(3)} of beat)`;
+            const top = Math.max(...ids.map((id) => lum[id]));
+            expect(top, `${label}: brightest title p90`).toBeGreaterThan(200); // a frame of dim titles is not "even"
+            for (const id of ids) expect(lum[id] / top, `${label}: ${id} title p90 ${lum[id]} vs brightest ${top}`).toBeGreaterThanOrEqual(REL_MIN);
           }
         }
       } finally {

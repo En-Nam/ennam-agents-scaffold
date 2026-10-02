@@ -354,14 +354,30 @@ describe('cue maps (C14) — one hit per bound item, spread from..to, never stac
     return story;
   };
   const hitsOf = (tl: any, beatId: string, prefix: string) => tl.hits.filter((h: Hit) => h.beatId === beatId && h.cue.startsWith(prefix + '.'));
+  // The documented C14 placement, computed here from the SHIPPED flow-graph cue map (archetypes.json), so tuning
+  // `from` / `to` re-derives these expectations instead of silently breaking them. The literal anchor below pins
+  // the formula itself (with a pinned map), so a change to the compiler's spread or snap still fails.
+  const snapDown = (x: number, q: number) => Math.ceil(x / q - 0.5 - 1e-9) * q; // nearest multiple, ties DOWN (C8)
+  const FLOW_STEP = ARCH.archetypes['flow-graph'].cueMaps.find((m: { name: string }) => m.name === 'step');
+  const mapped = (map: { from: number; to: number }, n: number, t0 = 3, t1 = 6) =>
+    Array.from({ length: n }, (_, i) => snapDown(t0 + (map.from + ((map.to - map.from) * i) / Math.max(1, n - 1)) * (t1 - t0), GRID));
 
   it('expands N items to <name>.<i> at t0 + (from + (to−from)·i/(N−1))·(t1−t0), snapped to GRID', () => {
+    // literal anchor (formula, not tuning): a pinned map from 0.15 to 0.6 over core [3, 6]
+    // KEEP LITERAL (Rule 9): `mapped` mirrors timeline.mjs, so only these hand-written numbers make the check non-tautological.
+    // raw 3.45, 3.9, 4.35, 4.8 → grid 3.5, 3.875, 4.375, 4.75
+    const pinned = clone(ARCH);
+    pinned.archetypes['flow-graph'].cueMaps = [{ ...FLOW_STEP, from: 0.15, to: 0.6 }];
+    const anchor = compileTimeline(withBody('flow-graph', 'converge', 'steps', 4), rs(15), pinned, { fps: 60 });
+    expect(hitsOf(anchor, 'b2', 'step').map((h: Hit) => h.t)).toEqual([3.5, 3.875, 4.375, 4.75].map(frame60));
+    expect(mapped({ from: 0.15, to: 0.6 }, 4)).toEqual([3.5, 3.875, 4.375, 4.75]); // the test-side formula agrees
+
+    // the shipped map (from FLOW_STEP), derived from the same formula
     const tl = compileTimeline(withBody('flow-graph', 'converge', 'steps', 4), rs(15), ARCH, { fps: 60 });
     const steps = hitsOf(tl, 'b2', 'step');
-    // raw 3.45, 3.9, 4.35, 4.8 → grid 3.5, 3.875, 4.375, 4.75
     expect(steps.map((h: Hit) => h.cue)).toEqual(['step.0', 'step.1', 'step.2', 'step.3']);
-    expect(steps.map((h: Hit) => h.t)).toEqual([3.5, 3.875, 4.375, 4.75].map(frame60));
-    expect(steps.every((h: Hit) => h.kind === 'snap' && h.amp === 0.3)).toBe(true);
+    expect(steps.map((h: Hit) => h.t)).toEqual(mapped(FLOW_STEP, 4).map(frame60));
+    expect(steps.every((h: Hit) => h.kind === FLOW_STEP.kind && h.amp === FLOW_STEP.amp)).toBe(true);
     // the archetype's own defaults still fire alongside the map
     expect(tl.hits.filter((h: Hit) => h.beatId === 'b2').map((h: Hit) => h.cue).sort()).toEqual(['converge', 'step.0', 'step.1', 'step.2', 'step.3']);
     expect(validate(TIMELINE_SCHEMA, tl)).toEqual([]);
@@ -375,13 +391,17 @@ describe('cue maps (C14) — one hit per bound item, spread from..to, never stac
   });
 
   it('a hit that snaps onto another hit of the same beat is pushed one GRID later', () => {
-    // An extra storyboard cue lands exactly on step.1 (3.875): step.1 moves to 4.0, step.2 (4.375) stays.
-    const story = withBody('flow-graph', 'converge', 'steps', 4, (s) => { s.beats[1].cues = [{ name: 'whoosh', at: 0.875 / 3, kind: 'sweep', amp: 0.2 }]; });
+    // An extra storyboard cue lands exactly on step.1's mapped grid point: step.1 moves one GRID later, step.2 stays.
+    // (at the time of writing, map 0.15..0.5 over core [3, 6]: step.1 3.75 → 3.875, step.2 4.125)
+    const [, s1, s2] = mapped(FLOW_STEP, 4);
+    // precondition: one GRID of push does not reach step.2, so only the collision moves anything
+    expect(s2! - s1!).toBeGreaterThanOrEqual(2 * GRID);
+    const story = withBody('flow-graph', 'converge', 'steps', 4, (s) => { s.beats[1].cues = [{ name: 'whoosh', at: (s1! - 3) / 3, kind: 'sweep', amp: 0.2 }]; });
     const tl = compileTimeline(story, rs(15), ARCH, { fps: 60 });
     const t = (cue: string) => tl.hits.find((h: Hit) => h.beatId === 'b2' && h.cue === cue)!.t;
-    expect(t('whoosh')).toBe(frame60(3.875));
-    expect(t('step.1')).toBe(frame60(4.0));
-    expect(t('step.2')).toBe(frame60(4.375));
+    expect(t('whoosh')).toBe(frame60(s1!));
+    expect(t('step.1')).toBe(frame60(s1! + GRID));
+    expect(t('step.2')).toBe(frame60(s2!));
   });
 
   it('two FIXED hits (default/storyboard) closer than 1 GRID fail E_TIMELINE naming the beat and both cues', () => {
@@ -423,18 +443,49 @@ describe('cue maps (C14) — one hit per bound item, spread from..to, never stac
     expect(() => compileTimeline(story, rs(15), ARCH, { fps: 60 })).not.toThrow();
   });
 
+  it('flow-graph at max N (6 steps) is held to the same limit: a short enough beat fails E_TIMELINE, 3 steps fit', () => {
+    // The flow-graph map squeezes 6 steps into from..to of the beat (narrower since `to` moved 0.6 → 0.5), so a short
+    // beat must still be refused, not drawn with stacked or late hits. Shrink b2 (flow-graph, weight 1) by growing
+    // b5 until the 6-step map no longer fits — derived, so `from` / `to` tuning moves the threshold, not the check.
+    // (at the time of writing: b5 weight 6 → b2 1.625 s is the first refusal; at 0.6 even 1.375 s fitted)
+    const at = (w5: number, n: number) => withBody('flow-graph', 'converge', 'steps', n, (s) => { s.beats[4].weight = w5; });
+    let refused: { w5: number; err: any } | null = null;
+    for (let w5 = 1.5; w5 <= 12 && !refused; w5 += 0.5) {
+      try { compileTimeline(at(w5, 6), rs(15), ARCH, { fps: 60 }); } catch (e) { refused = { w5, err: e }; }
+    }
+    expect(refused, 'some short beat refuses 6 flow-graph steps').not.toBeNull();
+    // bracket the limit from below: the first refusal is not the search start, and one step earlier 6 steps still fit
+    expect(refused!.w5, '6 steps must fit at the search start, or the threshold is not pinned').toBeGreaterThan(1.5);
+    expect(() => compileTimeline(at(refused!.w5 - 0.5, 6), rs(15), ARCH, { fps: 60 })).not.toThrow();
+    expect(refused!.err).toMatchObject({ code: 'E_TIMELINE' });
+    expect(refused!.err.message).toContain('b2');
+    expect(refused!.err.message).toMatch(/step\.\d.*pushed past "step" to=/);
+    expect(refused!.err.fix).toMatch(/weight|fewer/);
+    // the same beat with 3 steps fits — the refusal is about N, not about the beat being illegal
+    expect(() => compileTimeline(at(refused!.w5, 3), rs(15), ARCH, { fps: 60 })).not.toThrow();
+  });
+
   it('a storyboard cue overrides a mapped cue by full name ("step.2"): replaced, not duplicated', () => {
-    // step.1 = 3.875, step.3 = 4.75 (defaults): an override at 0.5 → 4.5 stays between them (index order kept)
-    const story = withBody('flow-graph', 'converge', 'steps', 4, (s) => { s.beats[1].cues = [{ name: 'step.2', at: 0.5, kind: 'boom', amp: 0.9 }]; });
+    // an override off step.2's own default, between the defaults of step.1 and step.3 and at least 1 GRID from
+    // both, stays between them (index order kept). At the time of writing: 3.75 / [4.125] / 4.5 → override 3.875
+    const [, s1, d2, s3] = mapped(FLOW_STEP, 4);
+    const room = Array.from({ length: Math.round((s3! - s1!) / GRID) - 1 }, (_, k) => s1! + (k + 1) * GRID);
+    const g = room.find((x) => Math.abs(x - d2!) > 1e-9)!;
+    expect(g, 'precondition: a grid point between step.1 and step.3 other than step.2 default').toBeDefined();
+    const story = withBody('flow-graph', 'converge', 'steps', 4, (s) => { s.beats[1].cues = [{ name: 'step.2', at: (g - 3) / 3, kind: 'boom', amp: 0.9 }]; });
     const tl = compileTimeline(story, rs(15), ARCH, { fps: 60 });
     const steps = hitsOf(tl, 'b2', 'step');
     expect(steps.map((h: Hit) => h.cue).sort()).toEqual(['step.0', 'step.1', 'step.2', 'step.3']);
     const s2 = steps.find((h: Hit) => h.cue === 'step.2')!;
-    expect([s2.t, s2.kind, s2.amp]).toEqual([frame60(3 + 0.5 * 3), 'boom', 0.9]); // 4.5
+    expect([s2.t, s2.kind, s2.amp]).toEqual([frame60(g), 'boom', 0.9]);
+    // the neighbours keep their mapped places (the override replaced step.2, it did not push anything)
+    expect(steps.find((h: Hit) => h.cue === 'step.1')!.t).toBe(frame60(s1!));
+    expect(steps.find((h: Hit) => h.cue === 'step.3')!.t).toBe(frame60(s3!));
   });
 
   it('an override that lands a mapped hit out of index order fails E_TIMELINE (archetypes reveal item i before i+1)', () => {
-    // step.2 at 0.75 → 5.25 s, AFTER step.3 (4.75): flow-graph would light the path 0, 1, 3, 2 — refused, not drawn
+    // step.2 at 0.75 → 5.25 s, AFTER step.3's mapped default: flow-graph would light the path 0, 1, 3, 2 — refused, not drawn
+    expect(mapped(FLOW_STEP, 4)[3], 'precondition: 5.25 s really is after step.3').toBeLessThan(5.25 - GRID);
     const late = withBody('flow-graph', 'converge', 'steps', 4, (s) => { s.beats[1].cues = [{ name: 'step.2', at: 0.75, kind: 'boom', amp: 0.9 }]; });
     let err: any;
     try { compileTimeline(late, rs(15), ARCH, { fps: 60 }); } catch (e) { err = e; }

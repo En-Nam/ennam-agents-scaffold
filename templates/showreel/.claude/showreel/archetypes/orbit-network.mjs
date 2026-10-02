@@ -20,6 +20,7 @@ const CHIP_H = 82, CHIP_LABEL_W = 360;  // a 20-char (C13 maxChars) label fits a
 const PK_SP = 1.25;                // beam packet cycles per second
 const ORBIT_W = 0.62;              // orbit spin (rad/s) — ONE constant for the spin and the badge phase below
 const GLOW_PAD = 60;
+const LABEL_GAP = 34;              // clear air between a badge label and the brain-core silhouette (R5 legibility)
 const ICON_BY_KIND = { route: 'browser', 'stack.item': 'hub', feature: 'code' };
 
 const fract = (v) => v - Math.floor(v);
@@ -190,6 +191,41 @@ export default {
       if (q.y > LANE) q.y = LANE + (q.y - LANE) * 0.2;
       return q;
     }
+    // brain-core size at u — ONE formula for the brain drawing and the label clearance below
+    function core(u) {
+      const bt = u - T.ign;
+      if (bt < 0) return { Rs: 0, spread: 1 };
+      return {
+        Rs: SPH * (1 + 0.075 * pulseEnergy(u)) * (1 - Math.pow(exitU(u), 4)) * clamp(bt / 0.12),
+        spread: 1 + 2.5 * (1 - ease.spring(clamp(bt / 0.75), 7)),
+      };
+    }
+    // badge pose at u: orbit point + scale, then (R5 legibility) pushed out along the ray from the core until the
+    // LABEL rect clears the core silhouette by LABEL_GAP — the minimal push, so it is continuous in u.
+    function pose(i, u) {
+      const B = badge(i, u), A = L.chips[i], dp = u - T.pop[i], da = u - T.army - i * 0.045;
+      const popS = ease.outBack(clamp(dp / 0.5)), flareS = da >= 0 ? 1 + 0.13 * Math.exp(-da * 7) : 1;
+      B.sc = B.s * popS * flareS * (0.9 + 0.1 * B.d) * (0.35 + 0.65 * sysScale(exitU(u)));
+      const { Rs, spread } = core(u);
+      if (Rs < 0.6) return B;
+      const R = Rs * Math.max(1, spread) * 1.03 + 10 + LABEL_GAP * (Rs / SPH);   // shell jitter ≤ 1.03, node dot ≤ 10
+      const lx0 = (-A.w / 2 + CHIP_H - 4) * B.sc, lx1 = (A.w / 2 - 36) * B.sc, ly = (CHIP_H / 2 - 8) * B.sc;
+      let px = B.x - CX, py = B.y - CY;
+      if (Math.hypot(px, py) < 1) { px = 0; py = -1; }
+      const clear = (k) => {
+        const x = CX + px * k, y = CY + py * k;
+        return Math.hypot(Math.max(x + lx0 - CX, 0, CX - x - lx1), Math.max(y - ly - CY, 0, CY - y - ly)) >= R;
+      };
+      if (clear(1)) return B;
+      let lo = 1, hi = 2;
+      while (!clear(hi) && hi < 1024) { lo = hi; hi *= 2; }
+      // fail loud (Rule 12): R is bounded, so 1024× the ray always clears a sane geometry — if it does not, the
+      // pose is corrupt (NaN size, broken core bound); never fling the badge off-frame and carry on
+      if (!clear(hi)) throw new Error(`orbit-network: badge ${i} cannot clear the brain-core at localT ${u} (clearance ${R}, label ${lx0}..${lx1} × ±${ly})`);
+      for (let k = 0; k < 22; k++) { const mid = (lo + hi) / 2; if (clear(mid)) hi = mid; else lo = mid; }
+      B.x = CX + px * hi; B.y = CY + py * hi;
+      return B;
+    }
     const packetOff = (i, k) => fract(hash(i * 7.1 + k * 3.3) + k * 0.5);
     function chipGlow(i, u) {
       let gl = 0;
@@ -209,12 +245,13 @@ export default {
       for (let k = 0; k <= 6; k++) g.addColorStop(k / 6, C(col, a * Math.pow(1 - k / 6, 2.4)));
       ctx.fillStyle = g; ctx.fillRect(x - r, y - r, r * 2, r * 2);
     }
-    function ping(x, y, q, col, rMax = 95, w = 3.5) {
-      if (q <= 0 || q >= 1) return;
-      const e = ease.outExpo(q);
-      ctx.save(); ctx.globalCompositeOperation = 'lighter';
-      ctx.strokeStyle = C(col, 0.9 * Math.pow(1 - q, 1.4)); ctx.lineWidth = lerp(w, 0.6, q);
-      ctx.beginPath(); ctx.arc(x, y, 14 + rMax * e, 0, TAU); ctx.stroke(); ctx.restore();
+    // pulse = a badge-shaped halo that grows OUTWARD from the pill (never a ring across the label)
+    function ping(i, B, q, col, gMax = 36, w = 3, a = 0.8) {
+      if (q <= 0 || q >= 1 || !(B.sc > 0)) return;
+      const e = ease.outExpo(q), g = 3 + gMax * e, A = L.chips[i];
+      ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.translate(B.x, B.y); ctx.scale(B.sc, B.sc);
+      ctx.strokeStyle = C(col, a * Math.pow(1 - q, 2)); ctx.lineWidth = lerp(w, 0.6, q);
+      rr(ctx, -A.w / 2 - g, -CHIP_H / 2 - g, A.w + 2 * g, CHIP_H + 2 * g, 30 + g); ctx.stroke(); ctx.restore();
     }
     function ringPolyline(R, tilt, roll, aBack, aFront, col, lw) {
       const n = 120, pts = [];
@@ -325,8 +362,7 @@ export default {
       if (bt < 0) return;
       const { nodes, edges, edgeR, sigs } = L.brain;
       const U = exitU(lt), pulse = pulseEnergy(lt);
-      const spread = 1 + 2.5 * (1 - ease.spring(clamp(bt / 0.75), 7));
-      const Rs = SPH * (1 + 0.075 * pulse) * (1 - Math.pow(U, 4)) * clamp(bt / 0.12);
+      const { Rs, spread } = core(lt);
       if (Rs < 0.6) return;
       const waves = [[T.ign, 1.0], [T.brain, 0.85], [T.army, 0.5]];
       const waveLit = (r) => {
@@ -458,9 +494,14 @@ export default {
     }
 
     // ── badge (glass chip with icon disc, node label via api.text, status dot) ──
-    function chip(i, x, y, sc, alpha, gl) {
+    // drawn LAST in the frame (R5 legibility): an opaque pill first, so nothing the scene drew behind shows through
+    // the label; depth dims the glass, never the label below 0.78.
+    function chip(i, x, y, sc, on, d, gl) {
       const A = L.chips[i], h = CHIP_H, w = A.w;
-      ctx.save(); ctx.translate(x, y); ctx.scale(sc, sc); ctx.globalAlpha *= alpha;
+      ctx.save(); ctx.translate(x, y); ctx.scale(sc, sc); ctx.globalAlpha *= on;
+      const ga = ctx.globalAlpha;
+      rr(ctx, -w / 2, -h / 2, w, h, 30); ctx.fillStyle = P.ink2; ctx.fill();
+      ctx.globalAlpha = ga * (0.55 + 0.45 * d);
       api.glass(ctx, -w / 2, -h / 2, w, h, 30, { fill: C(P.ink2, 0.88), border: C(A.c, 0.3 + 0.6 * gl), glowColor: C(A.c, 0.2 + 0.55 * gl), glowBlur: 20 + 34 * gl });
       if (gl > 0.02) { rr(ctx, -w / 2, -h / 2, w, h, 30); ctx.fillStyle = C(A.c, 0.12 * gl); ctx.fill(); }
       const ix = -w / 2 + h / 2;
@@ -468,9 +509,10 @@ export default {
       g.addColorStop(0, C(A.c, 0.42)); g.addColorStop(1, C(A.c, 0.08));
       ctx.beginPath(); ctx.arc(ix, 0, 29, 0, TAU); ctx.fillStyle = g; ctx.fill(); ctx.strokeStyle = C(A.c, 0.8); ctx.lineWidth = 1.6; ctx.stroke();
       ctx.save(); ctx.translate(ix, 0); ctx.scale(1.25, 1.25); icon(ctx, A.icon, mix(A.c, P.text, 0.5), rr); ctx.restore();
-      api.text(ctx, A.item, -w / 2 + h + 1, 2, { size: L.nodePx, weight: 600, base: 'middle', track: 0.3, fill: P.text });
       const sp = 0.5 + 0.5 * Math.sin(lt * 4 + A.a0 * 3);
-      ctx.beginPath(); ctx.arc(w / 2 - 24, 0, 4.6, 0, TAU); ctx.fillStyle = C(P.mint, 0.7 + 0.3 * sp); ctx.shadowColor = P.mint; ctx.shadowBlur = 8 + 8 * sp; ctx.fill();
+      ctx.save(); ctx.beginPath(); ctx.arc(w / 2 - 24, 0, 4.6, 0, TAU); ctx.fillStyle = C(P.mint, 0.7 + 0.3 * sp); ctx.shadowColor = P.mint; ctx.shadowBlur = 8 + 8 * sp; ctx.fill(); ctx.restore();
+      ctx.globalAlpha = ga * (0.78 + 0.22 * d);
+      api.text(ctx, A.item, -w / 2 + h + 1, 2, { size: L.nodePx, weight: 600, base: 'middle', track: 0.3, fill: P.text });   // the label is the chip's last draw
       ctx.restore();
     }
     // beam core → badge: soft wide stroke + hairline + travelling dashes + packets both ways
@@ -509,7 +551,7 @@ export default {
       let prev = null;
       ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round';
       for (let k = 0; k <= n; k++) {
-        const q = badge(i, lt - (k / n) * len);
+        const q = pose(i, lt - (k / n) * len);
         if (prev) { ctx.strokeStyle = C(A.c, 0.7 * Math.pow(1 - k / n, 1.4) * winFade(lt)); ctx.lineWidth = lerp(9, 1.5, k / n) * (0.6 + 0.6 * q.d); ctx.beginPath(); ctx.moveTo(prev.x, prev.y); ctx.lineTo(q.x, q.y); ctx.stroke(); }
         prev = q;
       }
@@ -521,7 +563,7 @@ export default {
       for (const R of L.arcs) {
         const q = (lt - (relay0 + R.k * 0.17)) / 0.5;
         if (q <= 0 || q >= 1) continue;
-        const A = badge(R.a, lt), B = badge(R.b, lt), ca = L.chips[R.a].c, cb = L.chips[R.b].c;
+        const A = pose(R.a, lt), B = pose(R.b, lt), ca = L.chips[R.a].c, cb = L.chips[R.b].c;
         const mx = (A.x + B.x) / 2, my = (A.y + B.y) / 2, ox = mx - CX, oy = my - CY, ol = Math.hypot(ox, oy) || 1, span = Math.hypot(A.x - B.x, A.y - B.y);
         const cxp = mx + (ol > 40 ? ox / ol : 0) * span * 0.22, cyp = my + (ol > 40 ? oy / ol : -1) * span * 0.22 - 70;
         const at = (s) => { const u = 1 - s; return [u * u * A.x + 2 * u * s * cxp + s * s * B.x, u * u * A.y + 2 * u * s * cyp + s * s * B.y]; };
@@ -647,34 +689,29 @@ export default {
     }
 
     // ───────────────────────── scene ─────────────────────────
-    const U = exitU(lt), fade = winFade(lt);
+    const fade = winFade(lt);
     inflow(0, T.ign, 11, 120, 2.4, 1, 1);
     ember();
     scrim();
+    const poses = L.chips.map((_, i) => (lt >= T.ign && lt >= T.pop[i] ? pose(i, lt) : null));
     if (lt >= T.ign) {
       rings();
       dust();
       wordRings();
       const items = [{ z: 0, o: 0, i: -1, f: brain }];
       L.chips.forEach((A, i) => {
-        if (lt < T.pop[i]) return;
-        const B = badge(i, lt), dp = lt - T.pop[i];
-        const da = lt - T.army - i * 0.045;
-        const popS = ease.outBack(clamp(dp / 0.5)), flareS = da >= 0 ? 1 + 0.13 * Math.exp(-da * 7) : 1;
-        const sc = B.s * popS * flareS * (0.9 + 0.1 * B.d) * (0.35 + 0.65 * sysScale(U));
-        const alpha = clamp(dp / 0.1) * (0.55 + 0.45 * B.d) * fade;
-        items.push({ z: B.z >= 0 ? B.z * 0.5 : B.z - 1, o: 1, i, f: () => { beam(i, B); trail(i); } });
-        items.push({ z: B.z, o: 3, i, f: () => { if (alpha > 0.01) chip(i, B.x, B.y, sc, alpha, chipGlow(i, lt)); } });
+        const B = poses[i];
+        if (B) items.push({ z: B.z >= 0 ? B.z * 0.5 : B.z - 1, o: 1, i, f: () => { beam(i, B); trail(i); } });
       });
       memoryCells(items);
       items.sort((a, b) => a.z - b.z || a.o - b.o || (a.i ?? 0) - (b.i ?? 0));
       for (const it of items) it.f();
       relays();
       L.chips.forEach((A, i) => {
-        const B = badge(i, lt);
-        ping(B.x, B.y, (lt - T.pop[i]) / 0.65, A.c);
-        if (lt < T.exit) ping(B.x, B.y, (lt - (T.army + i * 0.045)) / 0.6, A.c, 70, 2.5);
-        const b0 = badge(i, T.pop[i]);
+        const B = poses[i] ?? pose(i, lt);
+        ping(i, B, (lt - T.pop[i]) / 0.65, A.c);
+        if (lt < T.exit) ping(i, B, (lt - (T.army + i * 0.045)) / 0.45, A.c, 18, 2.2, 0.6);
+        const b0 = pose(i, T.pop[i]);
         sparks(T.pop[i], b0.x, b0.y, 16, 40 + i * 13, 120, 420, 0.7, [A.c, P.text]);
       });
       sparks(T.ign, CX, CY, 150, 3, 260, 1500, 1, [P.secondary, P.primary, P.text, P.hot]);
@@ -683,5 +720,16 @@ export default {
     inflow(T.exit + 0.05, T.end, 71, 90, 3.2, 0.9, 1.1);
     sucked(() => { hud(); hubLabel(); });
     singularity();
+    // badges LAST, back to front (R5 legibility): no ring / beam / pulse / spark / relay is ever drawn over a label.
+    // Accepted visual changes vs the M1/HEAD-c4af0fa z-sort (badges interleaved with brain / beams / memory cells):
+    //   (a) a badge behind the core (z < 0) now paints over front memory cells and beams — legibility over depth cue;
+    //   (b) through the exit collapse the shrinking badges paint over the singularity (rings + white-hot core) until
+    //       winFade / sysScale take them out — they read as falling INTO the point, not behind it.
+    // The hub-lane clearance of these opaque pills (they also draw after hubLabel) is pinned by the browser test (e).
+    const order = poses.map((B, i) => i).filter((i) => poses[i]).sort((a, b) => poses[a].z - poses[b].z || a - b);
+    for (const i of order) {
+      const B = poses[i], on = clamp((lt - T.pop[i]) / 0.1) * fade;
+      if (on > 0.01) chip(i, B.x, B.y, B.sc, on, B.d, chipGlow(i, lt));
+    }
   },
 };

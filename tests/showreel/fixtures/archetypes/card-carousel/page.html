@@ -33,19 +33,27 @@
       const dx = Number(q.get('nudge'));
       arch = { ...arch, draw(ctx, ...rest) { ctx.translate(dx, 0); card.draw(ctx, ...rest); } };
     }
-    // ?probe: count the placeholder draws per beat into SHOWREEL.probe[beatId] = {dash, deck} (the caller resets
-    // SHOWREEL.probe before a render). dash = a dashed stroke (row ghost slot outline); deck = a glass card body
+    // ?probe: count the placeholder draws per beat into SHOWREEL.probe[beatId] = {dash, deck, title} (the caller
+    // resets SHOWREEL.probe before a render). dash = a dashed stroke (row ghost slot outline); deck = a glass card body
     // with the unswung-deck fill (fan). Text-free draws the manifest cannot see (R5 review: pixels, not inference).
+    // title[itemId] = the strongest normal (source-over) palette-text draw of that item this frame: its effective
+    // opacity (ctx.globalAlpha × opts.alpha) — 1 = the title is drawn at full contrast, not mid-fade or dimmed.
     if (q.has('probe')) {
       const inner = arch;
       arch = { ...inner, draw(ctx, lt, p, rb, cues) {
-        const rec = ((S.probe ??= {})[p.beatId] ??= { dash: 0, deck: 0 });
+        const rec = ((S.probe ??= {})[p.beatId] ??= { dash: 0, deck: 0, title: {} });
         const deckFill = p.api.rgba(p.api.palette.ink2, 0.5);
         let inCheck = false; // api.checkMark draws its tick on with a dash pattern — not a placeholder
         const api = {
           ...p.api,
           glass: (c, x, y, w, h, r, o) => { if (o && o.fill === deckFill) rec.deck++; return p.api.glass(c, x, y, w, h, r, o); },
           checkMark: (...a) => { inCheck = true; try { return p.api.checkMark(...a); } finally { inCheck = false; } },
+          text: (c, item, x, y, o = {}) => {
+            if (c.globalCompositeOperation === 'source-over' && o.fill === p.api.palette.text) {
+              rec.title[item.id] = Math.max(rec.title[item.id] ?? 0, c.globalAlpha * (o.alpha ?? 1));
+            }
+            return p.api.text(c, item, x, y, o);
+          },
         };
         const sld = ctx.setLineDash;
         ctx.setLineDash = function (d) { if (d.length && !inCheck) rec.dash++; return sld.call(this, d); };

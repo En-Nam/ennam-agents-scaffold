@@ -386,6 +386,11 @@ describe('M2 archetypes (C13) — slot rules and cue-map override names', () => 
     mut(b[1]);
   });
   const e = (sb: unknown) => errs(sb, ctx({ facts }));
+  // the shipped flow-graph step map (from..to read from archetypes.json, so tuning re-derives the windows below);
+  // 3 steps → defaults from, (from+to)/2, to — computed exactly as validate.mjs does, so messages match verbatim
+  const STEP = ARCHETYPES.archetypes['flow-graph'].cueMaps.find((m: { name: string }) => m.name === 'step');
+  const d1 = STEP.from + ((STEP.to - STEP.from) * 1) / 2;
+  const reEsc = (x: number) => String(x).replace(/\./g, '\\.');
 
   it('a valid flow-graph beat passes (column-wipe is a legal transition)', () => {
     expect(e(flow())).toEqual([]);
@@ -397,8 +402,9 @@ describe('M2 archetypes (C13) — slot rules and cue-map override names', () => 
   });
 
   it('a storyboard cue may override a mapped cue by full name "<map>.<i>" for i < N', () => {
-    // 3 steps: defaults 0.15, 0.375, 0.6 — the last step may move anywhere after step.1 up to the map's `to`
-    expect(e(flow((b) => { b.cues = [{ name: 'step.2', at: 0.55, kind: 'boom', amp: 1 }]; }))).toEqual([]);
+    // 3 steps: defaults from, (from+to)/2, to (now 0.15, 0.325, 0.5) — the last step may move anywhere after step.1
+    // up to the map's `to`: half-way between step.1's default and `to`
+    expect(e(flow((b) => { b.cues = [{ name: 'step.2', at: (d1 + STEP.to) / 2, kind: 'boom', amp: 1 }]; }))).toEqual([]);
   });
 
   it('a mapped-cue override outside the map window (from..to) or out of index order is E_SCHEMA', () => {
@@ -406,18 +412,34 @@ describe('M2 archetypes (C13) — slot rules and cue-map override names', () => 
     // `converge` implosion) would render a scrambled reveal with no error
     const past = e(flow((b) => { b.cues = [{ name: 'step.2', at: 0.7, kind: 'boom', amp: 1 }]; }));
     expect(past).toEqual([expect.objectContaining({ path: '/beats/1/cues/0/at', code: 'E_SCHEMA' })]);
-    expect(past[0]!.message).toMatch(/outside.*0\.15\.\.0\.6/);
+    expect(STEP.to, 'precondition: 0.7 is past the map window').toBeLessThan(0.7);
+    expect(past[0]!.message).toMatch(new RegExp(`outside.*${reEsc(STEP.from)}\\.\\.${reEsc(STEP.to)}`));
     const early = e(flow((b) => { b.cues = [{ name: 'step.0', at: 0.1, kind: 'boom', amp: 1 }]; }));
     expect(early).toEqual([expect.objectContaining({ path: '/beats/1/cues/0/at', code: 'E_SCHEMA' })]);
     // step.2 before step.0 (both in the window): order broken
     const swapped = e(flow((b) => { b.cues = [{ name: 'step.2', at: 0.2, kind: 'boom', amp: 1 }]; }));
     expect(swapped).toEqual([expect.objectContaining({ path: '/beats/1/cues/0/at', code: 'E_SCHEMA' })]);
-    expect(swapped[0]!.message).toMatch(/index order.*step\.1 at 0\.375/);
+    expect(swapped[0]!.message).toMatch(new RegExp(`index order.*step\\.1 at ${reEsc(d1)}`));
     // two overrides that swap each other are judged against each other, not against the defaults
     const pair = e(flow((b) => { b.cues = [{ name: 'step.0', at: 0.4, kind: 'snap', amp: 1 }, { name: 'step.1', at: 0.3, kind: 'snap', amp: 1 }]; }));
     expect(pair.map((x) => x.path)).toEqual(['/beats/1/cues/0/at', '/beats/1/cues/1/at']);
     // in order + in the window passes even when several move
     expect(e(flow((b) => { b.cues = [{ name: 'step.0', at: 0.2, kind: 'snap', amp: 1 }, { name: 'step.1', at: 0.3, kind: 'snap', amp: 1 }]; }))).toEqual([]);
+  });
+
+  it('KEEP LITERAL (Rule 9): a pinned 0.15..0.6 step map yields hand-written window + order messages', () => {
+    // d1 and the regexes above mirror validate.mjs's default-placement formula, so a change to that formula made
+    // the same way on both sides would pass them; only these hand-written numbers make the check non-tautological.
+    const pinned = clone(ARCHETYPES);
+    pinned.archetypes['flow-graph'].cueMaps = [{ ...STEP, from: 0.15, to: 0.6 }];
+    const ep = (sb: unknown) => errs(sb, ctx({ facts, archetypes: pinned }));
+    expect(ep(flow((b) => { b.cues = [{ name: 'step.2', at: 0.55, kind: 'boom', amp: 1 }]; }))).toEqual([]);
+    const past = ep(flow((b) => { b.cues = [{ name: 'step.2', at: 0.7, kind: 'boom', amp: 1 }]; }));
+    expect(past).toEqual([expect.objectContaining({ path: '/beats/1/cues/0/at', code: 'E_SCHEMA' })]);
+    expect(past[0]!.message).toMatch(/outside.*0\.15\.\.0\.6/);
+    const swapped = ep(flow((b) => { b.cues = [{ name: 'step.2', at: 0.2, kind: 'boom', amp: 1 }]; }));
+    expect(swapped).toEqual([expect.objectContaining({ path: '/beats/1/cues/0/at', code: 'E_SCHEMA' })]);
+    expect(swapped[0]!.message).toMatch(/index order.*step\.1 at 0\.375/);
   });
 
   it('a mapped-cue name past N, or naming no cue map, is E_SCHEMA (an override that can never fire is a lie)', () => {

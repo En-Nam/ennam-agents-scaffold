@@ -47,11 +47,21 @@ export const TYPICAL = [
   fact('feature', 13, 'Live order tracking'),
   fact('route', 12, '/orders/[id]'),
 ];
+// The R5 sheet's row + fan cards (next fixture, 60 s film): short display titles first, so the first card's title
+// is far shorter than the row is wide — the case where a left-aligned title sat out in the frame-edge vignette.
+export const R5 = [
+  fact('feature', 21, 'One-tap checkout'),
+  fact('feature', 22, 'Order tracking'),
+  fact('feature', 23, 'Stripe payments'),
+  fact('command', 21, 'npm run start'),
+  fact('command', 22, 'npx @acme/acme-shop'),
+  fact('route', 21, '/products/[id]'),
+];
 export const FACTS = {
   version: 1,
   minimumGate: { passed: true, missing: [] },
   brand: { name: 'Acme Shop', palette: 'violet', wordmark: 'f.app.name.1' },
-  facts: [fact('app.name', 1, 'Acme Shop'), fact('command', 1, 'npm run dev'), ...NEAR_MAX, ...TYPICAL],
+  facts: [fact('app.name', 1, 'Acme Shop'), fact('command', 1, 'npm run dev'), ...NEAR_MAX, ...TYPICAL, ...R5],
 };
 const INPUTS = { archetypes: ARCH, facts: FACTS, phrases: PHRASES };
 
@@ -89,6 +99,16 @@ export const STORYBOARDS = {
   look: {
     version: 1, durationS: 15, seed: 5, palette: 'violet',
     beats: [open, cards('b2', 'row', typ(MID), 'p.carousel.2'), cards('b3', 'fan', typ(MID), 'p.carousel.3'), close('b4')],
+  },
+  // `r5` = the R5 sheet's card beats: same texts, ≈4.75 s card beats like the 60 s film's
+  r5: {
+    version: 1, durationS: 15, seed: 11, palette: 'violet',
+    beats: [
+      open,
+      { ...cards('b2', 'row', ['f.feature.21', 'f.feature.22', 'f.feature.23', 'f.command.1', 'f.command.11'], 'p.carousel.2'), weight: 1.75 },
+      { ...cards('b3', 'fan', ['f.command.21', 'f.command.11', 'f.command.22', 'f.route.21', 'f.route.11'], 'p.carousel.3'), weight: 1.75 },
+      close('b4'),
+    ],
   },
 };
 

@@ -61,7 +61,7 @@
         "steps": { "source": "fact", "kinds": ["route", "command", "feature", "stack.item"], "min": 3, "max": 6, "maxChars": 28 },
         "lead": { "source": "phrase", "tags": ["flow"], "min": 0, "max": 1 }
       },
-      "cueMaps": [{ "name": "step", "per": "steps", "kind": "snap", "amp": 0.3, "from": 0.15, "to": 0.6 }],
+      "cueMaps": [{ "name": "step", "per": "steps", "kind": "snap", "amp": 0.3, "from": 0.15, "to": 0.5 }],
       "defaultCues": [{ "name": "converge", "at": 0.85, "kind": "sweep", "amp": 0.6 }]
     },
     "layered-stack": {

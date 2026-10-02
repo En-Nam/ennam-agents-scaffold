@@ -27,7 +27,29 @@
   S.ready = (async () => {
     const [timeline, resolved] = await Promise.all([getJson('/build/timeline.json'), getJson('/build/resolved.json')]);
     await loadFonts('/fonts');
-    const eng = createEngine({ timeline, resolved, archetypes: { ...ARCHETYPES, [orbitNetwork.id]: orbitNetwork }, transitions: TRANSITIONS });
+    // test probes (R5 legibility (e)), read-only — the pixels are identical to the bare module:
+    //   S.xf[beatId]    the device transform the beat draws under (engine camera push / drift / shake / roll), so the
+    //                   test maps the core disc to frame pixels exactly instead of guessing a shake slack
+    //   S.pills[beatId] device-px bboxes of every badge PILL drawn in the last draw (api.rr calls with the chip's
+    //                   corner radius 30 and height CHIP_H 82 — both pinned by the static guard), so the test can
+    //                   bound the opaque pill, not just its label, against the hub label lane
+    const probed = { ...orbitNetwork, draw(ctx, lt, p, rb, cues) {
+      const m = ctx.getTransform();
+      S.xf = { ...(S.xf || {}), [p.beatId]: { a: m.a, b: m.b, c: m.c, d: m.d, e: m.e, f: m.f } };
+      const pills = [];
+      S.pills = { ...(S.pills || {}), [p.beatId]: pills };
+      const rr = (c, x, y, w, h, r) => {
+        if (r === 30 && h === 82) {
+          const t = c.getTransform();
+          const pts = [[x, y], [x + w, y], [x, y + h], [x + w, y + h]].map(([u, v]) => [t.a * u + t.c * v + t.e, t.b * u + t.d * v + t.f]);
+          const xs = pts.map((q) => q[0]), ys = pts.map((q) => q[1]);
+          pills.push({ x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) });
+        }
+        return p.api.rr(c, x, y, w, h, r);
+      };
+      return orbitNetwork.draw(ctx, lt, { ...p, api: { ...p.api, rr } }, rb, cues);
+    } };
+    const eng = createEngine({ timeline, resolved, archetypes: { ...ARCHETYPES, [orbitNetwork.id]: probed }, transitions: TRANSITIONS });
     S.renderAt = eng.renderAt;
     S.fit = eng.fit;
     return true;
