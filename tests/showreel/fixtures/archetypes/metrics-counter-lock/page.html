@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>showreel archetype fixture: metrics-counter-lock</title>
+<style>
+  html, body { margin: 0; background: #000; height: 100%; overflow: hidden; }
+  #stage { width: 100vw; height: 100vh; object-fit: contain; display: block; }
+</style>
+</head>
+<body>
+<!-- Test-local boot (same as engine/core.mjs boot()), with metrics-counter-lock wrapped so the test can PROBE
+     the archetype in isolation: SHOWREEL.probe(beatId, lt, card) redraws one card on a bare, transparent
+     1920×1080 canvas twice — lock live vs. lock deferred — and counts the pixels the lock changed inside vs.
+     outside that card. No engine post-FX (camera shake, bloom) in the probe, so every changed pixel is the
+     archetype's own lock flourish. Served from /build/ (the test copies this file into its temp build dir). -->
+<script type="module">
+  import { createEngine } from '/engine/core.mjs';
+  import { gpuRenderer } from '/engine/canvas.mjs';
+  import { manifest } from '/engine/text.mjs';
+  import { loadFonts, glyphGaps } from '/engine/fonts.mjs';
+  import { ARCHETYPES, TRANSITIONS } from '/archetypes/index.mjs';
+  import mcl from '/archetypes/metrics-counter-lock.mjs';
+
+  const last = {};
+  const wrapped = { ...mcl, draw(ctx, lt, p, rb, cues) { last[p.api.beatId] = { p, rb, cues }; return mcl.draw(ctx, lt, p, rb, cues); } };
+
+  function probe(beatId, lt, card, margin) {
+    const seen = last[beatId];
+    if (!seen) throw new Error(`probe: ${beatId} was never drawn (renderAt a time inside it first)`);
+    const { p, rb, cues } = seen;
+    const cd = p.layout.cards[card];
+    const L = { ...p.layout, label: null, cards: [cd] };
+    const shot = (lock) => {
+      const c = document.createElement('canvas'); c.width = 1920; c.height = 1080;
+      const g = c.getContext('2d');
+      // the archetype reads its cue through api.cue (engine contract): defer the lock there, not in `cues`
+      const api = { ...p.api, cue: (name) => (name === 'lock' ? lock : p.api.cue(name)) };
+      mcl.draw(g, lt, { ...p, layout: L, api }, rb, { ...cues, lock });
+      return g.getImageData(0, 0, 1920, 1080).data;
+    };
+    const on = shot(cues.lock), off = shot(lt + 1000);
+    const x0 = cd.x - margin, y0 = cd.y - margin, x1 = cd.x + cd.w + margin, y1 = cd.y + cd.h + margin;
+    let inside = 0, outside = 0, far = 0;
+    for (let y = 0; y < 1080; y++) for (let x = 0; x < 1920; x++) {
+      const i = (y * 1920 + x) * 4;
+      const d = Math.max(Math.abs(on[i] - off[i]), Math.abs(on[i + 1] - off[i + 1]), Math.abs(on[i + 2] - off[i + 2]), Math.abs(on[i + 3] - off[i + 3]));
+      if (d <= 8) continue;
+      if (x >= x0 && x < x1 && y >= y0 && y < y1) inside++;
+      else { outside++; far = Math.max(far, Math.max(x0 - x, x - x1 + 1, y0 - y, y - y1 + 1)); }
+    }
+    return { inside, outside, far, card: { x: cd.x, y: cd.y, w: cd.w, h: cd.h } };
+  }
+
+  const notReady = () => { throw new Error('SHOWREEL not ready: await SHOWREEL.ready first'); };
+  const S = { ready: null, renderer: gpuRenderer(), renderAt: notReady, manifest, fit: notReady, glyphGaps: notReady, probe, layout: (id) => last[id]?.p.layout };
+  window.SHOWREEL = S;
+  S.ready = (async () => {
+    const get = async (u) => { const r = await fetch(u); if (!r.ok) throw new Error(`${u} -> HTTP ${r.status}`); return r.json(); };
+    const [timeline, resolved] = await Promise.all([get('/build/timeline.json'), get('/build/resolved.json')]);
+    await loadFonts('/fonts');
+    S.glyphGaps = () => glyphGaps(resolved);
+    const eng = createEngine({ timeline, resolved, archetypes: { ...ARCHETYPES, [wrapped.id]: wrapped }, transitions: TRANSITIONS });
+    S.renderAt = eng.renderAt;
+    S.fit = eng.fit;
+    return true;
+  })();
+</script>
+</body>
+</html>

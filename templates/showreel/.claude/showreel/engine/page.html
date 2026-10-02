@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>showreel engine</title>
+<style>
+  html, body { margin: 0; background: #000; height: 100%; overflow: hidden; }
+  #stage { width: 100vw; height: 100vh; object-fit: contain; display: block; }
+</style>
+</head>
+<body>
+<!-- C10: loads /build/timeline.json + /build/resolved.json and sets window.SHOWREEL.
+     The 1920x1080 output canvas is appended as <canvas id="stage"> (capture reads it). -->
+<script type="module">
+  import { boot } from '/engine/core.mjs';
+  boot();
+</script>
+</body>
+</html>

@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "showreel/storyboard.schema.json",
+  "title": "showreel storyboard (C4) - written by the agent; enums, numbers, fact ids and phrase ids only, never free text",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "durationS", "seed", "beats"],
+  "properties": {
+    "version": { "const": 1 },
+    "durationS": { "enum": [15, 30, 45, 60] },
+    "seed": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+    "palette": { "$ref": "#/$defs/palette" },
+    "beats": { "type": "array", "minItems": 4, "maxItems": 14, "items": { "$ref": "#/$defs/beat" } }
+  },
+  "$defs": {
+    "palette": { "enum": ["violet", "cyan", "amber", "mint"] },
+    "factId": { "type": "string", "pattern": "^f\\.(app\\.name|app\\.tagline|feature|stack\\.item|route|command|count|problem)\\.[1-9][0-9]*$" },
+    "phraseId": { "type": "string", "pattern": "^p\\.(open|lead|metrics|cta|flow|stack|carousel|chapter)\\.[1-9][0-9]*$" },
+    "factIdOrList": {
+      "oneOf": [
+        { "$ref": "#/$defs/factId" },
+        { "type": "array", "minItems": 1, "maxItems": 8, "items": { "$ref": "#/$defs/factId" } }
+      ]
+    },
+    "beat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "archetype", "variant", "weight", "bindings", "transitionOut"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^b[0-9]{1,2}$" },
+        "archetype": { "enum": ["cold-open-command", "kinetic-text", "metrics-counter-lock", "lockup-cta", "flow-graph", "layered-stack", "card-carousel", "orbit-network"] },
+        "variant": { "enum": ["terminal", "stack", "punch", "row", "grid", "center", "converge", "chain", "cluster", "slabs", "fan", "orbit", "chapter"] },
+        "weight": { "type": "number", "minimum": 0.5, "maximum": 3 },
+        "bindings": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "command": { "$ref": "#/$defs/factIdOrList" },
+            "lines": { "$ref": "#/$defs/factIdOrList" },
+            "counters": { "$ref": "#/$defs/factIdOrList" },
+            "name": { "$ref": "#/$defs/factIdOrList" },
+            "tagline": { "$ref": "#/$defs/factIdOrList" },
+            "steps": { "$ref": "#/$defs/factIdOrList" },
+            "layers": { "$ref": "#/$defs/factIdOrList" },
+            "cards": { "$ref": "#/$defs/factIdOrList" },
+            "hub": { "$ref": "#/$defs/factIdOrList" },
+            "nodes": { "$ref": "#/$defs/factIdOrList" }
+          }
+        },
+        "phrases": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "caption": { "$ref": "#/$defs/phraseId" },
+            "lead": { "$ref": "#/$defs/phraseId" },
+            "label": { "$ref": "#/$defs/phraseId" },
+            "cta": { "$ref": "#/$defs/phraseId" }
+          }
+        },
+        "transitionOut": { "enum": ["cut", "zoom-through", "column-wipe"] },
+        "cues": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/cue" } }
+      }
+    },
+    "cue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "at", "kind", "amp"],
+      "properties": {
+        "name": { "$comment": "cue label for timeline hits only; never rendered on screen. <map>.<i> names one cue-map hit (C14)", "type": "string", "pattern": "^[a-z][a-z0-9-]{0,23}(\\.(0|[1-9][0-9]?))?$" },
+        "at": { "type": "number", "minimum": 0, "maximum": 1 },
+        "kind": { "enum": ["boom", "snap", "sweep", "thud", "lock", "ignite", "pop", "slam"] },
+        "amp": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    }
+  }
+}

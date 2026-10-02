@@ -62,6 +62,12 @@ export async function printNextSteps(profile: ProfileDef, result: ExecuteResult,
     steps.push(`Goals and loops run on your Anthropic account until they stop — always bound a goal ("… or stop after 20 turns"). Requires Claude Code >= ${getProfile('automation').minClaudeCodeVersion} (preflight warns if behind).`);
   }
 
+  // v1.16 — showreel is an add-on, so check the selected names, not the display profile.
+  if (selected.includes('showreel')) {
+    steps.push('Showreel toolkit installed at .claude/showreel/ (runbook docs/agents-scaffold/showreel.md). First run downloads ~111 MB (puppeteer-core, ffmpeg, fonts) into .claude/showreel/.tool — run: node .claude/showreel/cli.mjs preflight (needs Node >= 22.12 and Chrome or Edge).');
+    steps.push('Make a film: run /showreel [15|30|45|60] in Claude Code (default 30 s) — the motion-designer agent writes the storyboard, renders and verifies showreel/<slug>-<N>s.mp4. Final render takes minutes.');
+  }
+
   // Profile-specific prereq + post-install reminders (game-unity has the heaviest setup —
   // two extra runtimes (Python+uv for Unity MCP, ADB for build/deploy) plus a Tripo3D
   // commercial-tier license gate. Surface loudly per Rule 12 — silent default = bad UX.

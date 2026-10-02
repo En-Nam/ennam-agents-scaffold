@@ -1,0 +1,5 @@
+# pinned for deploy
+fastapi==0.110.0
+uvicorn[standard]>=0.29
+-r requirements-dev.txt
+pytest ; python_version >= "3.10"

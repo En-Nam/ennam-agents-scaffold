@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>showreel engine - flow-graph fixture page</title>
+<style>
+  html, body { margin: 0; background: #000; height: 100%; overflow: hidden; }
+  #stage { width: 100vw; height: 100vh; object-fit: contain; display: block; }
+</style>
+</head>
+<body>
+<!-- Test twin of engine/page.html (M2 Tasks 2-5). flow-graph IS registered in archetypes/index.mjs now (Task 7);
+     this page still builds the SAME engine (createEngine + the shipped fonts) because it wraps flow-graph with
+     the R5 test probes below (layouts(), hideBranches, hideLastNode). The N-matrix / AC3 / e2e runs render
+     flow-graph through the shipped engine/page.html, which is what catches a divergence of this twin. -->
+<script type="module">
+  import { createEngine } from '/engine/core.mjs';
+  import { loadFonts } from '/engine/fonts.mjs';
+  import { manifest } from '/engine/text.mjs';
+  import { gpuRenderer } from '/engine/canvas.mjs';
+  import { ARCHETYPES, TRANSITIONS } from '/archetypes/index.mjs';
+  import flowGraph from '/archetypes/flow-graph.mjs';
+
+  const S = { ready: null, renderer: gpuRenderer(), manifest };
+  window.SHOWREEL = S;
+  S.ready = (async () => {
+    const get = async (u) => { const r = await fetch(u); if (!r.ok) throw new Error(`${u} -> HTTP ${r.status}`); return r.json(); };
+    const [timeline, resolved] = await Promise.all([get('/build/timeline.json'), get('/build/resolved.json')]);
+    await loadFonts('/fonts');
+    // test probe (R5 scale): record each flow beat's layout geometry (plain numbers) as the engine builds it.
+    // createEngine runs layout() ONCE per beat at boot (C9), so geo is complete and final before ready resolves;
+    // the test also pins geo[id].px === fit()[id].steps, which would catch a stale or lazily re-run layout.
+    const geo = {};
+    S.layouts = () => geo;
+    // test probe (R5 ornament): S.hideBranches = true draws the SAME frame without the alternative-route arches
+    // (layout untouched, so the path edges / nodes are identical) — the pixel diff is exactly what the arches draw.
+    // Cluster spokes are hidden by the same flag (their diff = exactly what the spokes draw).
+    // Variant "cluster" (ruling f) comes in through the test's timeline/resolved (compiled with the shipped
+    // archetypes table); the wrapper below passes the variant through untouched.
+    S.hideBranches = false;
+    // test probe (R5 chain ghost slots): S.hideLastNode = true draws the SAME frame without the last path node and
+    // the edge into it — before that node pops, the pixel diff is exactly what its ghost slot (+ ghost edge) draws
+    S.hideLastNode = false;
+    const probed = { ...flowGraph, layout(rb, variant, api) {
+      const L = flowGraph.layout(rb, variant, api);
+      const box = (d) => ({ x: d.x, y: d.y, w: d.w, h: d.h });
+      // every drawn edge with its two endpoints (path edges: origin / node i-1 → node i; arches: node a → node b)
+      const ends = (pts) => ({ from: pts[0], to: pts[pts.length - 1] });
+      // cluster (ruling f): edges (directed path) must be empty, origin null; links = the undirected hub spokes
+      geo[api.beatId] = {
+        variant, px: L.px, nodes: L.nodes.map(box), origin: L.origin ? box(L.origin) : null,
+        edges: L.pathEdges.map((e) => ({ i: e.i, pts: e.pts, ...ends(e.pts) })),
+        arcs: L.fan.map((f) => ({ a: f.a, b: f.b, pts: f.pts, ...ends(f.pts) })),
+        links: L.links.map((l) => ({ b: l.b, keys: Object.keys(l).sort(), pts: l.pts, ...ends(l.pts) })),
+        hub: L.hub ? { x: L.hub.x, y: L.hub.y } : null,
+      };
+      return L;
+    }, draw(ctx, lt, p, rb, cues) {
+      // test probe (R5 ornament): the device transform the beat draws under (engine camera push / shake / roll),
+      // so the test maps layout geometry to frame pixels exactly
+      const m = ctx.getTransform();
+      S.xf = { ...(S.xf || {}), [p.beatId]: { a: m.a, b: m.b, c: m.c, d: m.d, e: m.e, f: m.f } };
+      let L = p.layout;
+      // hideBranches drops the ornament lines: converge arches and the cluster's hub spokes
+      if (S.hideBranches) L = { ...L, fan: [], links: [] };
+      if (S.hideLastNode) L = { ...L, nodes: L.nodes.slice(0, -1), pathEdges: L.pathEdges.slice(0, -1), links: L.links.filter((l) => l.b !== L.nodes.length - 1) };
+      return flowGraph.draw(ctx, lt, L === p.layout ? p : { ...p, layout: L }, rb, cues);
+    } };
+    const eng = createEngine({ timeline, resolved, archetypes: { ...ARCHETYPES, [flowGraph.id]: probed }, transitions: TRANSITIONS });
+    S.renderAt = eng.renderAt;
+    S.fit = eng.fit;
+    return true;
+  })();
+</script>
+</body>
+</html>

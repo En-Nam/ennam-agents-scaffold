@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "arrangements": {
+    "15": [
+      { "archetype": "cold-open-command", "variant": "terminal", "weight": 1.0, "transitionOut": "zoom-through" },
+      { "archetype": "kinetic-text", "variant": "punch", "weight": 0.75, "transitionOut": "cut" },
+      { "archetype": "flow-graph", "variant": "cluster", "weight": 1.25, "transitionOut": "column-wipe" },
+      { "archetype": "metrics-counter-lock", "variant": "row", "weight": 1.0, "transitionOut": "zoom-through" },
+      { "archetype": "lockup-cta", "variant": "center", "weight": 1.5, "transitionOut": "cut" }
+    ],
+    "30": [
+      { "archetype": "cold-open-command", "variant": "terminal", "weight": 1.0, "transitionOut": "zoom-through" },
+      { "archetype": "kinetic-text", "variant": "stack", "weight": 1.0, "transitionOut": "cut" },
+      { "archetype": "flow-graph", "variant": "cluster", "weight": 1.5, "transitionOut": "column-wipe" },
+      { "archetype": "layered-stack", "variant": "slabs", "weight": 1.25, "transitionOut": "zoom-through" },
+      { "archetype": "metrics-counter-lock", "variant": "row", "weight": 1.0, "transitionOut": "cut" },
+      { "archetype": "card-carousel", "variant": "row", "weight": 1.25, "transitionOut": "column-wipe" },
+      { "archetype": "orbit-network", "variant": "orbit", "weight": 1.5, "transitionOut": "zoom-through" },
+      { "archetype": "lockup-cta", "variant": "center", "weight": 1.5, "transitionOut": "cut" }
+    ],
+    "45": [
+      { "archetype": "cold-open-command", "variant": "terminal", "weight": 1.0, "transitionOut": "zoom-through" },
+      { "archetype": "kinetic-text", "variant": "chapter", "weight": 0.75, "transitionOut": "cut" },
+      { "archetype": "kinetic-text", "variant": "stack", "weight": 1.0, "transitionOut": "column-wipe" },
+      { "archetype": "flow-graph", "variant": "cluster", "weight": 1.5, "transitionOut": "zoom-through" },
+      { "archetype": "layered-stack", "variant": "slabs", "weight": 1.25, "transitionOut": "cut" },
+      { "archetype": "kinetic-text", "variant": "chapter", "weight": 0.75, "transitionOut": "cut" },
+      { "archetype": "metrics-counter-lock", "variant": "grid", "weight": 1.0, "transitionOut": "column-wipe" },
+      { "archetype": "card-carousel", "variant": "fan", "weight": 1.25, "transitionOut": "zoom-through" },
+      { "archetype": "orbit-network", "variant": "orbit", "weight": 1.5, "transitionOut": "cut" },
+      { "archetype": "kinetic-text", "variant": "punch", "weight": 0.75, "transitionOut": "zoom-through" },
+      { "archetype": "lockup-cta", "variant": "center", "weight": 1.5, "transitionOut": "cut" }
+    ],
+    "60": [
+      { "archetype": "cold-open-command", "variant": "terminal", "weight": 1.0, "transitionOut": "zoom-through" },
+      { "archetype": "kinetic-text", "variant": "punch", "weight": 0.75, "transitionOut": "cut" },
+      { "archetype": "kinetic-text", "variant": "chapter", "weight": 0.75, "transitionOut": "cut" },
+      { "archetype": "flow-graph", "variant": "cluster", "weight": 1.5, "transitionOut": "column-wipe" },
+      { "archetype": "layered-stack", "variant": "slabs", "weight": 1.25, "transitionOut": "zoom-through" },
+      { "archetype": "metrics-counter-lock", "variant": "row", "weight": 1.0, "transitionOut": "cut" },
+      { "archetype": "kinetic-text", "variant": "chapter", "weight": 0.75, "transitionOut": "cut" },
+      { "archetype": "card-carousel", "variant": "row", "weight": 1.25, "transitionOut": "column-wipe" },
+      { "archetype": "flow-graph", "variant": "cluster", "weight": 1.25, "transitionOut": "zoom-through" },
+      { "archetype": "orbit-network", "variant": "orbit", "weight": 1.5, "transitionOut": "cut" },
+      { "archetype": "metrics-counter-lock", "variant": "grid", "weight": 1.0, "transitionOut": "column-wipe" },
+      { "archetype": "kinetic-text", "variant": "stack", "weight": 1.0, "transitionOut": "zoom-through" },
+      { "archetype": "card-carousel", "variant": "fan", "weight": 1.25, "transitionOut": "cut" },
+      { "archetype": "lockup-cta", "variant": "center", "weight": 1.75, "transitionOut": "cut" }
+    ]
+  }
+}

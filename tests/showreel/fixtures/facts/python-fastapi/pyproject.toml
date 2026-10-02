@@ -1,0 +1,21 @@
+[build-system]
+requires = ["hatchling"]
+
+[project]
+name = "inventory-api"
+description = "Stock levels you can trust."
+dependencies = [
+  "fastapi>=0.110",
+  "sqlalchemy[asyncio]~=2.0",  # async engine
+  'pydantic',
+  "httpx",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+inventory = "inventory.cli:main"
+
+[tool.ruff]
+name = "not-the-project"

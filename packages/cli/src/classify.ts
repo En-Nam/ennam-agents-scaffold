@@ -24,10 +24,17 @@ const RULES: Rule[] = [
   { match: r => r === '.claude/settings.json',                  kind: 'json-merge' },
   { match: r => r.startsWith('.claude/hooks/'),                 kind: 'write-or-ask' },
   { match: r => r.startsWith('.claude/commands/'),              kind: 'skip-if-exists' },
+  // v1.16 (showreel) — the motion-designer agent and /showreel skill declare the toolkit version they
+  // drive (B4 handshake), so they must upgrade together with .claude/showreel/: pinned write-or-ask
+  // ABOVE the generic agents/ and skills/ skip-if-exists rules (first match wins).
+  { match: r => r === '.claude/agents/motion-designer.md',      kind: 'write-or-ask' },
+  { match: r => r.startsWith('.claude/skills/showreel/'),       kind: 'write-or-ask' },
   { match: r => r.startsWith('.claude/agents/'),                kind: 'skip-if-exists' },
   { match: r => r.startsWith('.claude/workflows/'),             kind: 'skip-if-exists' },
   // v1.15 (automation) — the default /loop prompt is meant to be edited; never clobber it.
   { match: r => r === '.claude/loop.md',                        kind: 'skip-if-exists' },
+  // v1.16 (showreel) — toolkit upgrades together (B4)
+  { match: r => r.startsWith('.claude/showreel/'),              kind: 'write-or-ask' },
   { match: r => r.startsWith('.claude/skills/'),                kind: 'skip-if-exists' },
   { match: r => r.startsWith('.serena/'),                       kind: 'skip-if-exists' },
   { match: r => r.startsWith('docs/superpowers/'),              kind: 'skip-if-exists' },

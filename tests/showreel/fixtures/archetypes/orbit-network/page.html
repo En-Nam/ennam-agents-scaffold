@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>showreel archetype fixture: orbit-network</title>
+<style>html, body { margin: 0; background: black; overflow: hidden; }</style>
+</head>
+<body>
+<!-- Test-local engine page (M2 Tasks 2-5): the shipped engine (/engine/core.mjs createEngine) with the
+     production registry PLUS archetypes/orbit-network.mjs injected, so the archetype is testable before the
+     orchestrator registers it in archetypes/index.mjs. Same window.SHOWREEL surface as engine/page.html (C10). -->
+<script type="module">
+  import { createEngine } from '/engine/core.mjs';
+  import { gpuRenderer } from '/engine/canvas.mjs';
+  import { loadFonts } from '/engine/fonts.mjs';
+  import { manifest } from '/engine/text.mjs';
+  import { ARCHETYPES, TRANSITIONS } from '/archetypes/index.mjs';
+  import orbitNetwork from '/archetypes/orbit-network.mjs';
+
+  const getJson = async (url) => {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`fixture page: ${url} -> HTTP ${res.status}`);
+    return res.json();
+  };
+  const S = { ready: null, renderer: gpuRenderer(), manifest };
+  window.SHOWREEL = S;
+  S.ready = (async () => {
+    const [timeline, resolved] = await Promise.all([getJson('/build/timeline.json'), getJson('/build/resolved.json')]);
+    await loadFonts('/fonts');
+    // test probes (R5 legibility (e)), read-only — the pixels are identical to the bare module:
+    //   S.xf[beatId]    the device transform the beat draws under (engine camera push / drift / shake / roll), so the
+    //                   test maps the core disc to frame pixels exactly instead of guessing a shake slack
+    //   S.pills[beatId] device-px bboxes of every badge PILL drawn in the last draw (api.rr calls with the chip's
+    //                   corner radius 30 and height CHIP_H 82 — both pinned by the static guard), so the test can
+    //                   bound the opaque pill, not just its label, against the hub label lane
+    const probed = { ...orbitNetwork, draw(ctx, lt, p, rb, cues) {
+      const m = ctx.getTransform();
+      S.xf = { ...(S.xf || {}), [p.beatId]: { a: m.a, b: m.b, c: m.c, d: m.d, e: m.e, f: m.f } };
+      const pills = [];
+      S.pills = { ...(S.pills || {}), [p.beatId]: pills };
+      const rr = (c, x, y, w, h, r) => {
+        if (r === 30 && h === 82) {
+          const t = c.getTransform();
+          const pts = [[x, y], [x + w, y], [x, y + h], [x + w, y + h]].map(([u, v]) => [t.a * u + t.c * v + t.e, t.b * u + t.d * v + t.f]);
+          const xs = pts.map((q) => q[0]), ys = pts.map((q) => q[1]);
+          pills.push({ x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) });
+        }
+        return p.api.rr(c, x, y, w, h, r);
+      };
+      return orbitNetwork.draw(ctx, lt, { ...p, api: { ...p.api, rr } }, rb, cues);
+    } };
+    const eng = createEngine({ timeline, resolved, archetypes: { ...ARCHETYPES, [orbitNetwork.id]: probed }, transitions: TRANSITIONS });
+    S.renderAt = eng.renderAt;
+    S.fit = eng.fit;
+    return true;
+  })();
+</script>
+</body>
+</html>

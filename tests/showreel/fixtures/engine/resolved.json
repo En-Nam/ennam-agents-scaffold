@@ -1,0 +1,272 @@
+{
+  "allowed": [
+    "12",
+    "42",
+    "7",
+    "Acme Shop",
+    "Built for speed.",
+    "By the numbers",
+    "Carts abandoned at checkout",
+    "Checkout in one tap",
+    "Get started",
+    "Live order tracking",
+    "Next.js 16",
+    "One command.",
+    "Shop smarter, not harder",
+    "components",
+    "npm run dev",
+    "routes",
+    "tests"
+  ],
+  "beats": {
+    "b1": {
+      "archetype": "cold-open-command",
+      "slots": {
+        "caption": {
+          "fitSizePx": null,
+          "items": [
+            {
+              "id": "p.open.2",
+              "number": null,
+              "text": "One command.",
+              "unit": null
+            }
+          ],
+          "source": "phrase"
+        },
+        "command": {
+          "fitSizePx": null,
+          "items": [
+            {
+              "id": "f.command.1",
+              "number": null,
+              "text": "npm run dev",
+              "unit": null
+            }
+          ],
+          "source": "fact"
+        }
+      },
+      "variant": "terminal"
+    },
+    "b2": {
+      "archetype": "kinetic-text",
+      "slots": {
+        "lead": {
+          "fitSizePx": null,
+          "items": [
+            {
+              "id": "p.lead.1",
+              "number": null,
+              "text": "Built for speed.",
+              "unit": null
+            }
+          ],
+          "source": "phrase"
+        },
+        "lines": {
+          "fitSizePx": null,
+          "items": [
+            {
+              "id": "f.feature.1",
+              "number": null,
+              "text": "Checkout in one tap",
+              "unit": null
+            },
+            {
+              "id": "f.feature.2",
+              "number": null,
+              "text": "Live order tracking",
+              "unit": null
+            }
+          ],
+          "source": "fact"
+        }
+      },
+      "variant": "stack"
+    },
+    "b3": {
+      "archetype": "metrics-counter-lock",
+      "slots": {
+        "counters": {
+          "fitSizePx": null,
+          "items": [
+            {
+              "id": "f.count.1",
+              "number": 42,
+              "text": "42",
+              "unit": "routes"
+            },
+            {
+              "id": "f.count.2",
+              "number": 12,
+              "text": "12",
+              "unit": "components"
+            }
+          ],
+          "source": "fact"
+        },
+        "label": {
+          "fitSizePx": null,
+          "items": [
+            {
+              "id": "p.metrics.1",
+              "number": null,
+              "text": "By the numbers",
+              "unit": null
+            }
+          ],
+          "source": "phrase"
+        }
+      },
+      "variant": "row"
+    },
+    "b4": {
+      "archetype": "kinetic-text",
+      "slots": {
+        "lead": {
+          "fitSizePx": null,
+          "items": [],
+          "source": "phrase"
+        },
+        "lines": {
+          "fitSizePx": null,
+          "items": [
+            {
+              "id": "f.app.tagline.1",
+              "number": null,
+              "text": "Shop smarter, not harder",
+              "unit": null
+            }
+          ],
+          "source": "fact"
+        }
+      },
+      "variant": "punch"
+    },
+    "b5": {
+      "archetype": "metrics-counter-lock",
+      "slots": {
+        "counters": {
+          "fitSizePx": null,
+          "items": [
+            {
+              "id": "f.count.3",
+              "number": 7,
+              "text": "7",
+              "unit": "tests"
+            }
+          ],
+          "source": "fact"
+        },
+        "label": {
+          "fitSizePx": null,
+          "items": [],
+          "source": "phrase"
+        }
+      },
+      "variant": "grid"
+    },
+    "b6": {
+      "archetype": "kinetic-text",
+      "slots": {
+        "lead": {
+          "fitSizePx": null,
+          "items": [],
+          "source": "phrase"
+        },
+        "lines": {
+          "fitSizePx": null,
+          "items": [
+            {
+              "id": "f.stack.item.1",
+              "number": null,
+              "text": "Next.js 16",
+              "unit": null
+            }
+          ],
+          "source": "fact"
+        }
+      },
+      "variant": "stack"
+    },
+    "b7": {
+      "archetype": "kinetic-text",
+      "slots": {
+        "lead": {
+          "fitSizePx": null,
+          "items": [],
+          "source": "phrase"
+        },
+        "lines": {
+          "fitSizePx": null,
+          "items": [
+            {
+              "id": "f.problem.1",
+              "number": null,
+              "text": "Carts abandoned at checkout",
+              "unit": null
+            }
+          ],
+          "source": "fact"
+        }
+      },
+      "variant": "punch"
+    },
+    "b8": {
+      "archetype": "lockup-cta",
+      "slots": {
+        "command": {
+          "fitSizePx": null,
+          "items": [
+            {
+              "id": "f.command.1",
+              "number": null,
+              "text": "npm run dev",
+              "unit": null
+            }
+          ],
+          "source": "fact"
+        },
+        "cta": {
+          "fitSizePx": null,
+          "items": [
+            {
+              "id": "p.cta.1",
+              "number": null,
+              "text": "Get started",
+              "unit": null
+            }
+          ],
+          "source": "phrase"
+        },
+        "name": {
+          "fitSizePx": null,
+          "items": [
+            {
+              "id": "f.app.name.1",
+              "number": null,
+              "text": "Acme Shop",
+              "unit": null
+            }
+          ],
+          "source": "fact"
+        },
+        "tagline": {
+          "fitSizePx": null,
+          "items": [
+            {
+              "id": "f.app.tagline.1",
+              "number": null,
+              "text": "Shop smarter, not harder",
+              "unit": null
+            }
+          ],
+          "source": "fact"
+        }
+      },
+      "variant": "center"
+    }
+  },
+  "version": 1
+}

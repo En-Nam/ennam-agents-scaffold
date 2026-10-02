@@ -1,0 +1,70 @@
+// showreel toolkit CLI — `node .claude/showreel/cli.mjs <command> [--root <dir>] [args…]`.
+// Prints exactly one compact JSON line: {"ok":true,"cmd":…} or {"ok":false,"cmd":…,"error":{code,message,fix}}.
+//
+// This file must PARSE on Node 18+ so an old Node gets an actionable message instead of a
+// SyntaxError: ES2018 syntax only at the top level, and the Node floor check runs before
+// any dynamic import of the toolkit modules.
+import { pathToFileURL } from 'node:url';
+import { resolve } from 'node:path';
+import { ok, fail, ShowreelError } from './lib/util/out.mjs';
+import { VERSION, NODE_FLOOR, nodeTooOld } from './lib/util/version.mjs';
+
+export { VERSION };
+
+// Command → loader of a module exporting `run(args, hostRoot) → Promise<exitCode>`.
+const COMMANDS = {
+  preflight: () => import('./lib/preflight/cmd.mjs'),
+  facts: () => import('./lib/facts/cmd.mjs'),
+  check: () => import('./lib/check/cmd.mjs'),
+  render: () => import('./lib/render/cmd.mjs'),
+  verify: () => import('./lib/verify/cmd.mjs'),
+};
+
+function parseArgs(argv) {
+  const rest = [];
+  let root = process.cwd();
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--root') {
+      if (i + 1 >= argv.length) throw new ShowreelError('E_USAGE', '--root needs a directory.', 'Use: --root <dir>');
+      root = argv[++i];
+    } else if (a.indexOf('--root=') === 0) {
+      root = a.slice('--root='.length);
+    } else {
+      rest.push(a);
+    }
+  }
+  return { root: resolve(root), rest: rest };
+}
+
+export async function main(argv) {
+  const cmd = argv[0] || '';
+  if (nodeTooOld(process.versions.node)) {
+    return fail(
+      'preflight',
+      'E_NODE',
+      'Node ' + process.versions.node + ' is too old for the showreel toolkit (needs >= ' + NODE_FLOOR.join('.') + ').',
+      'Install Node ' + NODE_FLOOR.join('.') + '+ (e.g. nvm install ' + NODE_FLOOR[0] + ') and re-run: node .claude/showreel/cli.mjs preflight',
+    );
+  }
+  const usage = 'Use: node .claude/showreel/cli.mjs <' + Object.keys(COMMANDS).concat('version').join('|') + '> [--root <dir>]';
+  if (cmd === 'version') return ok('version', { version: VERSION });
+  if (!Object.prototype.hasOwnProperty.call(COMMANDS, cmd)) {
+    return fail(cmd || 'cli', 'E_USAGE', cmd ? 'Unknown command "' + cmd + '".' : 'No command given.', usage);
+  }
+  try {
+    const args = parseArgs(argv.slice(1));
+    const mod = await COMMANDS[cmd]();
+    return await mod.run(args.rest, args.root);
+  } catch (err) {
+    if (err instanceof ShowreelError) return fail(cmd, err.code, err.message, err.fix);
+    return fail(cmd, 'E_INTERNAL', String((err && err.stack) || err), 'This is a toolkit bug — report it with the command you ran.');
+  }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main(process.argv.slice(2)).then(
+    (code) => { process.exitCode = code; },
+    (err) => { process.exitCode = fail('cli', 'E_INTERNAL', String((err && err.stack) || err), 'This is a toolkit bug — report it with the command you ran.'); },
+  );
+}

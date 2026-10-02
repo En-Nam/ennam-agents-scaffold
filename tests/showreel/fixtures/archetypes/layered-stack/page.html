@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>showreel archetype fixture: layered-stack</title>
+<style>
+  html, body { margin: 0; background: #000; height: 100%; overflow: hidden; }
+  #stage { width: 100vw; height: 100vh; object-fit: contain; display: block; }
+</style>
+</head>
+<body>
+<!-- Test-local registry injection (M2 plan Tasks 2-5): the same boot as engine/core.mjs boot(), but the
+     archetype under test is added to the shipped registry here, so the test does not need archetypes/index.mjs.
+     Served from /build/ (the test copies this file into its temp build dir). -->
+<script type="module">
+  import { createEngine } from '/engine/core.mjs';
+  import { gpuRenderer } from '/engine/canvas.mjs';
+  import { manifest } from '/engine/text.mjs';
+  import { loadFonts, glyphGaps } from '/engine/fonts.mjs';
+  import { ARCHETYPES, TRANSITIONS } from '/archetypes/index.mjs';
+  import layeredStack from '/archetypes/layered-stack.mjs';
+
+  const notReady = () => { throw new Error('SHOWREEL not ready: await SHOWREEL.ready first'); };
+  const S = { ready: null, renderer: gpuRenderer(), renderAt: notReady, manifest, fit: notReady, glyphGaps: notReady };
+  window.SHOWREEL = S;
+  S.ready = (async () => {
+    const get = async (u) => { const r = await fetch(u); if (!r.ok) throw new Error(`${u} -> HTTP ${r.status}`); return r.json(); };
+    const [timeline, resolved] = await Promise.all([get('/build/timeline.json'), get('/build/resolved.json')]);
+    await loadFonts('/fonts');
+    S.glyphGaps = () => glyphGaps(resolved);
+    const eng = createEngine({ timeline, resolved, archetypes: { ...ARCHETYPES, [layeredStack.id]: layeredStack }, transitions: TRANSITIONS });
+    S.renderAt = eng.renderAt;
+    S.fit = eng.fit;
+    return true;
+  })();
+</script>
+</body>
+</html>

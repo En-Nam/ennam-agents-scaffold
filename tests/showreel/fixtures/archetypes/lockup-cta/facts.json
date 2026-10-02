@@ -1,0 +1,14 @@
+{
+  "facts": [
+    { "id": "f.app.name.1", "kind": "app.name", "value": "Warehouse Mobile Web Manager App", "display": "Warehouse Mobile Web Manager App", "unit": null },
+    { "id": "f.app.tagline.1", "kind": "app.tagline", "value": "Mapping workflows and webhooks, made for every Windows machine", "display": "Mapping workflows and webhooks, made for every Windows machine", "unit": null },
+    { "id": "f.app.tagline.2", "kind": "app.tagline", "value": "Movement workflows and webhooks mapped for each Windows machine", "display": "Movement workflows and webhooks mapped for each Windows machine", "unit": null },
+    { "id": "f.app.tagline.3", "kind": "app.tagline", "value": "Warehouse workflows and webhooks mapped for each Windows machine", "display": "Warehouse workflows and webhooks mapped for each Windows machine", "unit": null },
+    { "id": "f.app.tagline.4", "kind": "app.tagline", "value": "Acme Shop is a storefront for tiny teams.", "display": "Acme Shop is a storefront for tiny teams.", "unit": null },
+    { "id": "f.command.1", "kind": "command", "value": "npm run dev", "display": "npm run dev", "unit": null },
+    { "id": "f.command.2", "kind": "command", "value": "npm run migrate:warehouse -- --workflow=multiwarehouse --webhook", "display": "npm run migrate:warehouse -- --workflow=multiwarehouse --webhook", "unit": null },
+    { "id": "f.feature.1", "kind": "feature", "value": "Realtime order sync", "display": "Realtime order sync", "unit": null },
+    { "id": "f.app.name.2", "kind": "app.name", "value": "acme-shop", "display": "acme-shop", "unit": null },
+    { "id": "f.command.3", "kind": "command", "value": "npm run build", "display": "npm run build", "unit": null }
+  ]
+}

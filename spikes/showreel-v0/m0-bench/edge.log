@@ -1,0 +1,3 @@
+pipe FAIL Protocol error (Target.setDiscoverTargets): Target closed
+udd FAIL The browser is already running for C:\Users\ADMIN\AppData\Local\Temp\claude\d--Projects-EnNam-ennam-agents-scaffold\11ddcdf9-94ea-4ad5-92c6-e5ad2e4f3d8e\scratchpad\m0/edgeprof2. Use a different `userDataDir` or stop the running browser first.
+oldHeadless FAIL Failed to launch the browser process:  Code: 0

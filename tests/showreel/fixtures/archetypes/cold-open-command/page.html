@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>showreel engine - cold-open-command fixture page</title>
+<style>
+  html, body { margin: 0; background: #000; height: 100%; overflow: hidden; }
+  #stage { width: 100vw; height: 100vh; object-fit: contain; display: block; }
+</style>
+</head>
+<body>
+<!-- Test twin of engine/page.html: the SAME engine (createEngine + the shipped fonts) with cold-open-command wrapped
+     by one R5 probe. S.noBokeh = true draws the SAME frame without the bokeh discs (layout otherwise untouched), so
+     the pixel diff is exactly what the bokeh draws. The AC3 runs use the shipped engine/page.html, not this twin. -->
+<script type="module">
+  import { createEngine } from '/engine/core.mjs';
+  import { loadFonts } from '/engine/fonts.mjs';
+  import { manifest } from '/engine/text.mjs';
+  import { gpuRenderer } from '/engine/canvas.mjs';
+  import { ARCHETYPES, TRANSITIONS } from '/archetypes/index.mjs';
+  import coldOpen from '/archetypes/cold-open-command.mjs';
+
+  const S = { ready: null, renderer: gpuRenderer(), manifest };
+  window.SHOWREEL = S;
+  S.ready = (async () => {
+    const get = async (u) => { const r = await fetch(u); if (!r.ok) throw new Error(`${u} -> HTTP ${r.status}`); return r.json(); };
+    const [timeline, resolved] = await Promise.all([get('/build/timeline.json'), get('/build/resolved.json')]);
+    await loadFonts('/fonts');
+    S.noBokeh = false;
+    const probed = { ...coldOpen, draw(ctx, lt, p, rb, cues) {
+      if (!S.noBokeh) return coldOpen.draw(ctx, lt, p, rb, cues);
+      if (!Array.isArray(p.layout.bokeh) || !p.layout.bokeh.length) throw new Error('probe: layout.bokeh is not a non-empty array (the probe would be vacuous)');
+      return coldOpen.draw(ctx, lt, { ...p, layout: { ...p.layout, bokeh: [] } }, rb, cues);
+    } };
+    const eng = createEngine({ timeline, resolved, archetypes: { ...ARCHETYPES, [coldOpen.id]: probed }, transitions: TRANSITIONS });
+    S.renderAt = eng.renderAt;
+    S.fit = eng.fit;
+    return true;
+  })();
+</script>
+</body>
+</html>

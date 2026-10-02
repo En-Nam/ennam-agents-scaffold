@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "showreel/resolved.schema.json",
+  "title": "showreel resolved text (C7) - text comes ONLY from fact.display / phrase.text",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "beats", "allowed"],
+  "properties": {
+    "version": { "const": 1 },
+    "beats": {
+      "type": "object",
+      "propertyNames": { "pattern": "^b[0-9]{1,2}$" },
+      "additionalProperties": { "$ref": "#/$defs/beat" }
+    },
+    "allowed": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "beat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["archetype", "variant", "slots"],
+      "properties": {
+        "archetype": { "enum": ["cold-open-command", "kinetic-text", "metrics-counter-lock", "lockup-cta"] },
+        "variant": { "enum": ["terminal", "stack", "punch", "row", "grid", "center"] },
+        "slots": {
+          "type": "object",
+          "propertyNames": { "pattern": "^[a-z][a-zA-Z0-9]*$" },
+          "additionalProperties": { "$ref": "#/$defs/slot" }
+        }
+      }
+    },
+    "slot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "items", "fitSizePx"],
+      "properties": {
+        "source": { "enum": ["fact", "phrase"] },
+        "items": { "type": "array", "items": { "$ref": "#/$defs/item" } },
+        "fitSizePx": { "type": ["number", "null"], "minimum": 0 }
+      }
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "text", "number", "unit"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^(f\\.[a-z.]+|p\\.[a-z]+)\\.\\d+$" },
+        "text": { "type": "string" },
+        "number": { "type": ["integer", "null"] },
+        "unit": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

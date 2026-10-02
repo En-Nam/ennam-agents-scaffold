@@ -1,0 +1,15 @@
+{
+  "facts": [
+    { "id": "f.app.name.1", "kind": "app.name", "value": "Northwind Commerce Suite", "display": "Northwind Commerce Suite", "unit": null },
+    { "id": "f.app.tagline.1", "kind": "app.tagline", "value": "Ship every order on time", "display": "Ship every order on time", "unit": null },
+    { "id": "f.command.1", "kind": "command", "value": "npm run dev", "display": "npm run dev", "unit": null },
+    { "id": "f.stack.item.1", "kind": "stack.item", "value": "Next.js App Router", "display": "Next.js App Router", "unit": null },
+    { "id": "f.feature.1", "kind": "feature", "value": "Realtime order sync", "display": "Realtime order sync", "unit": null },
+    { "id": "f.route.1", "kind": "route", "value": "/dashboard/settings", "display": "/dashboard/settings", "unit": null },
+    { "id": "f.stack.item.2", "kind": "stack.item", "value": "PostgreSQL + Prisma", "display": "PostgreSQL + Prisma", "unit": null },
+    { "id": "f.feature.2", "kind": "feature", "value": "Stripe subscriptions", "display": "Stripe subscriptions", "unit": null },
+    { "id": "f.route.2", "kind": "route", "value": "/api/webhooks/stripe", "display": "/api/webhooks/stripe", "unit": null },
+    { "id": "f.stack.item.3", "kind": "stack.item", "value": "TanStack Query cache", "display": "TanStack Query cache", "unit": null },
+    { "id": "f.feature.3", "kind": "feature", "value": "Multi-tenant billing", "display": "Multi-tenant billing", "unit": null }
+  ]
+}
