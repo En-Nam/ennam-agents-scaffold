@@ -101,15 +101,29 @@ function renderChoir(ctx, A) {
   });
 }
 
+// The throb leaves room for every hit it is given: a pulse landing from THROB_REST_PRE before a hit to
+// THROB_REST_POST after it plays as a ghost note (THROB_REST_GAIN). Its 46 Hz body rings
+// ~0.15 s, so a pulse up to one 8th ahead of a hit filled the onset detector's 80 ms
+// pre-window and masked low-amp snaps/pops in long, hit-dense peaks (AC4: the climax-anchored
+// 8ths are off the hits' grid, so this cannot be fixed by alignment).
+// "Every hit" = all kinds except boom/slam (see renderBed). Ignite is included on purpose: unlike
+// boom/slam it has no pre-hit vacuum in mix.mjs (its duck starts on the hit), so a pulse just
+// ahead of it fills its onset pre-window exactly as it does for a light hit.
+const THROB_REST_PRE = 0.3, THROB_REST_POST = 0.05, THROB_REST_GAIN = 0.15;
+
 // Sub throb on 8ths through the peak, growing; anchored so the last pulse lands one 8th before the climax.
-function renderThrob(ctx, A) {
+// hits = timeline.hits; boom/slam keep the full build into them (they carry their own pre-hit vacuum in
+// mix.mjs), every other hit — ignite included — gets throb rests. Exported for the score tests.
+export function renderThrob(ctx, A, hits) {
   const C = A.climax, b8 = ctx.beat16 * 2, span = C - A.peakT0;
   if (span <= 0) return;
+  const hitTs = hits.filter((h) => h.kind !== 'boom' && h.kind !== 'slam').map((h) => h.t);
   for (let k = Math.floor(span / b8); k >= 1; k--) {
     const at = C - k * b8;
     const u = clamp01((at - A.peakT0) / span);
     const accent = (k % 2 === 0) ? 1 : 0.72;
-    const g = (0.2 + 1.3 * Math.pow(u, 1.5)) * accent;
+    const rest = hitTs.some((t) => at > t - THROB_REST_PRE && at < t + THROB_REST_POST) ? THROB_REST_GAIN : 1;
+    const g = (0.2 + 1.3 * Math.pow(u, 1.5)) * accent * rest;
     const o = mono(0.3); let ph = 0;
     for (let i = 0; i < o.length; i++) {
       const x = i / SR, f = F.Fs1 * (1 + 0.5 * Math.exp(-x / 0.02));
@@ -121,11 +135,26 @@ function renderThrob(ctx, A) {
   }
 }
 
+// Long peaks get thinner arps: the 16ths stretch scales with the peak, and its very wet sends
+// pile up in the reverb into a high-band wash that masked light pops near the climax (AC4).
+// Peaks up to ARP_THIN_FROM seconds (the 15 s film's) are untouched; from
+// ARP_THIN_FROM + ARP_THIN_OVER on, arps play at ARP_LONG_GAIN with ARP_LONG_SEND of their send.
+const ARP_THIN_FROM = 4, ARP_THIN_OVER = 4, ARP_LONG_GAIN = 0.8, ARP_LONG_SEND = 0.5;
+
+/** arpThin(peakSpanS) → {gk, sk}: arp dry-gain and send multipliers (1, 1 up to ARP_THIN_FROM; eased to the long-peak values). */
+export function arpThin(span) {
+  const thin = smooth((span - ARP_THIN_FROM) / ARP_THIN_OVER);
+  return { gk: 1 - (1 - ARP_LONG_GAIN) * thin, sk: 1 - (1 - ARP_LONG_SEND) * thin };
+}
+
 // Shimmering high arps over the second half of the peak: 8ths first, 16ths for the last
 // stretch, one step higher in the final third. (Spike ratios of its 8.9→12.2 peak window.)
-function renderArps(ctx, A) {
+// `thin` defaults to the peak's own arpThin; the score tests pass {gk: 1, sk: 1} as the unthinned reference.
+export function renderArps(ctx, A, thin = arpThin(A.climax - A.peakT0)) {
   const C = A.climax, span = C - A.peakT0, g16 = ctx.beat16;
   if (span <= 0) return;
+  const { gk, sk } = thin;
+  const arp = (at, buf, o) => add(ctx.bed, at, buf, { ...o, g: o.g * gk, s: o.s * sk });
   const arpT0 = A.peakT0 + 0.45 * span, sixteenthsT = A.peakT0 + 0.6 * span, liftT = A.peakT0 + 0.7 * span;
   const scale = [F.Fs5, F.A5, F.Cs6, F.E6, F.Fs6, F.A6, F.Cs7];
   const pat = [0, 2, 4, 2, 3, 4, 5, 4, 0, 2, 4, 6, 5, 4, 2, 3];
@@ -140,11 +169,11 @@ function renderArps(ctx, A) {
     const idx = Math.min(6, pat[n % pat.length] + (at > liftT ? 1 : 0));
     const f = scale[idx], pan = Math.sin(at * 2.2) * 0.75;
     const g = 0.14 + 0.5 * Math.pow(u, 1.2);
-    add(ctx.bed, at, pluck(f, GLASS, 0.16, 0.9), { g, pan, s: 0.45 + 0.2 * u });
-    if (u > 0.4) add(ctx.bed, at, pluck(f * 2, [[1, 1, 1]], 0.07, 0.4), { g: g * 0.25, pan: -pan, s: 0.5 });
+    arp(at, pluck(f, GLASS, 0.16, 0.9), { g, pan, s: 0.45 + 0.2 * u });
+    if (u > 0.4) arp(at, pluck(f * 2, [[1, 1, 1]], 0.07, 0.4), { g: g * 0.25, pan: -pan, s: 0.5 });
     // dotted-8th ping-pong echoes
-    add(ctx.bed, at + g16 * 3, pluck(f, GLASS, 0.16, 0.9), { g: g * 0.35, pan: -pan, s: 0.4 });
-    add(ctx.bed, at + g16 * 6, pluck(f, GLASS, 0.16, 0.9), { g: g * 0.15, pan: pan * 0.5, s: 0.4 });
+    arp(at + g16 * 3, pluck(f, GLASS, 0.16, 0.9), { g: g * 0.35, pan: -pan, s: 0.4 });
+    arp(at + g16 * 6, pluck(f, GLASS, 0.16, 0.9), { g: g * 0.15, pan: pan * 0.5, s: 0.4 });
   });
 }
 
@@ -181,7 +210,7 @@ export function renderBed(ctx, timeline) {
   const cv = curves(ctx.bed.L.length, A);
   renderDrone(ctx, cv, A);
   renderChoir(ctx, A);
-  renderThrob(ctx, A);
+  renderThrob(ctx, A, timeline.hits); // rests for every hit except boom/slam (see renderThrob)
   renderArps(ctx, A);
   renderEndCard(ctx, A);
   return A;

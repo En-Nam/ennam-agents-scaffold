@@ -19,6 +19,7 @@ export default {
   layout(rb, variant, api) {
     const cmd = rb.slots.command.items[0];
     const cap = rb.slots.caption?.items[0] ?? null;
+    api.cue('enter'); // the compiler always emits it (default cue): a missing one fails the boot
     const fs = api.fitSlot('command', { maxW: PW - CMD_X - X0 - 40, maxPx: FS_MAX, weight: 500 });
     const capPx = cap ? api.fitSlot('caption', { maxW: PW - 2 * X0 - 60, maxPx: CAP_MAX, weight: 500 }) : 0;
     const m = api.makeCanvas('cache', 8, 8).ctx;
@@ -57,8 +58,8 @@ export default {
     const { api, layout: L, typing } = p;
     const { W, H, clamp, lerp, ease, prog, rng, hash, rr, rgba, mix, palette: P } = api;
     const N = L.glyphs.length;
-    // schedule (local seconds): typing from timeline.typing, ENTER from the cue (fallbacks from dur)
-    const E = cues.enter ?? typing?.enterAt ?? p.dur * 0.72;
+    // schedule (local seconds): typing from timeline.typing, ENTER from the compiled cue (api.cue throws if missing)
+    const E = api.cue('enter');
     const TS = typing ? typing.t0 : p.dur * 0.13;
     const IV = typing ? typing.interval : Math.max(0.02, (E - TS - api.grid * 3) / Math.max(1, N));
     const I = clamp(TS / 0.6, 0.5, 1.5);             // intro choreography scales with the typing lead-in

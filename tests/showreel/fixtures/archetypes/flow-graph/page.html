@@ -9,9 +9,10 @@
 </style>
 </head>
 <body>
-<!-- Test-local registry injection (M2 Tasks 2-5): the shipped page boots with archetypes/index.mjs only;
-     flow-graph is registered there by the orchestrator after the fan-out. This page builds the SAME engine
-     (createEngine + the shipped fonts) with flow-graph added, so the archetype is tested before then. -->
+<!-- Test twin of engine/page.html (M2 Tasks 2-5). flow-graph IS registered in archetypes/index.mjs now (Task 7);
+     this page still builds the SAME engine (createEngine + the shipped fonts) because it wraps flow-graph with
+     the R5 test probes below (layouts(), hideBranches, hideLastNode). The N-matrix / AC3 / e2e runs render
+     flow-graph through the shipped engine/page.html, which is what catches a divergence of this twin. -->
 <script type="module">
   import { createEngine } from '/engine/core.mjs';
   import { loadFonts } from '/engine/fonts.mjs';
@@ -26,7 +27,29 @@
     const get = async (u) => { const r = await fetch(u); if (!r.ok) throw new Error(`${u} -> HTTP ${r.status}`); return r.json(); };
     const [timeline, resolved] = await Promise.all([get('/build/timeline.json'), get('/build/resolved.json')]);
     await loadFonts('/fonts');
-    const eng = createEngine({ timeline, resolved, archetypes: { ...ARCHETYPES, [flowGraph.id]: flowGraph }, transitions: TRANSITIONS });
+    // test probe (R5 scale): record each flow beat's layout geometry (plain numbers) as the engine builds it.
+    // createEngine runs layout() ONCE per beat at boot (C9), so geo is complete and final before ready resolves;
+    // the test also pins geo[id].px === fit()[id].steps, which would catch a stale or lazily re-run layout.
+    const geo = {};
+    S.layouts = () => geo;
+    // test probe (R5 boxless branches): S.hideBranches = true draws the SAME frame without the branch stubs
+    // (layout untouched, so lanes / fan edges / nodes are identical) — the pixel diff is exactly what branches draw
+    S.hideBranches = false;
+    // test probe (R5 chain ghost slots): S.hideLastNode = true draws the SAME frame without the last path node and
+    // the edge into it — before that node pops, the pixel diff is exactly what its ghost slot (+ ghost edge) draws
+    S.hideLastNode = false;
+    const probed = { ...flowGraph, layout(rb, variant, api) {
+      const L = flowGraph.layout(rb, variant, api);
+      const box = (d) => ({ x: d.x, y: d.y, w: d.w, h: d.h });
+      geo[api.beatId] = { px: L.px, nodes: L.nodes.map(box), decoys: L.decoys.map(box) };
+      return L;
+    }, draw(ctx, lt, p, rb, cues) {
+      let L = p.layout;
+      if (S.hideBranches) L = { ...L, decoys: [] };
+      if (S.hideLastNode) L = { ...L, nodes: L.nodes.slice(0, -1), pathEdges: L.pathEdges.slice(0, -1) };
+      return flowGraph.draw(ctx, lt, L === p.layout ? p : { ...p, layout: L }, rb, cues);
+    } };
+    const eng = createEngine({ timeline, resolved, archetypes: { ...ARCHETYPES, [flowGraph.id]: probed }, transitions: TRANSITIONS });
     S.renderAt = eng.renderAt;
     S.fit = eng.fit;
     return true;

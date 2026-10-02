@@ -1,22 +1,36 @@
 // flow-graph (C9 / C13) — port of spike s2 PART B, the install flow graph. Lanes of options fan out, one
 // chosen path lights node by node on the cue map `step.<i>` (C14), packets ride the edges, then the whole
-// graph IMPLODES into a single point on cue `converge` (iris + core flare + rays + shock rings).
+// graph IMPLODES into a single point on cue `converge` (iris + core flare + rays + shock rings). Cue times come
+// only from api.cue (a missing cue fails at boot, never a re-derived schedule).
 //   converge — lanes with skeleton option pills (the paths not taken) + the lit path, imploding at the end
 //   chain    — the same path as a clean pipeline (ghost nodes fill in on their cue), no fan; on `converge`
 //              a light runs the whole chain and it LOCKS with a check instead of imploding
 // Layout: 3 steps → one row; 4..6 → two rows read as a snake (row 2 runs right → left), so 6 near-maxChars
 // labels still fit the safe area at or above the family minimum (fitSlot fails `check` otherwise).
+// Scale (R5): labels take the LARGEST px the column width allows (up to STEP_MAX_PX) and the columns spread
+// over the whole graph band (GX0..GX1), so short labels read big and the graph always spans most of the frame.
+// The paths not taken are drawn as secondary branch stubs (a dim port dot + a fading line, no box, no text),
+// so nothing reads as a missing label; they fan over the branch band (BAND_Y0..BAND_Y1) so the graph fills the
+// frame height too. Chain ghost slots (future nodes) are port dots only, for the same reason.
+// Accepted vignette floor: the engine vignette still dims the outermost lit label a little (worst measured glyph
+// ratio vs the centre label ≈ 0.86, pinned ≥ 0.84 in the R5 rendered test); lifting it further needs engine changes.
 // Slots: steps (3–6 facts; route/command render mono) · lead (flow phrase, optional, screen-fixed header).
-// Colours come only from params.palette (no literals); sprites are build-once 'cache' canvases (M0 root
-// cause); draw() is a pure function of localT and the cues (D9/D10).
+// Colours come only from params.palette (no literals); the soft-light dots are per-dot radial gradients, not a
+// reused sprite (see SPR); draw() is a pure function of localT and the cues (D9/D10).
 
-const TEXT_L = 140, TEXT_R = 1780;        // text kept clear of the 48 px safe margin under camera push + shake
-const TEXT_MAX_W = 620, STEP_MAX_PX = 30, STEP_W = 700, STEP_TRACK = 0.4;
-const PADX = 24, GAP_MIN = 48, GAP_MAX = 210;   // 3 columns of 28 mono chars still fit at 28 px (display minimum)
-const ROW_Y1 = 590, ROW_Y2 = [430, 730];  // node centre rows: one row / two-row snake
-const PITCH = 66;                         // option pitch inside a lane
+// text band = api.safeRect (x0 ≈ 139.5, x1 ≈ 1780.5): clear of the 48 px safe margin under the worst camera
+const TEXT_MAX_W = 620, STEP_MAX_PX = 48, STEP_W = 700, STEP_TRACK = 0.4;
+const PAD_K = 0.7, PAD_MIN = 20;          // pill side padding = PAD_K·px, at least PAD_MIN
+const GAP_MIN = 48, GAP_MAX = 400;      // 3 columns of 28 mono chars still fit at 28 px (display minimum)
+// pill band (one row / snake: room on the right for the turn edge). Kept inside x ≈ 290..1630 (still ≥ 65% of the
+// frame): the engine vignette (0 inside r = 0.35·H, 0.62 at r = H) takes ~20% off a white label ~660 px off-axis
+const GX0 = 290, GX1 = [1630, 1590];
+const ROW_Y1 = 600, ROW_Y2 = [420, 770];  // node centre rows: one row / two-row snake
 const LANE_PAD = 18;
 const LEAD_Y = 170, LEAD_MAX_PX = 40;
+// branch band (converge): the option branches fan out to fill ~60–65% of the frame height like spike A's option
+// lists. Lane glass stays below the lead header's rule (LEAD_Y + 29) and above BAND_Y1; pitch capped at PITCH_MAX
+const BAND_Y0 = [140, LEAD_Y + 50], BAND_Y1 = 980, PITCH_MAX = 110;
 const SAMP = 20;                          // samples per edge curve
 const LOCK_O_MAX = 90;                    // chain lock ring: final growth off the last pill's edge
 
@@ -53,23 +67,32 @@ export default {
     const lead = rb.slots.lead?.items[0] ?? null;
     const N = items.length;
     const chain = variant === 'chain';
+    // the compiler emits step.<i> per step + converge (C14): a missing one fails the boot, never a made-up time
+    for (const name of [...items.map((_, i) => `step.${i}`), 'converge']) api.cue(name);
     const rows = N <= 3 ? 1 : 2;
     const cols = rows === 1 ? N : Math.ceil(N / 2);
-    const span = TEXT_R - TEXT_L;
-    const twMax = Math.min(TEXT_MAX_W, Math.floor((span - (cols - 1) * (2 * PADX + GAP_MIN)) / cols));
+    const TEXT_L = Math.ceil(api.safeRect.x0), TEXT_R = Math.floor(api.safeRect.x1);
+    const span = TEXT_R - TEXT_L, gx1 = GX1[rows - 1];
+    const twMax = Math.min(TEXT_MAX_W, Math.floor((span - (cols - 1) * (2 * PAD_MIN + GAP_MIN)) / cols));
     const px = api.fitSlot('steps', { maxW: twMax, maxPx: STEP_MAX_PX, weight: STEP_W, track: STEP_TRACK });
     const leadPx = lead ? api.fitSlot('lead', { maxW: 1300, maxPx: LEAD_MAX_PX, weight: 700, track: 4 }) : 0;
     const m = api.makeCanvas('cache', 8, 8).ctx;
-    const PH = Math.round(px * 2.1);
 
     // snake placement: row 0 left → right, row 1 right → left (short turn edge on the right)
     const place = (i) => (i < cols ? { row: 0, col: i } : { row: 1, col: cols - 1 - (i - cols) });
     const tws = items.map((it) => Math.min(twMax, api.measure(m, it, { size: px, weight: STEP_W, track: STEP_TRACK }).width));
     const colTw = Array.from({ length: cols }, () => 0);
     items.forEach((_, i) => { const c = place(i).col; colTw[c] = Math.max(colTw[c], tws[i]); });
-    const pillSum = colTw.reduce((s, w) => s + w + 2 * PADX, 0);
-    const gap = cols > 1 ? Math.min(GAP_MAX, (span + 2 * PADX - pillSum) / (cols - 1)) : 0;
-    let x = 960 - (pillSum + (cols - 1) * gap) / 2;
+    const twSum = colTw.reduce((s, w) => s + w, 0);
+    // pill padding grows with px but never pushes text past TEXT_L/TEXT_R (the tight extent is span + 2·PAD_MIN)
+    const padRoom = Math.floor((span + 2 * PAD_MIN - twSum - (cols - 1) * GAP_MIN) / (2 * cols));
+    const PADX = Math.max(PAD_MIN, Math.min(Math.round(PAD_K * px), padRoom));
+    const PH = Math.round(px * 2), RAD = Math.round(PH * 0.28);
+    const pillSum = twSum + 2 * PADX * cols;
+    // columns spread over the pill band: the graph spans most of the frame whatever the label lengths
+    const gap = cols > 1 ? Math.max(GAP_MIN, Math.min(GAP_MAX, (gx1 - GX0 - pillSum) / (cols - 1))) : 0;
+    const total = pillSum + (cols - 1) * gap;
+    let x = (total > gx1 - GX0 ? 960 : (GX0 + gx1) / 2) - total / 2;
     const colX = colTw.map((w) => { const cx = x + w / 2 + PADX; x += w + 2 * PADX + gap; return cx; });
     const rowY = rows === 1 ? [ROW_Y1] : ROW_Y2;
     const nodes = items.map((item, i) => {
@@ -83,37 +106,39 @@ export default {
     const dirOf = (i) => (nodes[i].row === 0 ? 1 : -1);
     const pathEdges = nodes.map((n, i) => ({ i, pts: edgeBetween(i === 0 ? origin : nodes[i - 1], n, kindInto(i), dirOf(i)) }));
 
-    // converge: every path step sits in a lane of skeleton options (the paths not taken), fanned from the previous node
+    // converge: every path step sits in a lane of option branches (the paths not taken), fanned from the previous
+    // node. A branch is a port dot on the lane's entry side + a fading stub line: clearly secondary, never a box
+    // (an empty box reads as a missing label) and never text (nothing on screen is invented).
     const rnd = api.rng(api.seed);
     const lanes = [], decoys = [], fan = [];
     if (!chain) {
+      // 3 branches per side fill the room between the node row and the band edge (one row: both sides; a snake row
+      // fans outward only), never closer to the node than its pill edge + a port dot
+      const top = BAND_Y0[lead ? 1 : 0] + LANE_PAD + 10, bot = BAND_Y1 - LANE_PAD - 10;
+      const room = Math.min(rowY[0] - top, bot - rowY[rows - 1]);
+      const pitch = Math.round(Math.max(PH / 2 + 12, Math.min(PITCH_MAX, room / 3)));
       nodes.forEach((n, i) => {
-        // one row has the whole frame height: 3–4 options per lane (both sides) keep it as dense as the spike
-        const k = rows === 1 ? 3 + Math.floor(rnd() * 2) : 1 + Math.floor(rnd() * 2);
-        const offs = rows === 1 ? [-1, 1, -2, 2].slice(0, k) : (n.row === 0 ? [-1, -2] : [1, 2]).slice(0, k);
-        const mine = offs.map((o, r) => {
-          const w = Math.max(110, Math.round(n.w * (0.45 + 0.45 * rnd())));
-          return { lane: i, rank: r, x: n.x, y: n.y + o * PITCH, w, h: Math.round(PH * 0.86), bar: 0.45 + 0.3 * rnd() };
-        });
+        const dir = dirOf(i);
+        const offs = rows === 1 ? [-1, 1, -2, 2, -3, 3] : n.row === 0 ? [-1, -2, -3] : [1, 2, 3];
+        const mine = offs.map((o, r) => ({
+          lane: i, rank: r, far: Math.abs(o), x: n.x - dir * (n.w / 2 - PADX), y: n.y + o * pitch, w: 0, h: 0,
+          dir, len: Math.round((n.w - 2 * PADX) * (0.5 + 0.45 * rnd())),
+        }));
         decoys.push(...mine);
-        const all = [n, ...mine];
-        const lw = Math.max(...all.map((d) => d.w)) + 2 * LANE_PAD;
-        const y0 = Math.min(...all.map((d) => d.y - d.h / 2)) - LANE_PAD, y1 = Math.max(...all.map((d) => d.y + d.h / 2)) + LANE_PAD;
-        lanes.push({ i, x0: n.x - lw / 2, x1: n.x + lw / 2, y0, y1 });
-        mine.forEach((d) => fan.push({ lane: i, rank: d.rank, ph: rnd(), pts: edgeBetween(i === 0 ? origin : nodes[i - 1], d, kindInto(i), dirOf(i)) }));
+        const ys = [n.y - PH / 2, n.y + PH / 2, ...mine.map((d) => d.y)];
+        const y0 = Math.min(...ys) - LANE_PAD - 10, y1 = Math.max(...ys) + LANE_PAD + 10;
+        lanes.push({ i, x0: n.x - n.w / 2 - LANE_PAD, x1: n.x + n.w / 2 + LANE_PAD, y0, y1, ny: n.y });
+        mine.forEach((d) => fan.push({ lane: i, rank: d.rank, ph: rnd(), pts: edgeBetween(i === 0 ? origin : nodes[i - 1], d, kindInto(i), dir) }));
       });
     }
 
-    // build-once soft-light sprites (batched glow without shadowBlur) — CACHE role, palette colours only
-    const sprite = (stops) => {
-      const s = api.makeCanvas('cache', 64, 64), g = s.ctx, gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-      for (const [o, c] of stops) gr.addColorStop(o, c);
-      g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
-      return s;
-    };
-    const tint = (c) => sprite([[0, api.mix(P.text, c, 0.15)], [0.25, api.rgba(c, 0.8)], [0.6, api.rgba(c, 0.18)], [1, api.rgba(c, 0)]]);
+    // soft-light dots (glow without shadowBlur): radial-gradient colour stops, palette colours only. Painted as a
+    // fresh gradient per dot in draw(): blitting one build-once CPU sprite many times per frame made the SAME frame
+    // hash differently on its first and later renders in a page (measured: the dirty-page AC3 test), which the
+    // final render — every frame in one page — would turn into a film that differs from verify's fresh re-render
+    const tint = (c) => [[0, api.mix(P.text, c, 0.15)], [0.25, api.rgba(c, 0.8)], [0.6, api.rgba(c, 0.18)], [1, api.rgba(c, 0)]];
     const SPR = {
-      white: sprite([[0, api.rgba(P.text, 1)], [0.2, api.rgba(P.text, 0.85)], [0.55, api.mix(P.text, P.primary, 0.3, 0.22)], [1, api.rgba(P.primary, 0)]]),
+      white: [[0, api.rgba(P.text, 1)], [0.2, api.rgba(P.text, 0.85)], [0.55, api.mix(P.text, P.primary, 0.3, 0.22)], [1, api.rgba(P.primary, 0)]],
       primary: tint(P.primary),
       secondary: tint(P.secondary),
     };
@@ -121,24 +146,28 @@ export default {
     const ys = [...nodes, ...decoys].flatMap((d) => [d.y - d.h / 2, d.y + d.h / 2]);
     const gc = (Math.min(...ys) + Math.max(...ys)) / 2;
     const leadW = lead ? api.measure(m, lead, { size: leadPx, weight: 700, track: 4 }).width - 4 : 0;
-    return { chain, N, rows, px, PH, nodes, origin, pathEdges, lanes, decoys, fan, SPR, gc, lead, leadPx, leadW };
+    return { chain, N, rows, px, PH, PADX, RAD, nodes, origin, pathEdges, lanes, decoys, fan, SPR, gc, lead, leadPx, leadW };
   },
 
   draw(ctx, lt, p, rb, cues) {
-    const { api, layout: L, dur } = p;
+    const { api, layout: L } = p;
     const { W, H, clamp, lerp, ease, hash, rgba, mix, rr, palette: P, grid } = api;
     const CX = W / 2, CY = H / 2;
-    const snap = (v) => Math.max(grid, Math.round(v / grid) * grid);
     const sm = (a, b, v) => { const u = clamp((v - a) / (b - a)); return u * u * (3 - 2 * u); };
     const mod = (a, n) => ((a % n) + n) % n;
     const N = L.N;
-    const STEP = L.nodes.map((_, i) => cues[`step.${i}`] ?? snap(dur * (0.15 + (0.45 * i) / Math.max(1, N - 1))));
-    const CV = cues.converge ?? snap(dur * 0.85);
+    const STEP = L.nodes.map((_, i) => api.cue(`step.${i}`));
+    const CV = api.cue('converge');
     const CV0 = CV - 2 * grid;                         // implosion window ends exactly on the cue
     const laneT = (i) => Math.max(0, STEP[i] - 4 * grid);
     const edgeT0 = (i) => STEP[i] - 2 * grid, EDGE_D = 2 * grid;
     const pathColor = (k, a = 1) => mix(P.primary, P.secondary, clamp(k / Math.max(1, N)), a);
-    const spot = (c, s, x, y, r, a) => { c.globalAlpha = a; c.drawImage(s.canvas, x - r, y - r, r * 2, r * 2); };
+    const spot = (c, stops, x, y, r, a) => {
+      if (!(r > 0) || !(a > 0)) return;
+      const g = c.createRadialGradient(x, y, 0, x, y, r);
+      for (const [o, col] of stops) g.addColorStop(o, col);
+      c.globalAlpha = a; c.fillStyle = g; c.fillRect(x - r, y - r, r * 2, r * 2);
+    };
 
     // camera: gentle pull-back while the graph builds; converge pulls everything radially into the core
     const c = L.chain ? 0 : ease.inQuart(clamp((lt - CV0) / (CV - CV0)));
@@ -175,11 +204,18 @@ export default {
     // ── lanes: glass columns behind each option list ──
     function drawLanes() {
       for (const ln of L.lanes) {
-        const a = sm(laneT(ln.i), laneT(ln.i) + 1.6 * grid, lt) * F.vis; if (a < 0.01) continue;
+        // the glass fades in with its contents (first branch stub → node pop), never ahead of them as an empty panel
+        const a = sm(laneT(ln.i) + 1.1 * grid, edgeT0(ln.i) + grid, lt) * F.vis; if (a < 0.01) continue;
         const [x0, y0] = Pt(ln.x0, ln.y0), [x1, y1] = Pt(ln.x1, ln.y1);
         ctx.save(); ctx.globalAlpha = a * (1 - 0.3 * F.dim);
-        rr(ctx, x0, y0, x1 - x0, y1 - y0, 24 * F.ns); ctx.fillStyle = mix(P.panel2, P.primary, 0.1, 0.46); ctx.fill();
-        ctx.lineWidth = 1.5; ctx.strokeStyle = mix(P.text, P.primary, 0.3, 0.16); ctx.stroke();
+        // the glass is densest on the chosen node's row and thins out over the branch stubs (no empty panel)
+        const ny = Pt(0, ln.ny)[1], far = Math.abs(y0 - ny) > Math.abs(y1 - ny) ? y0 : y1;
+        const lg = ctx.createLinearGradient(0, ny, 0, far + Math.sign(far - ny) * 1e-3);
+        lg.addColorStop(0, mix(P.panel2, P.primary, 0.1, 0.46)); lg.addColorStop(1, mix(P.panel2, P.primary, 0.1, 0.1));
+        const sg = ctx.createLinearGradient(0, ny, 0, far + Math.sign(far - ny) * 1e-3);
+        sg.addColorStop(0, mix(P.text, P.primary, 0.3, 0.16)); sg.addColorStop(1, mix(P.text, P.primary, 0.3, 0.04));
+        rr(ctx, x0, y0, x1 - x0, y1 - y0, 24 * F.ns); ctx.fillStyle = lg; ctx.fill();
+        ctx.lineWidth = 1.5; ctx.strokeStyle = sg; ctx.stroke();
         // lane index pips (no text: a dot per step position, the lit one in brand colour)
         const [px0, py0] = Pt((ln.x0 + ln.x1) / 2, ln.y0 + 12);
         for (let k = 0; k < N; k++) {
@@ -238,16 +274,21 @@ export default {
 
     function shape(c2, w, h, r) { rr(c2, -w / 2, -h / 2, w, h, r); }
 
-    // skeleton option pill (a path not taken): no text, a placeholder bar
+    // option branch (a path not taken): a port dot where its fan edge lands + a stub that fades into the lane.
+    // Secondary by construction: thin, dim, fainter the further it sits from the chosen node, no box, no text.
     function drawDecoy(d) {
       const t0 = laneT(d.lane) + d.rank * 0.25 * grid + 1.1 * grid, age = lt - t0; if (age < 0) return;
-      const [x, y] = Pt(d.x, d.y), sc = F.ns * lerp(0.3, 1, ease.outBack(clamp(age / (2.4 * grid))));
-      ctx.save(); ctx.translate(x, y); ctx.scale(sc, sc);
-      ctx.globalAlpha = clamp(age / (0.6 * grid)) * F.vis * (1 - 0.45 * F.dim);
-      shape(ctx, d.w, d.h, 16); ctx.fillStyle = rgba(P.panel, 0.94); ctx.fill();
-      ctx.lineWidth = 1.5; ctx.strokeStyle = mix(P.text, P.primary, 0.2, 0.22); ctx.stroke();
-      const bw = (d.w - 2 * PADX) * d.bar;
-      rr(ctx, -bw / 2, -6, bw, 12, 6); ctx.globalAlpha *= 0.22; ctx.fillStyle = mix(P.text, P.dim, 0.3); ctx.fill();
+      const [x, y] = Pt(d.x, d.y), grow = ease.outCubic(clamp(age / (1.6 * grid)));
+      const a = clamp(age / (0.6 * grid)) * F.vis * (1 - 0.45 * F.dim) * (1.1 - 0.16 * d.far);
+      if (a < 0.01) return;
+      const len = d.len * grow * F.ns, x1 = x + d.dir * len;
+      ctx.save(); ctx.lineCap = 'round';
+      const g = ctx.createLinearGradient(x, 0, x1 + d.dir * 1e-3, 0);
+      g.addColorStop(0, mix(P.dim, P.primary, 0.45, 0.75)); g.addColorStop(1, mix(P.dim, P.primary, 0.45, 0));
+      ctx.globalAlpha = a; ctx.strokeStyle = g; ctx.lineWidth = Math.max(1, 2 * F.ns);
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x1, y); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x, y, 5.5 * F.ns, 0, 7); ctx.fillStyle = rgba(P.ink2, 0.9); ctx.fill();
+      ctx.lineWidth = Math.max(1, 1.8 * F.ns); ctx.strokeStyle = mix(P.dim, P.primary, 0.5, 0.8); ctx.stroke();
       ctx.restore();
     }
 
@@ -265,23 +306,28 @@ export default {
       ctx.save(); ctx.translate(x, y); ctx.scale(sc, sc);
       ctx.globalAlpha = Math.max(ghost * 0.85, clamp(age / (0.6 * grid))) * F.vis;
       const w = n.w * (1 + 0.04 * flash), h = n.h;
-      shape(ctx, w, h, 16);
+      shape(ctx, w, h, L.RAD);
       if (lit > 0.01) {
         ctx.shadowColor = pathColor(i, 0.9); ctx.shadowBlur = (26 + 40 * flash) * Math.min(1, 1.4 - F.s * 0.2);
         const fg = ctx.createLinearGradient(-w / 2, 0, w / 2, 0);
         // a dark tinted body keeps the label readable under bloom; colour lives in the border + glow (+ the landing flash)
         // flash term capped low so the freshly lit label stays crisp under the landing flash (ring + glow carry it)
-        fg.addColorStop(0, rgba(P.primary, 0.1 + 0.14 * lit + 0.12 * flash)); fg.addColorStop(1, rgba(P.secondary, 0.08 + 0.12 * lit + 0.12 * flash));
+        fg.addColorStop(0, rgba(P.primary, 0.04 + 0.06 * lit + 0.1 * flash)); fg.addColorStop(1, rgba(P.secondary, 0.03 + 0.05 * lit + 0.1 * flash));
         ctx.fillStyle = rgba(P.ink2, 0.92); ctx.fill(); ctx.fillStyle = fg; ctx.fill(); ctx.shadowBlur = 0;
         ctx.lineWidth = 2.5; ctx.strokeStyle = api.brand(ctx, -w / 2, 0, w / 2, 0, P.primary, P.secondary); ctx.stroke();
-      } else {
+      } else if (age >= 0) {
         ctx.fillStyle = rgba(P.panel, 0.94); ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = mix(P.text, P.primary, 0.2, 0.26); ctx.stroke();
+      } else {
+        // chain ghost slot (before its label pops): structure only — the two port dots its edges attach to, no
+        // outline (an empty box reads as a missing label), no fill, no placeholder bar
+        for (const sx of [-w / 2, w / 2]) {
+          ctx.beginPath(); ctx.arc(sx, 0, 5.5, 0, 7); ctx.fillStyle = rgba(P.ink2, 0.9); ctx.fill();
+          ctx.lineWidth = 1.8; ctx.strokeStyle = mix(P.dim, P.primary, 0.5, 0.8); ctx.stroke();
+        }
       }
       if (age >= 0) {
         api.text(ctx, n.item, 0, 1, { size: L.px, weight: STEP_W, track: STEP_TRACK, align: 'center', base: 'middle',
           fill: lit > 0.3 ? P.text : mix(P.text, P.dim, 0.45), alpha: clamp(age / grid) });
-      } else {
-        const bw = n.tw * 0.6; rr(ctx, -bw / 2, -6, bw, 12, 6); ctx.globalAlpha *= 0.2; ctx.fillStyle = mix(P.text, P.dim, 0.3); ctx.fill();
       }
       ctx.restore();
 
@@ -293,7 +339,7 @@ export default {
           const o = lerp(0, 70, ease.outExpo(uk)) * F.ns, ww = w * F.ns, hh = h * F.ns;
           ctx.globalAlpha = 0.9 * Math.exp(-dk * 26) * F.vis; ctx.lineWidth = lerp(5, 1.5, uk);
           ctx.strokeStyle = api.brand(ctx, x - ww / 2 - o, 0, x + ww / 2 + o, 0, P.primary, P.secondary);
-          rr(ctx, x - ww / 2 - o, y - hh / 2 - o * 0.8, ww + 2 * o, hh + 1.6 * o, 16 + o * 0.45); ctx.stroke();
+          rr(ctx, x - ww / 2 - o, y - hh / 2 - o * 0.8, ww + 2 * o, hh + 1.6 * o, L.RAD + o * 0.45); ctx.stroke();
         }
         ctx.restore();
         const sc2 = [P.text, P.secondary, P.primary];
@@ -395,7 +441,7 @@ export default {
         ctx.strokeStyle = api.brand(ctx, x - 500, 0, x + 500, 0, P.primary, P.secondary); ctx.shadowColor = P.secondary; ctx.shadowBlur = 24;
         // the lock ring grows OUT from the last pill's edge (never across a label), the check sits above it
         const o = lerp(0, LOCK_O_MAX, ease.outExpo(k)), ww = last.w * F.ns, hh = last.h * F.ns;
-        rr(ctx, x - ww / 2 - o, y - hh / 2 - o * 0.8, ww + 2 * o, hh + 1.6 * o, 16 + o * 0.45); ctx.stroke();
+        rr(ctx, x - ww / 2 - o, y - hh / 2 - o * 0.8, ww + 2 * o, hh + 1.6 * o, L.RAD + o * 0.45); ctx.stroke();
         ctx.restore();
         api.checkMark(ctx, bx, by, 26, clamp(dt / (3 * grid)), P.mint);
         api.sparks(ctx, dt, bx, by, 48, 90, { a0: 0, a1: 6.2832, sMin: 200, sMax: 1000, pow: 1.4, drag: 4, grav: 260, lifeMin: 0.3, lifeMax: 0.7, alpha: 0.85 }, [P.text, P.secondary, P.primary, P.mint], hash);

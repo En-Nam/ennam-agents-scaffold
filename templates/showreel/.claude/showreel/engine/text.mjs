@@ -10,7 +10,17 @@
 // bbox (C16): each entry also carries the device-space bounds {x, y, w, h} of where it was drawn in the
 // LATEST frame (union of all its draws in that frame; null when not drawn in it). The engine calls
 // beginFrame() once per renderAt, so offFrame(manifest()) judges exactly the frame just rendered.
-// Draws into 'cache' sprites are recorded without a box (sprite space is not frame space).
+// onScreen: true once the entry had a frame-space box in ANY rendered frame. Coverage checks ("every resolved
+// item reached the screen") must read onScreen, not mere presence: an entry is created by its first draw,
+// and a draw into a build-once sprite happens at layout boot, before any frame.
+// Draws into 'cache' sprites get no frame box at draw time (sprite space is not frame space). They are kept
+// per sprite canvas instead, and blit(ctx, sprite, …) — the drawImage of a text sprite — maps them through
+// the blit rectangle and ctx's transform into frame space. A text sprite blitted with a plain drawImage
+// therefore never gets a box and never counts as on screen (fail loud in coverage, never a silent pass).
+// Box recording is suspended while a transition composites two beats (setBoxRecording(false), core.mjs):
+// both beats draw on scratch layers that the transition then blits moved / scaled / clipped under the
+// camera, so a draw-time box would describe the wrong rectangle. Overlap frames carry bbox null; C16
+// judges solo frames only.
 
 import { FAMILIES, familyOf } from './fonts.mjs';
 import { clamp } from './math.mjs';
@@ -49,10 +59,12 @@ function rasterize(g, str, x, y, o) {
 
 const recorded = new Map();
 let frameNo = 0;
+let boxesOn = true;
+const spriteText = new WeakMap(); // cache canvas → [{e, l, t, r, b}] text boxes in sprite pixel space
 function record(text, source) {
   const key = source + '\u0000' + text;
   let e = recorded.get(key);
-  if (!e) recorded.set(key, (e = { text, source, bbox: null, frame: -1 }));
+  if (!e) recorded.set(key, (e = { text, source, bbox: null, frame: -1, onScreen: false }));
   return e;
 }
 
@@ -61,30 +73,79 @@ export function beginFrame() {
   frameNo++;
 }
 
-/**
- * Union the device-space bounds of str drawn at (x, y) under ctx's current transform into entry e.
- * A stroke paints lineWidth/2 outside the glyph outline, so stroked text pads the box by that much.
- * Not covered: glow/shadowBlur, and any later transform of the layer the text was drawn on — so
- * archetypes draw text on the beat ctx, never on a scratch layer that is then blitted moved/scaled
- * (see the ARCHETYPE CONTRACT in core.mjs).
- */
-function recordBox(e, ctx, m, x, y, pad) {
-  if (ctx.canvas && roleOf(ctx.canvas) === 'cache') return;
-  if (!(ctx.globalAlpha > 0)) return; // fully transparent: nothing lands on the frame
-  const l = x - (m.actualBoundingBoxLeft ?? 0) - pad, r = x + (m.actualBoundingBoxRight ?? m.width) + pad;
-  const t = y - (m.actualBoundingBoxAscent ?? 0) - pad, b = y + (m.actualBoundingBoxDescent ?? 0) + pad;
-  const T = typeof ctx.getTransform === 'function' ? ctx.getTransform() : { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+/** Suspends (false) / resumes (true) frame-box recording. core.mjs suspends it while a transition draws. */
+export function setBoxRecording(on) {
+  boxesOn = Boolean(on);
+}
+
+const IDENTITY = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+const transformOf = (ctx) => (typeof ctx.getTransform === 'function' ? ctx.getTransform() : IDENTITY);
+
+/** device-space bounds of the user rect [l, r]×[t, b] under transform T */
+function mapRect(T, l, t, r, b) {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const [px, py] of [[l, t], [r, t], [l, b], [r, b]]) {
     const dx = T.a * px + T.c * py + T.e, dy = T.b * px + T.d * py + T.f;
     x0 = Math.min(x0, dx); y0 = Math.min(y0, dy); x1 = Math.max(x1, dx); y1 = Math.max(y1, dy);
   }
+  return [x0, y0, x1, y1];
+}
+
+/** union the device rect into entry e for the current frame; marks the entry as on screen */
+function unionBox(e, [x0, y0, x1, y1]) {
   if (e.frame === frameNo && e.bbox) {
     x0 = Math.min(x0, e.bbox.x); y0 = Math.min(y0, e.bbox.y);
     x1 = Math.max(x1, e.bbox.x + e.bbox.w); y1 = Math.max(y1, e.bbox.y + e.bbox.h);
   }
   e.bbox = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
   e.frame = frameNo;
+  e.onScreen = true;
+}
+
+/**
+ * Union the device-space bounds of str drawn at (x, y) under ctx's current transform into entry e.
+ * A stroke paints lineWidth/2 outside the glyph outline, so stroked text pads the box by that much.
+ * A draw into a 'cache' sprite is kept on the sprite (sprite pixel space) for blit() to place later.
+ * Not covered: glow/shadowBlur, and any later transform of a 'frame' scratch layer the text was drawn on —
+ * so archetypes draw text on the beat ctx (or on a sprite they place with blit), never on a scratch layer
+ * that is then blitted moved/scaled (see the ARCHETYPE CONTRACT in core.mjs).
+ */
+function recordBox(e, ctx, m, x, y, pad) {
+  if (!(ctx.globalAlpha > 0)) return; // fully transparent: nothing lands on the frame (or the sprite)
+  const l = x - (m.actualBoundingBoxLeft ?? 0) - pad, r = x + (m.actualBoundingBoxRight ?? m.width) + pad;
+  const t = y - (m.actualBoundingBoxAscent ?? 0) - pad, b = y + (m.actualBoundingBoxDescent ?? 0) + pad;
+  const box = mapRect(transformOf(ctx), l, t, r, b);
+  if (ctx.canvas && roleOf(ctx.canvas) === 'cache') {
+    let list = spriteText.get(ctx.canvas);
+    if (!list) spriteText.set(ctx.canvas, (list = []));
+    list.push({ e, l: box[0], t: box[1], r: box[2], b: box[3] });
+    return;
+  }
+  if (!boxesOn) return;
+  unionBox(e, box);
+}
+
+/**
+ * blit(ctx, sprite, …drawImage args) — ctx.drawImage(sprite, …) for a sprite that holds text (a 'cache'
+ * canvas the archetype drew api.text into). Same argument forms as drawImage: (dx, dy), (dx, dy, dw, dh) or
+ * (sx, sy, sw, sh, dx, dy, dw, dh). Every text box on the sprite (clipped to the source rect) is mapped to
+ * the destination rect and through ctx's transform, and recorded as a draw of that text in this frame.
+ */
+export function blit(ctx, sprite, ...a) {
+  if (![2, 4, 8].includes(a.length)) throw new Error(`blit: expected 2, 4 or 8 numbers after the sprite (drawImage forms), got ${a.length}`);
+  ctx.drawImage(sprite, ...a);
+  const list = spriteText.get(sprite);
+  if (!list || !boxesOn || !(ctx.globalAlpha > 0)) return;
+  let sx = 0, sy = 0, sw = sprite.width, sh = sprite.height, dx, dy, dw, dh;
+  if (a.length === 2) [dx, dy] = a, dw = sw, dh = sh;
+  else if (a.length === 4) [dx, dy, dw, dh] = a;
+  else [sx, sy, sw, sh, dx, dy, dw, dh] = a;
+  const kx = dw / sw, ky = dh / sh, T = transformOf(ctx);
+  for (const s of list) {
+    const l = Math.max(s.l, sx), t = Math.max(s.t, sy), r = Math.min(s.r, sx + sw), b = Math.min(s.b, sy + sh);
+    if (!(r > l && b > t)) continue; // the text is outside the blitted part of the sprite
+    unionBox(s.e, mapRect(T, dx + (l - sx) * kx, dy + (t - sy) * ky, dx + (r - sx) * kx, dy + (b - sy) * ky));
+  }
 }
 
 /**
@@ -100,10 +161,13 @@ export function clusters(str) {
   return out;
 }
 
-/** Everything drawn so far in this page, sorted (source, text): [{text, source, bbox}] (bbox: latest frame or null). */
+/**
+ * Everything drawn so far in this page, sorted (source, text): [{text, source, bbox, onScreen}]
+ * (bbox: latest frame or null; onScreen: had a frame-space box in any rendered frame of this page).
+ */
 export function manifest() {
   return [...recorded.values()]
-    .map((e) => ({ text: e.text, source: e.source, bbox: e.frame === frameNo && e.bbox ? { ...e.bbox } : null }))
+    .map((e) => ({ text: e.text, source: e.source, bbox: e.frame === frameNo && e.bbox ? { ...e.bbox } : null, onScreen: e.onScreen }))
     .sort((a, b) => (a.source < b.source ? -1 : a.source > b.source ? 1 : a.text < b.text ? -1 : a.text > b.text ? 1 : 0));
 }
 

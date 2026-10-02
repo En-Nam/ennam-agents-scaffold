@@ -29,10 +29,13 @@ type Browser = any;
 type Page = any;
 
 describe('card-carousel — static contract (d)', () => {
-  it('reads every colour from the palette: no hex / rgb() / hsl() / named-colour literals', () => {
-    expect(CODE.match(/#[0-9a-fA-F]{3,8}\b/g) ?? []).toEqual([]);
-    expect(CODE.match(/['"`](?:rgba?|hsla?)\(/g) ?? []).toEqual([]);
-    expect(CODE.match(/['"`](?:white|black|red|blue|cyan|magenta|yellow|green|transparent)['"`]/gi) ?? []).toEqual([]);
+  // palette-only colours: one table-driven ban over every archetype module (engine-static.test.ts)
+
+  it('no placeholder text shapes (core.mjs rule, shared with flow-graph): no skeleton bars on cards or ghost slots', () => {
+    // a grey bar where a label would be reads as a missing label (R5); the cards carry their real fact text
+    expect(CODE).not.toMatch(/skeleton/i);
+    // card accents come from the palette roles (api.accents), never a named hue the palette did not pick
+    expect(CODE).toMatch(/const accents = api\.accents\(N\)/);
   });
 
   it('draws text only through api.text, creates canvases only through api.makeCanvas', () => {
@@ -42,8 +45,8 @@ describe('card-carousel — static contract (d)', () => {
   });
 
   it('reads the cue-map hits card.<i> and the settle cue, never absolute times, never a made-up fallback', () => {
-    expect(CODE).toMatch(/cueOf\(cues, 'card\.' \+ i\)/);
-    expect(CODE).toMatch(/cueOf\(cues, 'settle'\)/);
+    expect(CODE).toMatch(/api\.cue\('card\.' \+ i\)/);
+    expect(CODE).toMatch(/api\.cue\('settle'\)/);
     expect(CODE).not.toMatch(/cues(\[[^\]]+\]|\.\w+)\s*\?\?/); // `cues[x] ?? guess` would hide a broken timeline
     expect(SPEC.cueMaps.map((m: any) => m.name)).toEqual(['card']);
     expect(SPEC.defaultCues.map((c: any) => c.name)).toEqual(['settle']);
@@ -122,6 +125,9 @@ describe.skipIf(!E2E)('card-carousel in the browser (SHOWREEL_E2E=1)', () => {
           // mixed display + mono slot: the engine's slot px is the min over items, floored per family (mono 22)
           expect(fit[b.id].cards, `${name}.${b.id} cards`).not.toBeNull();
           expect(fit[b.id].cards, `${name}.${b.id} cards`).toBeGreaterThanOrEqual(22);
+          // the lead the storyboard binds is really resolved (else the conditional check and the coverage loop
+          // below would skip it silently)
+          expect(slots.lead.items.length, `${name}.${b.id} lead resolved`).toBe(b.phrases?.lead ? 1 : 0);
           if (slots.lead.items.length) expect(fit[b.id].lead, `${name}.${b.id} lead`).toBeGreaterThanOrEqual(28);
           const T = beatTimes(film.timeline, b.id);
           for (const k of ['half', 'last'] as const) {
@@ -176,7 +182,7 @@ describe.skipIf(!E2E)('card-carousel in the browser (SHOWREEL_E2E=1)', () => {
     try {
       for (const [beat, cue] of [['b2', 'card.2'], ['b3', 'settle']]) {
         const film = await serve('dense', (tl) => { tl.hits = tl.hits.filter((h: any) => !(h.beatId === beat && h.cue === cue)); });
-        await expect(openPage(browser, film.url), `${beat} without ${cue}`).rejects.toThrow(`card-carousel: missing cue ${cue}`);
+        await expect(openPage(browser, film.url), `${beat} without ${cue}`).rejects.toThrow(`${beat} (card-carousel) has no cue "${cue}"`);
       }
     } finally {
       await browser.close();
@@ -241,7 +247,8 @@ describe.skipIf(!E2E)('card-carousel in the browser (SHOWREEL_E2E=1)', () => {
       for (const b of cardBeats(STORYBOARDS.matrix)) {
         const page = await openPage(browser, film.url); // fresh page: only THIS beat's draws are in the manifest
         const T = beatTimes(film.timeline, b.id);
-        for (const t of [T.enter, T.hit, T.half]) await renderAt(page, t);
+        // (cards land by 0.45 of the beat, so the stagger is judged up to the first card's landing, not at half)
+        for (const t of [T.enter, T.first]) await renderAt(page, t);
         const before = new Set((await manifest(page)).map((e) => e.source));
         await renderAt(page, T.hold);
         const m = await manifest(page);
@@ -255,6 +262,55 @@ describe.skipIf(!E2E)('card-carousel in the browser (SHOWREEL_E2E=1)', () => {
       }
     } finally {
       await browser.close();
+    }
+  }, 300_000);
+
+  it('R5: from 0.45 of the beat on, every card has landed in its final place — no ghost slot / deck / textless card', async () => {
+    // Why: the cue map spreads card.<i> over 0.2…0.7 of the beat, so landing ON the cue left the contact-sheet hold
+    // (0.6 of the solo window) with 3 of 5 cards + an empty card + a dashed ghost slot — the set read unfinished.
+    // Two checks per frame ≥ 0.45: (1) every card's text is drawn at the place it holds on the last frame (text is
+    // drawn only once a card has landed); (2) the ?probe page counts the text-free placeholder draws directly —
+    // dashed ghost-slot strokes (row) and unswung-deck card bodies (fan) — and there must be none. A control at
+    // the beat's enter frame proves the probe sees them (so a ghost left under a landed card would fail here).
+    const probeAt = (page: Page, t: number, id: string): Promise<{ dash: number; deck: number }> =>
+      page.evaluate((t: number, id: string) => {
+        const S = (window as any).SHOWREEL;
+        S.probe = {};
+        S.renderAt(t, 1);
+        return S.probe[id] ?? { dash: -1, deck: -1 }; // -1: the beat was not drawn at all — fails both checks
+      }, t, id);
+    for (const name of ['matrix', 'dense', 'look']) {
+      const film = await serve(name);
+      const browser = await launch();
+      try {
+        const page = await openPage(browser, film.url, '?probe=1');
+        const F = 1 / film.timeline.fps;
+        for (const b of cardBeats(STORYBOARDS[name])) {
+          const tb = film.timeline.beats.find((x: any) => x.id === b.id);
+          const ids: string[] = film.resolved.beats[b.id].slots.cards.items.map((it: any) => it.id);
+          const last = beatTimes(film.timeline, b.id).last;
+          const early = await probeAt(page, beatTimes(film.timeline, b.id).enter, b.id);
+          expect(b.variant === 'fan' ? early.deck : early.dash, `${name}.${b.id} (${b.variant}) probe control: placeholders seen at enter`).toBeGreaterThan(0);
+          await renderAt(page, last);
+          const final = new Map((await manifest(page)).filter((e) => e.bbox).map((e) => [e.source, e.bbox!]));
+          const t45 = Math.ceil((tb.t0 + 0.45 * (tb.t1 - tb.t0)) / F) * F;
+          for (let t = t45; t <= last + 1e-9; t += 4 * F) {
+            const pr = await probeAt(page, t, b.id);
+            const at = new Map((await manifest(page)).filter((e) => e.bbox).map((e) => [e.source, e.bbox!]));
+            const label = `${name}.${b.id} (${b.variant}, N=${ids.length}) local t=${(t - tb.t0).toFixed(3)} (${((t - tb.t0) / (tb.t1 - tb.t0)).toFixed(3)} of beat)`;
+            expect(pr, `${label}: placeholder draws (dashed ghost slot / unswung deck card)`).toEqual({ dash: 0, deck: 0 });
+            for (const id of ids) {
+              const bb = at.get(id);
+              expect(bb, `${label}: ${id} not landed`).toBeTruthy();
+              const fb = final.get(id)!;
+              // in its final place: only the idle drift / kick / fan breathe move it (≤ 24 px), never a fly-in
+              expect(Math.abs(bb!.x - fb.x) + Math.abs(bb!.y - fb.y), `${label}: ${id} still moving into place`).toBeLessThanOrEqual(24);
+            }
+          }
+        }
+      } finally {
+        await browser.close();
+      }
     }
   }, 300_000);
 

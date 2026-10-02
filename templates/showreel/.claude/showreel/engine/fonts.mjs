@@ -14,10 +14,15 @@ export const FAMILIES = Object.freeze({
 
 const MONO_KINDS = ['command', 'route'];
 
+/** fact kind encoded in a resolved item's id ('f.<kind>.<n>' → '<kind>'); null for phrases (C7). */
+export function kindOf(item) {
+  const m = /^f\.(.+)\.\d+$/.exec(item.id);
+  return m ? m[1] : null;
+}
+
 /** 'mono' | 'display' for a resolved item (C7) — by fact kind encoded in the id. */
 export function familyOf(item) {
-  const m = /^f\.(.+)\.\d+$/.exec(item.id);
-  return m && MONO_KINDS.includes(m[1]) ? 'mono' : 'display';
+  return MONO_KINDS.includes(kindOf(item)) ? 'mono' : 'display';
 }
 
 /** Parse fontsource index.css → [{ weight, style, file, ranges:[[lo,hi],…] }] (pure). */

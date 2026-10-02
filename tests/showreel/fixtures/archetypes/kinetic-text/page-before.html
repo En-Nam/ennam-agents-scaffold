@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>showreel archetype fixture: kinetic-text BEFORE the R5 fix</title>
+<style>html, body { margin: 0; background: black; overflow: hidden; }</style>
+</head>
+<body>
+<!-- Test-local engine page: the shipped engine (/engine/core.mjs createEngine) with the production registry,
+     except that "kinetic-text" is the frozen pre-fix module (fixtures/archetypes/kinetic-text/kinetic-text-before.mjs,
+     copied into the build dir by the test). Only renders the "old" column of the before/after sheet.
+     Same window.SHOWREEL surface as engine/page.html (C10). -->
+<script type="module">
+  import { createEngine } from '/engine/core.mjs';
+  import { gpuRenderer } from '/engine/canvas.mjs';
+  import { loadFonts } from '/engine/fonts.mjs';
+  import { manifest } from '/engine/text.mjs';
+  import { ARCHETYPES, TRANSITIONS } from '/archetypes/index.mjs';
+  import before from '/build/kinetic-text-before.mjs';
+
+  const getJson = async (url) => {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`fixture page: ${url} -> HTTP ${res.status}`);
+    return res.json();
+  };
+  const S = { ready: null, renderer: gpuRenderer(), manifest };
+  window.SHOWREEL = S;
+  S.ready = (async () => {
+    const [timeline, resolved] = await Promise.all([getJson('/build/timeline.json'), getJson('/build/resolved.json')]);
+    await loadFonts('/fonts');
+    const eng = createEngine({ timeline, resolved, archetypes: { ...ARCHETYPES, [before.id]: before }, transitions: TRANSITIONS });
+    S.renderAt = eng.renderAt;
+    S.fit = eng.fit;
+    return true;
+  })();
+</script>
+</body>
+</html>

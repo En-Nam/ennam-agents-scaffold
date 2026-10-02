@@ -1,9 +1,10 @@
 // card-carousel (C9 / C13) — NEW archetype in spike A's glass-card language (s2 wizard chips + selected band,
-// s3 glass counter cards with glowing frame corners and check pops). A set of fact cards lands one by one on
-// the cue-map hits `card.<i>` (C14), the focus band follows the newest card like a carousel selection, and a
-// light sweep (cue `settle`) re-lights every card once the set is complete. A missing cue throws (no made-up times).
+// s3 glass counter cards with glowing frame corners and check pops). A set of fact cards lands one by one (all in
+// place by 0.45 of the beat), then the cue-map hits `card.<i>` (C14) select them in turn — focus band, check pop,
+// edge flash — like a carousel selection, and a light sweep (cue `settle`) re-lights every card once the set is
+// complete. A missing cue throws (no made-up times).
 //   row — glass cards slide in from the right into ghost slots; rows of up to 3 (N ≥ 4 → two rows)
-//   fan — a deck at a glowing pivot swings open like a hand of cards; each card swings out on its hit
+//   fan — a deck at a glowing pivot swings open like a hand of cards; each card swings out to land
 // Slots: cards (3–6 feature / route / command facts; route + command render mono) · lead (phrase, optional).
 // Every colour comes from params.palette (no literals — static test); text only via api.text (D8). A card's
 // text is drawn only once the card has landed in its final place, so no text is ever drawn off-frame while
@@ -12,7 +13,9 @@
 const ROW_CW = 560, ROW_GAP = 40, ROW_PAD = 40, ROW_TAG = 56;
 const FAN_PX = 260, FAN_CY = 548, FAN_R0 = 180, FAN_R1 = 1560, FAN_RT = 880, FAN_TEXT = 76, FAN_SPREAD = 32, FAN_STEP = 12;
 const DEG = Math.PI / 180;
-const KIND = /^f\.(.+)\.\d+$/;
+// every card in place by 0.45 of the beat and fully at rest: LAND_SETTLE ≥ the longest landing motion (text wipe
+// 0.32 s; corners + progress bar 0.3 s; pop decayed) so nothing is still settling at 0.45
+const LAND_BY = 0.45, LAND_SETTLE = 0.32, LAND_REST = 0.3;
 
 /** row variant: cards per row (N ≤ 3 → one row; else two, the first one longer) */
 function rowsOf(N) {
@@ -40,13 +43,6 @@ function kindSizes(api, m, items, kinds, maxW, maxPx, slotPx) {
   return kinds.map((k) => byKind[k]);
 }
 
-/** a cue's local time, or throw: never invent a time for a missing / misnamed cue */
-function cueOf(cues, name) {
-  const t = cues[name];
-  if (typeof t !== 'number') throw new Error(`card-carousel: missing cue ${name}`);
-  return t;
-}
-
 export default {
   id: 'card-carousel',
 
@@ -55,9 +51,9 @@ export default {
     const lead = rb.slots.lead?.items[0] ?? null;
     const N = items.length;
     const m = api.makeCanvas('cache', 8, 8).ctx;
-    const kinds = items.map((it) => KIND.exec(it.id)?.[1] ?? 'feature');
+    const kinds = items.map((it) => api.kindOf(it) ?? 'feature');
     // the compiler always emits card.<i> + settle (C14): a missing one is a broken timeline — fail at setup (Rule 12)
-    for (const name of [...items.map((_, i) => 'card.' + i), 'settle']) cueOf(api.cues, name);
+    for (const name of [...items.map((_, i) => 'card.' + i), 'settle']) api.cue(name);
 
     if (variant === 'fan') {
       const spread = Math.min(FAN_SPREAD, (N - 1) * FAN_STEP) * DEG;
@@ -103,17 +99,27 @@ export default {
   },
 
   draw(ctx, lt, p, rb, cues) {
-    const { api, layout: L } = p;
+    const { api, layout: L, dur } = p;
     const { W, clamp, lerp, ease, hash, rgba, mix, rr, palette: P, grid } = api;
     const N = L.N;
-    const landAt = (i) => cueOf(cues, 'card.' + i);
-    const SETTLE = cueOf(cues, 'settle');
+    // Two clocks per card. selAt(i) = the cue-map hit card.<i> (C14, 0.2…0.7 of the beat): the carousel SELECTS the
+    // card on it — focus band, check pop, edge flash + sparks — so every snap in the score has its visual event.
+    // landAt(i) = where the card has arrived in its final place: the cue spacing compressed from card.0 so the last
+    // card lands LAND_BY of the beat minus LAND_SETTLE (its pop + text wipe done by then; never later than its cue).
+    // So from LAND_BY of the beat on the set is complete — no ghost slot, deck card or textless card is left
+    // waiting for a late cue (R5: a hold frame with 3 of 5 cards + a ghost slot read unfinished).
+    const selAt = (i) => api.cue('card.' + i);
+    const SEL0 = selAt(0), SELN = selAt(N - 1);
+    const LAST_LAND = Math.max(SEL0, Math.min(SELN, Math.floor((LAND_BY * dur - LAND_SETTLE) / grid) * grid));
+    const landStep = N > 1 ? (LAST_LAND - SEL0) / (N - 1) : 0;
+    const landAt = (i) => Math.min(selAt(i), SEL0 + Math.round((i * landStep) / grid) * grid, LAST_LAND);
+    const SETTLE = api.cue('settle');
     const pulse = (t0, decay) => (lt >= t0 ? Math.exp(-(lt - t0) * decay) : 0);
-    const accents = [P.primary, P.secondary, P.hot, P.amber, P.mint, P.primary];
+    const accents = api.accents(N); // one per card, from the palette roles only
     const sparkCols = [P.text, P.secondary, P.primary];
-    // carousel focus: the newest landed card holds the band until the next one lands
+    // carousel focus: the newest selected card holds the band until the next cue selects the next one
     let focusIdx = -1;
-    for (let i = 0; i < N; i++) if (lt >= landAt(i)) focusIdx = i;
+    for (let i = 0; i < N; i++) if (lt >= selAt(i)) focusIdx = i;
     const settled = lt >= SETTLE;
     const kick = 1 + 0.012 * Math.min(1, api.cueEnergy(lt, 10));
 
@@ -153,9 +159,9 @@ export default {
     /** one glass card in LOCAL coords: body rect (x0,y0,w,h); content anchored at (tx, base) */
     function card(c, cd, i, g) {
       const { x0, y0, w, h, tx, tagX, tagY, tagS, base, ghost } = g;
-      const land = landAt(i), dl = lt - land;
+      const land = landAt(i), dl = lt - land, sel = selAt(i), ds = lt - sel;
       const landed = dl >= 0;
-      const fl = pulse(land, 7);                       // landing flash
+      const fl = Math.max(0.6 * pulse(land, 7), pulse(sel, 7)); // landing flash, full flash on the selecting cue
       const focus = !settled && i === focusIdx ? 1 : 0;
       const sw = pulse(SETTLE + i * grid * 0.5, 4.5);  // settle re-light, staggered across the set
       const lit = landed ? 0.35 + 0.65 * Math.max(focus, sw) : 0;
@@ -174,27 +180,21 @@ export default {
         glowColor: rgba(P.primary, 0.2 + 0.3 * lit + 0.3 * fl), glowBlur: 30,
       });
       // focus band: the spike's selected-option gradient, held by the active card, flashed on landing
-      const band = 0.26 * focus + 0.5 * fl + 0.22 * sw;
+      const band = 0.26 * focus + 0.34 * fl + 0.22 * sw; // flash kept below the level that washes out the card text
       if (band > 0.003) {
         c.save(); c.globalCompositeOperation = 'lighter'; c.globalAlpha *= clamp(band);
         rr(c, x0 + 2, y0 + 2, w - 4, h - 4, r - 2);
         c.fillStyle = api.brand(c, x0, 0, x0 + w, 0, rgba(P.primary, 0.75), rgba(P.secondary, 0.55)); c.fill();
         c.restore();
       }
-      corners(c, x0 + 12, y0 + 12, w - 24, h - 24, Math.min(40, h * 0.22) * ease.outBack(clamp(dl / 0.3)) * (landed ? 1 : 0), 0.55 + 0.45 * lit, fl + sw);
+      corners(c, x0 + 12, y0 + 12, w - 24, h - 24, Math.min(40, h * 0.22) * ease.outBack(clamp(dl / LAND_REST)) * (landed ? 1 : 0), 0.55 + 0.45 * lit, fl + sw);
 
       // tag tile + kind icon
       const ta = landed ? 1 : 0.35;
       api.glass(c, tagX, tagY, tagS, tagS, 14, { fill: rgba(acc, 0.12 + 0.14 * lit), border: rgba(acc, 0.5 + 0.4 * lit), alpha: ta, glowColor: landed ? rgba(acc, 0.45) : null, glowBlur: 16 });
       if (landed) icon(c, cd.kind, tagX + tagS / 2, tagY + tagS / 2, tagS * 0.62, mix(acc, P.text, 0.35));
 
-      // skeleton bars (spike placeholder rows) — ghost cards show them alone
-      const sk = g.skeleton;
-      if (sk) {
-        c.save(); c.fillStyle = rgba(P.text, landed ? 0.07 : 0.1);
-        for (let k = 0; k < sk.n; k++) { rr(c, tx, sk.y + k * sk.gap, sk.w * (0.82 - 0.3 * hash(i * 3.1 + k * 7.7)), 10, 5); c.fill(); }
-        c.restore();
-      }
+      // no placeholder text bars: a shape that stands in for text reads as a missing label (core.mjs placeholder rule)
 
       // text: only once landed (final place → never off-frame); wipes on left → right
       if (landed) {
@@ -205,7 +205,7 @@ export default {
         api.text(c, cd.item, tx, base + 10 * (1 - q), { size: cd.px, weight: 600, fill: P.text, alpha: clamp(q * 2.5) });
         if (fl > 0.02) { // hot white flash on the glyphs
           c.globalCompositeOperation = 'lighter'; c.shadowBlur = 0;
-          api.text(c, cd.item, tx, base + 10 * (1 - q), { size: cd.px, weight: 600, fill: P.text, alpha: 0.55 * fl });
+          api.text(c, cd.item, tx, base + 10 * (1 - q), { size: cd.px, weight: 600, fill: P.text, alpha: 0.3 * fl });
         }
         c.restore();
         // wipe head
@@ -222,25 +222,25 @@ export default {
       if (g.bar) {
         const { bx, by, bw } = g.bar;
         c.save(); rr(c, bx, by, bw, 6, 3); c.fillStyle = rgba(P.text, 0.08); c.fill();
-        const f = landed ? Math.min(1.03, ease.outBack(clamp(dl / 0.45))) : 0;
+        const f = landed ? Math.min(1.03, ease.outBack(clamp(dl / LAND_REST))) : 0;
         if (f > 0.002) {
           rr(c, bx, by, bw * f, 6, 3);
           c.fillStyle = api.brand(c, bx, 0, bx + bw, 0, P.primary, P.secondary); c.shadowColor = P.secondary; c.shadowBlur = 8 + 10 * lit; c.fill();
         }
         c.restore();
       }
-      if (dl >= 0.05) api.checkMark(c, x0 + w - 34, y0 + 34, 15, clamp((dl - 0.05) / 0.35), P.mint);
+      if (ds >= 0.05) api.checkMark(c, x0 + w - 34, y0 + 34, 15, clamp((ds - 0.05) / 0.35), P.mint); // checked on its cue
 
-      // landing: flash lines on the long edges + sparks from both ends (spike reel lock)
-      if (landed && dl < 0.6) {
-        const hw = lerp(0, w * 0.6, ease.outExpo(clamp(dl / 0.22))), mx = x0 + w / 2;
+      // selection (cue card.<i>): flash lines on the long edges + sparks from both ends (spike reel lock)
+      if (ds >= 0 && ds < 0.6) {
+        const hw = lerp(0, w * 0.6, ease.outExpo(clamp(ds / 0.22))), mx = x0 + w / 2;
         c.save(); c.globalCompositeOperation = 'lighter';
         const lg = c.createLinearGradient(mx - hw, 0, mx + hw, 0);
-        lg.addColorStop(0, rgba(P.secondary, 0)); lg.addColorStop(0.5, rgba(P.text, 0.7 * Math.exp(-dl * 9))); lg.addColorStop(1, rgba(P.primary, 0));
+        lg.addColorStop(0, rgba(P.secondary, 0)); lg.addColorStop(0.5, rgba(P.text, 0.7 * Math.exp(-ds * 9))); lg.addColorStop(1, rgba(P.primary, 0));
         c.fillStyle = lg; c.fillRect(mx - hw, y0 - 1.5, hw * 2, 3); c.fillRect(mx - hw, y0 + h - 1.5, hw * 2, 3);
         c.restore();
-        api.sparks(c, dl, x0 + 6, y0 + h / 2, 14, 40 + i, { a0: 2.2, a1: 4.1, sMin: 200, sMax: 800, pow: 1.3, drag: 5, grav: 400, lifeMin: 0.25, lifeMax: 0.55, alpha: 0.85 }, sparkCols, hash);
-        api.sparks(c, dl, x0 + w - 6, y0 + h / 2, 14, 60 + i, { a0: -0.95, a1: 0.95, sMin: 200, sMax: 800, pow: 1.3, drag: 5, grav: 400, lifeMin: 0.25, lifeMax: 0.55, alpha: 0.85 }, sparkCols, hash);
+        api.sparks(c, ds, x0 + 6, y0 + h / 2, 14, 40 + i, { a0: 2.2, a1: 4.1, sMin: 200, sMax: 800, pow: 1.3, drag: 5, grav: 400, lifeMin: 0.25, lifeMax: 0.55, alpha: 0.85 }, sparkCols, hash);
+        api.sparks(c, ds, x0 + w - 6, y0 + h / 2, 14, 60 + i, { a0: -0.95, a1: 0.95, sMin: 200, sMax: 800, pow: 1.3, drag: 5, grav: 400, lifeMin: 0.25, lifeMax: 0.55, alpha: 0.85 }, sparkCols, hash);
       }
       // settle sweep: a light band crossing the card (clipped to it)
       const sq = clamp((lt - (SETTLE - 0.12 + i * grid * 0.5)) / 0.5);
@@ -270,7 +270,8 @@ export default {
     function drawRow() {
       drawLead(W / 2, L.leadY, 'center', L.lead ? 600 : 0);
       const drift = 6 * Math.sin(lt * 0.9);   // the carousel never quite stops
-      // ghost slots: dashed outlines waiting for their card (no empty frame before the first landing)
+      // ghost slots: dashed card outlines waiting for their card (no empty frame before the first landing). The
+      // outline is the card's frame, not a label stand-in: no placeholder text bars inside (core.mjs placeholder rule)
       const ga = ease.outCubic(clamp(lt / 0.35));
       ctx.save(); ctx.translate(W / 2, 540); ctx.scale(kick, kick); ctx.translate(-W / 2, -540);
       L.cards.forEach((cd, i) => {
@@ -279,8 +280,6 @@ export default {
         if (u < 1 && ga > 0) {
           ctx.save(); ctx.globalAlpha = ga * (1 - u) * 0.9; ctx.setLineDash([10, 9]); ctx.lineDashOffset = -lt * 30;
           ctx.strokeStyle = rgba(P.text, 0.22); ctx.lineWidth = 2; rr(ctx, cd.x + 0.5, cd.y + 0.5, cd.w - 1, cd.h - 1, 22); ctx.stroke();
-          ctx.setLineDash([]); ctx.fillStyle = rgba(P.text, 0.06);
-          for (let k = 0; k < 3; k++) { rr(ctx, cd.x + ROW_PAD, cd.y + cd.h * 0.5 + k * 30, (cd.w - 2 * ROW_PAD) * (0.75 - 0.25 * hash(i + k * 5.3)), 10, 5); ctx.fill(); }
           ctx.restore();
         }
         if (u <= 0) return;
@@ -294,7 +293,6 @@ export default {
           return {
             x0, y0, w, h, tx: x0 + ROW_PAD, tagX: x0 + ROW_PAD, tagY: y0 + 34, tagS: ROW_TAG,
             base: y0 + 34 + ROW_TAG + 30 + L.px * 0.95,
-            skeleton: { n: 2, y: y0 + 34 + ROW_TAG + 30 + L.px * 0.95 + 34, gap: 26, w: w - 2 * ROW_PAD },
             bar: { bx: x0 + ROW_PAD, by: y0 + h - 30, bw: w - 2 * ROW_PAD },
           };
         };
@@ -343,7 +341,6 @@ export default {
         const base = cd.px * 0.36 - (h > 96 ? 10 : 0);
         return {
           x0, y0, w, h, tx: L.textX, tagX: FAN_RT, tagY: -tagS / 2, tagS, base,
-          skeleton: h > 96 ? { n: 1, y: base + 18, gap: 0, w: Math.min(420, FAN_R1 - 60 - L.textX) } : null,
           bar: null,
         };
       };
@@ -362,7 +359,7 @@ export default {
         ctx.restore();
       }
       // pivot hub
-      const hub = pulse(landAt(Math.max(0, focusIdx)), 6) * (focusIdx >= 0 ? 1 : 0) + pulse(SETTLE, 4);
+      const hub = pulse(selAt(Math.max(0, focusIdx)), 6) * (focusIdx >= 0 ? 1 : 0) + pulse(SETTLE, 4);
       ctx.save(); ctx.translate(FAN_PX, FAN_CY);
       api.glowDot(ctx, 0, 0, 90 + 60 * hub, 0.35 + 0.35 * hub, api.hexToRgb(P.primary).join(','));
       api.glass(ctx, -34, -34, 68, 68, 34, { fill: rgba(P.ink2, 0.85), border: rgba(P.secondary, 0.8), glowColor: rgba(P.secondary, 0.6), glowBlur: 24 });

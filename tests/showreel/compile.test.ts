@@ -424,12 +424,26 @@ describe('cue maps (C14) — one hit per bound item, spread from..to, never stac
   });
 
   it('a storyboard cue overrides a mapped cue by full name ("step.2"): replaced, not duplicated', () => {
-    const story = withBody('flow-graph', 'converge', 'steps', 4, (s) => { s.beats[1].cues = [{ name: 'step.2', at: 0.75, kind: 'boom', amp: 0.9 }]; });
+    // step.1 = 3.875, step.3 = 4.75 (defaults): an override at 0.5 → 4.5 stays between them (index order kept)
+    const story = withBody('flow-graph', 'converge', 'steps', 4, (s) => { s.beats[1].cues = [{ name: 'step.2', at: 0.5, kind: 'boom', amp: 0.9 }]; });
     const tl = compileTimeline(story, rs(15), ARCH, { fps: 60 });
     const steps = hitsOf(tl, 'b2', 'step');
     expect(steps.map((h: Hit) => h.cue).sort()).toEqual(['step.0', 'step.1', 'step.2', 'step.3']);
     const s2 = steps.find((h: Hit) => h.cue === 'step.2')!;
-    expect([s2.t, s2.kind, s2.amp]).toEqual([frame60(3 + 0.75 * 3), 'boom', 0.9]); // 5.25
+    expect([s2.t, s2.kind, s2.amp]).toEqual([frame60(3 + 0.5 * 3), 'boom', 0.9]); // 4.5
+  });
+
+  it('an override that lands a mapped hit out of index order fails E_TIMELINE (archetypes reveal item i before i+1)', () => {
+    // step.2 at 0.75 → 5.25 s, AFTER step.3 (4.75): flow-graph would light the path 0, 1, 3, 2 — refused, not drawn
+    const late = withBody('flow-graph', 'converge', 'steps', 4, (s) => { s.beats[1].cues = [{ name: 'step.2', at: 0.75, kind: 'boom', amp: 0.9 }]; });
+    let err: any;
+    try { compileTimeline(late, rs(15), ARCH, { fps: 60 }); } catch (e) { err = e; }
+    expect(err).toMatchObject({ code: 'E_TIMELINE' });
+    expect(err.message).toMatch(/b2.*step\.2.*step\.3.*out of index order/s);
+    // the subtle case validate cannot see: step.1 overridden just after step.0's default (0.16 vs 0.15 of the beat)
+    // snaps onto step.0's grid; the mapped step.0 is then pushed one GRID later, past the fixed step.1
+    const close = withBody('flow-graph', 'converge', 'steps', 4, (s) => { s.beats[1].cues = [{ name: 'step.1', at: 0.16, kind: 'snap', amp: 0.3 }]; });
+    expect(() => compileTimeline(close, rs(15), ARCH, { fps: 60 })).toThrow(/step\.0.*step\.1.*out of index order/s);
   });
 });
 

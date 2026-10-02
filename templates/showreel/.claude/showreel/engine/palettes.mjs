@@ -1,10 +1,14 @@
 // Design tokens. `violet` = spike core.js `pal` verbatim (+ role aliases). The other palettes keep the
 // same neutrals and swap the role colours: primary (brand accent), secondary (counter-accent), hot (rare highlight).
 // Archetypes should use the roles (primary/secondary/hot), not the named hues, so the palette choice carries.
+// More accent colours than three roles (one per layer / card / badge): accents(palette, n) — derived from the
+// roles only, so a non-violet film never shows a violet slab. white/black are the pure neutrals (white-hot
+// cores, masks); the static palette-only test bans colour literals in archetypes, so they come from here.
 
 const BASE = {
   ink: '#05060a', ink2: '#0a0c13', panel: '#10131d', panel2: '#161a27',
   line: 'rgba(255,255,255,0.09)', text: '#eef1f8', dim: '#8a93a8', faint: '#4a5266',
+  white: '#ffffff', black: '#000000',
   violet: '#8b6bff', cyan: '#2ee6d6', amber: '#ffb347', magenta: '#ff4fa3', mint: '#5dffa0', red: '#ff5d73',
 };
 
@@ -33,4 +37,18 @@ export function hexToRgb(hex) {
 export function rgba(hex, a = 1) {
   const [r, g, b] = hexToRgb(hex);
   return `rgba(${r},${g},${b},${a})`;
+}
+
+const toHex = (rgb) => '#' + rgb.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
+
+/**
+ * accents(palette, n) → n '#rrggbb' accent colours from the ROLES only: primary, secondary, hot, then the
+ * midpoints primary·secondary, secondary·hot, hot·primary; cycles beyond 6. Never a named hue that is not
+ * one of the palette's roles.
+ */
+export function accents(p, n) {
+  const [A, B, C] = [p.primary, p.secondary, p.hot].map(hexToRgb);
+  const mid = (x, y) => toHex(x.map((v, i) => (v + y[i]) / 2));
+  const base = [p.primary, p.secondary, p.hot, mid(A, B), mid(B, C), mid(C, A)];
+  return Array.from({ length: n }, (_, i) => base[i % base.length]);
 }

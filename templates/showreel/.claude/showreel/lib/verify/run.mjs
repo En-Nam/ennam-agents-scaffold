@@ -54,9 +54,13 @@ export function colorTagsFailure(color) {
   return `colorTags ${JSON.stringify(color)} are not tv + bt709 (colorspace/primaries/trc): players would decode the colours with the wrong matrix`;
 }
 
-/** Coverage half of D8: an engine that draws nothing would pass manifest ⊆ resolved trivially. */
+/**
+ * Coverage half of D8: an engine that draws nothing would pass manifest ⊆ resolved trivially.
+ * Only entries that reached a rendered frame count (onScreen, engine/text.mjs): an entry also exists for text
+ * drawn into a build-once sprite at boot, which proves nothing about the film until the sprite is placed.
+ */
 export function undrawn(manifest, resolved) {
-  const sources = new Set(manifest.map((m) => m.source));
+  const sources = new Set(manifest.filter((m) => m.onScreen === true).map((m) => m.source));
   const missing = [];
   for (const [beatId, beat] of Object.entries(resolved.beats)) {
     for (const [slot, s] of Object.entries(beat.slots)) {

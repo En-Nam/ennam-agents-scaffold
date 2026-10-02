@@ -5,6 +5,8 @@
 // short luminance lift trailing the front keep the columns legible over dark backgrounds. 2 GRID overlap (C13/C14).
 // Pure function of k (0..1 over the overlap). Continuity: k=0 ≡ outgoing beat alone, k=1 ≡ incoming alone;
 // mid-overlap the left columns already show the incoming beat while the right ones still show the outgoing.
+// C16: both beats draw onto scratch layers that are blitted shifted (±SLIDE) and clipped, so the engine records
+// no text boxes during the overlap (core.mjs setBoxRecording(false)); overlap frames are exempt from offFrame.
 
 const COLS = 6;
 const STAGGER = 0.1;                         // start offset between neighbouring columns, in k

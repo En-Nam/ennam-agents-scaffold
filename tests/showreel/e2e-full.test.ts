@@ -17,7 +17,9 @@ import { resolveFfmpeg } from '../../templates/showreel/.claude/showreel/lib/ren
 // the sheet, storyboard, timeline and resolved files kept per film (the R5 tool renders from next-60s). Every
 // duration runs even after a failure (soft assertions), so a single run shows all 8 results.
 // If a repo's facts cannot fill an arrangement at the typical item count, the helper falls back to the MINIMUM
-// counts (still only real facts) and the line says so (`count`); it never pads with invented facts.
+// counts (still only real facts), the line says so (`count`) and a soft assertion FAILS the run — the fallback
+// film is still rendered and verified for the full picture, but it is weaker AC1 evidence and must surface
+// (Rule 12). It never pads with invented facts.
 
 const FULL = process.env.SHOWREEL_E2E_FULL === '1';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -125,6 +127,9 @@ describe.skipIf(!FULL)('showreel e2e-full: next + python × 15/30/45/60 s --fina
         if (ARTIFACTS) { mkdirSync(ARTIFACTS, { recursive: true }); appendFileSync(path.join(ARTIFACTS, 'e2e-full.jsonl'), line + '\n'); }
 
         const tag = `${profile} ${N}s`;
+        // the exit evidence is the arrangement at TYPICAL counts: a min-count fallback (the fixture can no longer
+        // fill typical) still renders and is logged, but fails the run visibly instead of passing as weaker proof
+        expect.soft(count, `${tag}: storyboard fell back to MIN slot counts (the fixture's facts cannot fill typical)`).toBe('typical');
         expect.soft(render.ok, `${tag} render --final: ${JSON.stringify(render.error ?? null)}`).toBe(true);
         if (!render.ok) continue;
         expect.soft(render, tag).toMatchObject({ mode: 'final', fps: 60, frames: N * 60 });

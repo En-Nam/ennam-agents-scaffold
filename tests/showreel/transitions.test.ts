@@ -18,8 +18,10 @@ import { ARCHETYPES, TRANSITIONS } from '../../templates/showreel/.claude/showre
 // What matters: it is a real OVERLAP transition (both beats on screen mid-overlap, columns flipping
 // left → right), continuous at both ends (no pop: k≈0 is the outgoing beat, k≈1 the incoming), and
 // deterministic like every other frame (AC3: same bytes across fresh pages / orders / launches, S=1 and S=6).
-// The engine registry (archetypes/index.mjs) is the orchestrator's file in M2; these tests inject the
-// module through a test twin of the engine page (fixtures/transitions/page.html → createEngine overrides).
+// column-wipe is registered in archetypes/index.mjs (Task 7). The probe cases still boot a test twin of the
+// engine page (fixtures/transitions/page.html → createEngine overrides), because they inject two opaque PROBE
+// archetypes that are not (and must not be) in the shipped registry; the real-film cases and the N-matrix /
+// AC3 runs exercise column-wipe through the shipped engine/page.html.
 
 const E2E = process.env.SHOWREEL_E2E === '1';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -227,3 +229,10 @@ describe.skipIf(!E2E)('column-wipe in the engine (SHOWREEL_E2E=1)', () => {
     }
   }, 180_000);
 });
+
+// Registered only when E2E is off: a full E2E run must report 0 skipped (Rule 12).
+if (!E2E) {
+  describe('column-wipe in the engine (skipped)', () => {
+    it.skip('SKIPPED: set SHOWREEL_E2E=1 (+ SHOWREEL_TOOL_DIR) to run the column-wipe continuity, mid-overlap and determinism checks', () => {});
+  });
+}

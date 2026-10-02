@@ -31,7 +31,7 @@ export default {
     const sk = Math.sin(Math.PI * k);
     if (sk > 0.002) {
       ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round';
-      const cols = ['#ffffff', pal.primary, pal.secondary], buckets = [[], [], []];
+      const cols = [pal.white, pal.primary, pal.secondary], buckets = [[], [], []];
       for (let i = 0; i < STREAKS; i++) {
         const u = hash(i * 3.7 + 1), ph = hash(i * 7.1 + 4);
         const m = (u + zk * (0.8 + ph * 1.4)) % 1, rad = 90 + 1900 * m * m, len = rad * (0.15 + 0.7 * zk) * (0.4 + ph);
@@ -55,7 +55,7 @@ export default {
     const ba = 0.5 * arm * sk * (1 - 0.7 * grow);
     if (ba > 0.002) {
       const bl = ctx.createRadialGradient(cx, cy, 0, cx, cy, 150 + hw * 0.9);
-      bl.addColorStop(0, `rgba(255,255,255,${ba * 0.5})`); bl.addColorStop(0.35, api.rgba(pal.primary, ba * 0.6)); bl.addColorStop(1, api.rgba(pal.primary, 0));
+      bl.addColorStop(0, api.rgba(pal.white, ba * 0.5)); bl.addColorStop(0.35, api.rgba(pal.primary, ba * 0.6)); bl.addColorStop(1, api.rgba(pal.primary, 0));
       ctx.fillStyle = bl; ctx.fillRect(cx - 150 - hw, cy - 150 - hw, 300 + 2 * hw, 300 + 2 * hw);
     }
     ctx.globalCompositeOperation = 'source-over';
@@ -83,7 +83,7 @@ export default {
       ctx.save();
       rr(ctx, cx - hw, cy - hh, hw * 2, hh * 2, rad);
       const rg = ctx.createLinearGradient(cx - hw, cy - hh, cx + hw, cy + hh);
-      rg.addColorStop(0, '#ffffff'); rg.addColorStop(0.45, pal.primary); rg.addColorStop(1, pal.secondary);
+      rg.addColorStop(0, pal.white); rg.addColorStop(0.45, pal.primary); rg.addColorStop(1, pal.secondary);
       ctx.lineWidth = 5 + 14 * (1 - grow); ctx.strokeStyle = rg; ctx.shadowColor = pal.primary; ctx.shadowBlur = 50;
       ctx.globalAlpha = rimA; ctx.stroke();
       ctx.restore();

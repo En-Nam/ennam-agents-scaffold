@@ -272,15 +272,25 @@ describe('showreel verify: undrawn() — the coverage half of D8', () => {
     },
   };
   const full = [
-    { text: 'Acme', source: 'f.app.name.1' },
-    { text: '12', source: 'counter:f.count.routes' },
-    { text: '12', source: 'f.count.routes' },
-    { text: 'routes', source: 'unit:f.count.routes' },
-    { text: 'Ship it', source: 'p.tagline' },
+    { text: 'Acme', source: 'f.app.name.1', onScreen: true },
+    { text: '12', source: 'counter:f.count.routes', onScreen: true },
+    { text: '12', source: 'f.count.routes', onScreen: true },
+    { text: 'routes', source: 'unit:f.count.routes', onScreen: true },
+    { text: 'Ship it', source: 'p.tagline', onScreen: true },
   ];
 
   it('a manifest covering every item and unit → []', () => {
     expect(undrawn(full, resolved)).toEqual([]);
+  });
+
+  it('an entry that never reached a frame (text drawn into a sprite that was never placed) is NOT coverage', () => {
+    // the engine records sprite text at layout boot, before any frame: presence alone would pass a title
+    // sprite that draw() never blits (engine/text.mjs onScreen)
+    const sprite = full.map((m) => (m.source === 'f.app.name.1' ? { ...m, onScreen: false } : m));
+    expect(undrawn(sprite, resolved)).toEqual(['b1.title f.app.name.1']);
+    // an old-format entry without the flag cannot prove coverage either
+    const legacy = full.map((m) => (m.source === 'p.tagline' ? { text: m.text, source: m.source } : m));
+    expect(undrawn(legacy as never, resolved)).toEqual(['b2.stats p.tagline']);
   });
 
   it('a resolved item the engine never drew is listed with beat.slot', () => {

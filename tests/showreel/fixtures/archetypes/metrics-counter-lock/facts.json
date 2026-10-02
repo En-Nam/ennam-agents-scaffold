@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "minimumGate": { "passed": true, "missing": [] },
+  "brand": { "name": "Acme Shop", "palette": "violet", "wordmark": "f.app.name.1" },
+  "facts": [
+    { "id": "f.app.name.1", "kind": "app.name", "value": "Acme Shop", "display": "Acme Shop", "unit": null, "source": { "file": "package.json", "locator": "name", "extractor": "fixture", "rule": "fixture" }, "hash": "sha256:0000000000000001" },
+    { "id": "f.command.1", "kind": "command", "value": "npm run dev", "display": "npm run dev", "unit": null, "source": { "file": "package.json", "locator": "scripts.dev", "extractor": "fixture", "rule": "fixture" }, "hash": "sha256:0000000000000002" },
+    { "id": "f.feature.1", "kind": "feature", "value": "Checkout in one tap", "display": "Checkout in one tap", "unit": null, "source": { "file": "README.md", "locator": "features", "extractor": "fixture", "rule": "fixture" }, "hash": "sha256:0000000000000003" },
+    { "id": "f.count.1", "kind": "count", "value": 3, "display": "3", "unit": "routes", "source": { "file": "app", "locator": "routes", "extractor": "fixture", "rule": "fixture" }, "hash": "sha256:0000000000000011" },
+    { "id": "f.count.2", "kind": "count", "value": 48, "display": "48", "unit": "integrations", "source": { "file": "package.json", "locator": "dependencies", "extractor": "fixture", "rule": "fixture" }, "hash": "sha256:0000000000000012" },
+    { "id": "f.count.3", "kind": "count", "value": 5, "display": "5", "unit": "commands", "source": { "file": "package.json", "locator": "scripts", "extractor": "fixture", "rule": "fixture" }, "hash": "sha256:0000000000000013" },
+    { "id": "f.count.4", "kind": "count", "value": 120, "display": "120", "unit": "tests", "source": { "file": "tests", "locator": "files", "extractor": "fixture", "rule": "fixture" }, "hash": "sha256:0000000000000014" }
+  ]
+}

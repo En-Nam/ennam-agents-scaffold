@@ -6,9 +6,10 @@
 <style>html, body { margin: 0; background: #000; }</style>
 </head>
 <body>
-<!-- Test-only twin of engine/page.html (tests/showreel/transitions.test.ts). Served from /build/ so the toolkit
-     registry (archetypes/index.mjs) stays untouched: column-wipe and two solid-fill probe archetypes are injected
-     into createEngine. Same SHOWREEL surface as boot(): ready, renderAt, fit, manifest. -->
+<!-- Test-only twin of engine/page.html (tests/showreel/transitions.test.ts). Served from /build/ because it injects
+     two solid-fill PROBE archetypes into createEngine (they must never be in the shipped registry); column-wipe
+     itself is registered in archetypes/index.mjs (Task 7) and is added here only for explicitness.
+     Same SHOWREEL surface as boot(): ready, renderAt, fit, manifest. -->
 <script type="module">
   import { createEngine } from '/engine/core.mjs';
   import { loadFonts } from '/engine/fonts.mjs';

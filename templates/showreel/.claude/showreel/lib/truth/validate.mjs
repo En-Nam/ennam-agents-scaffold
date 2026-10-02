@@ -26,7 +26,9 @@ export function indexInputs({ archetypes, facts, phrases }) {
   };
 }
 
-const asList = (v) => (Array.isArray(v) ? v : [v]);
+// a slot reference as a list of ids: a single id becomes [id] (an absent ref is never passed here — unlike the
+// compiler's boundList, which maps a missing binding to [])
+const idsOf = (v) => (Array.isArray(v) ? v : [v]);
 const charLen = (s) => [...s].length;
 
 /**
@@ -96,7 +98,7 @@ export function validateStoryboard(sb, inputs) {
           err(p, 'E_SLOT_KIND', `slot "${slotId}" takes a ${slot.source} id, not a ${source} id (move it to "${slot.source === 'fact' ? 'bindings' : 'phrases'}")`);
           continue;
         }
-        const ids = asList(ref);
+        const ids = idsOf(ref);
         if (ids.length < slot.min || ids.length > slot.max) {
           err(p, 'E_SLOT_COUNT', `slot "${slotId}" takes ${slot.min}-${slot.max} item(s) (got ${ids.length})`);
         }
@@ -116,20 +118,44 @@ export function validateStoryboard(sb, inputs) {
     }
 
     // Cue-map overrides (C14): "<map>.<i>" must name a hit the compiler will actually emit.
+    const overrides = new Map(); // map name → [{i, at, j}]
     (beat.cues || []).forEach((cue, j) => {
       const dot = cue.name.indexOf('.');
       if (dot < 0) return;
       const mapName = cue.name.slice(0, dot), i = Number(cue.name.slice(dot + 1));
       const map = (arch.cueMaps || []).find((m) => m.name === mapName);
-      const n = map && bound.has(map.per) ? asList(bound.get(map.per)).length : 0;
+      const n = map && bound.has(map.per) ? idsOf(bound.get(map.per)).length : 0;
       if (!map || i >= n) {
         const offered = (arch.cueMaps || []).map((m) => {
-          const k = bound.has(m.per) ? asList(bound.get(m.per)).length : 0;
+          const k = bound.has(m.per) ? idsOf(bound.get(m.per)).length : 0;
           return k ? `${m.name}.0..${m.name}.${k - 1}` : null;
         }).filter(Boolean);
         err(`${at}/cues/${j}/name`, 'E_SCHEMA', `cue "${cue.name}" overrides no cue-map hit of beat ${beat.id} (mapped cues: ${offered.join(', ') || 'none'})`);
+        return;
       }
+      if (!overrides.has(mapName)) overrides.set(mapName, []);
+      overrides.get(mapName).push({ i, at: cue.at, j });
     });
+    // …inside the map's from..to window and in index order: archetypes reveal item i before item i+1 (a path
+    // lights step by step, badges pop in turn), so an override that reorders the map would scramble the reveal
+    for (const [mapName, list] of overrides) {
+      const map = arch.cueMaps.find((m) => m.name === mapName);
+      const n = idsOf(bound.get(map.per)).length;
+      const eff = Array.from({ length: n }, (_, k) => map.from + ((map.to - map.from) * k) / Math.max(1, n - 1));
+      for (const o of list) {
+        eff[o.i] = o.at;
+        if (o.at < map.from || o.at > map.to) {
+          err(`${at}/cues/${o.j}/at`, 'E_SCHEMA', `cue "${mapName}.${o.i}" at ${o.at} is outside the "${mapName}" cue map window ${map.from}..${map.to} of beat ${beat.id}`);
+        }
+      }
+      for (const o of list) {
+        const prev = o.i > 0 ? eff[o.i - 1] : -Infinity, next = o.i < n - 1 ? eff[o.i + 1] : Infinity;
+        if (!(o.at > prev && o.at < next)) {
+          const nb = [o.i > 0 ? `${mapName}.${o.i - 1} at ${prev}` : null, o.i < n - 1 ? `${mapName}.${o.i + 1} at ${next}` : null].filter(Boolean).join(', ');
+          err(`${at}/cues/${o.j}/at`, 'E_SCHEMA', `cue "${mapName}.${o.i}" at ${o.at} breaks the index order of the "${mapName}" cue map in beat ${beat.id} (${nb}): items are revealed in order, so each "${mapName}.<i>" must lie strictly between its neighbours`);
+        }
+      }
+    }
   });
   return errors;
 }

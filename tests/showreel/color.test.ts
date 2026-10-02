@@ -280,3 +280,10 @@ describe.skipIf(!E2E)('BT.709 colour round trip (SHOWREEL_E2E=1)', () => {
     }, 180_000);
   }
 });
+
+// Registered only when E2E is off: a full E2E run must report 0 skipped (Rule 12).
+if (!E2E) {
+  describe('BT.709 colour round trip (skipped)', () => {
+    it.skip('SKIPPED: set SHOWREEL_E2E=1 (+ SHOWREEL_TOOL_DIR, ffmpeg) to run the encode → decode ΔE76 round trip', () => {});
+  });
+}

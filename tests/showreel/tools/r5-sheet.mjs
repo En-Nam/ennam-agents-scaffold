@@ -6,16 +6,16 @@
 // The spike is used read-only: classic scripts via file URL, window.renderAt(t, undefined, 6).
 // M2 still per row = the FIRST beat of that archetype/variant at its contact-sheet "hold" moment (render/sheet.mjs
 // sheetTimes: 0.6 of the beat's solo window), so the pick is mechanical, not cherry-picked.
-import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
-import os from 'node:os';
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '..', '..', '..');
 const TOOLKIT = path.join(REPO, 'templates', 'showreel', '.claude', 'showreel');
-const { loadDep } = await import(pathToFileURL(path.join(TOOLKIT, 'lib', 'util', 'tooldeps.mjs')).href);
-const { launchArgs } = await import(pathToFileURL(path.join(TOOLKIT, 'render', 'browser.mjs')).href);
+// browser discovery + launch = the toolkit's own C11 launchBrowser (SHOWREEL_BROWSER / CHROME_PATH, Chrome, Edge via
+// the connect path, Chromium on PATH) — no second detection list here
+const { launchBrowser } = await import(pathToFileURL(path.join(TOOLKIT, 'render', 'browser.mjs')).href);
 const { startServer } = await import(pathToFileURL(path.join(TOOLKIT, 'render', 'server.mjs')).href);
 const { sheetTimes } = await import(pathToFileURL(path.join(TOOLKIT, 'render', 'sheet.mjs')).href);
 
@@ -24,10 +24,7 @@ const OUT = path.resolve(process.argv[3] || path.join(REPO, '.showreel-dev', 'm2
 const FRAMES = process.argv[4] ? path.resolve(process.argv[4]) : null;
 const SPIKE = pathToFileURL(path.join(REPO, 'spikes', 'showreel-v0', 'index.html')).href;
 const S = 6;
-const EXE = [process.env.SHOWREEL_BROWSER, process.env.CHROME_PATH, 'C:/Program Files/Google/Chrome/Application/chrome.exe', '/usr/bin/google-chrome', '/usr/bin/chromium']
-  .find((p) => p && existsSync(p));
 if (!process.env.SHOWREEL_TOOL_DIR) throw new Error('set SHOWREEL_TOOL_DIR (e.g. .showreel-dev/.tool)');
-if (!EXE) throw new Error('no Chrome found: set SHOWREEL_BROWSER');
 for (const f of ['timeline.json', 'resolved.json']) {
   if (!existsSync(path.join(BUILD, f))) throw new Error(`${BUILD} has no ${f}: run tests/showreel/e2e-full.test.ts with SHOWREEL_E2E_ARTIFACTS first`);
 }
@@ -54,9 +51,8 @@ const picks = ROWS.map(([arch, vf, scene, ts]) => {
   return { arch, scene, ts, beat: b, t: h.t, label: `M2  ${b.id} ${b.archetype}/${b.variant}  hold  local t=${(h.t - b.t0).toFixed(2)}s  (film t=${h.t.toFixed(2)}s, S=${S})` };
 });
 
-const pp = (await loadDep('puppeteer-core', process.cwd())).default;
-const udd = mkdtempSync(path.join(os.tmpdir(), 'showreel-r5-udd-'));
-const browser = await pp.launch({ executablePath: EXE, headless: true, args: launchArgs(), userDataDir: udd });
+// puppeteer-core resolves from the cwd (the repo root here, like the gated tests' loadDep(…, process.cwd()))
+const { browser, close } = await launchBrowser({ hostRoot: process.cwd() });
 const srv = await startServer({ toolkitDir: TOOLKIT, toolDir: process.env.SHOWREEL_TOOL_DIR, buildDir: BUILD });
 const grab = (page, expr) => page.evaluate(expr);
 try {
@@ -99,7 +95,6 @@ try {
   writeFileSync(OUT, Buffer.from(png.split(',')[1], 'base64'));
   console.log(JSON.stringify({ ok: true, out: OUT, build: BUILD, rows: picks.map((p) => ({ arch: p.arch, beat: p.beat.id, variant: p.beat.variant, t: p.t, spike: `${p.scene} t=${p.ts}` })) }));
 } finally {
-  await browser.close();
+  await close();
   await srv.close();
-  rmSync(udd, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 }

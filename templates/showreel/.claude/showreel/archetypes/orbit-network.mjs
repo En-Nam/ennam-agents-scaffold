@@ -5,7 +5,8 @@
 // spirals into a point (the singularity) — a natural hand-off to a zoom-through / column-wipe / cut.
 //   orbit — the only variant.
 // Slots: hub (app.name, 1) · nodes (stack.item | feature | route, 3–8; routes render in mono via familyOf).
-// Colours: every colour comes from params.palette (roles primary/secondary/hot + text/ink/mint/amber tokens);
+// Colours: every colour comes from params.palette (roles primary/secondary/hot, badge colours = api.accents(N),
+// text/ink, and the mint status dot);
 // no colour literals (static test). Text: only api.text on the beat ctx (manifest + C16 bbox). The hub glow is a
 // blur-filtered CACHE sprite built once in layout() (M0 root cause: blur sprites must be CPU-pinned).
 // Pure function of localT: phase marks derive from cues + params.dur + api.grid; no absolute seconds (D10).
@@ -17,11 +18,11 @@ const LANE = 770;                  // badges soft-compress above this y: the low
 const HUB_MAX = 84, HUB_W = 1500, HUB_TRACK = -1.2, HUB_BASE = 944;   // ≤ 96 device px → GPU text path
 const CHIP_H = 82, CHIP_LABEL_W = 360;  // a 20-char (C13 maxChars) label fits at 28 px in display AND mono (one shared px per slot)
 const PK_SP = 1.25;                // beam packet cycles per second
+const ORBIT_W = 0.62;              // orbit spin (rad/s) — ONE constant for the spin and the badge phase below
 const GLOW_PAD = 60;
 const ICON_BY_KIND = { route: 'browser', 'stack.item': 'hub', feature: 'code' };
 
 const fract = (v) => v - Math.floor(v);
-const kindOf = (item) => (/^f\.(.+)\.\d+$/.exec(item.id) ?? [])[1] ?? '';
 
 // N-dependent orbit geometry: more badges → wider, slightly steeper orbit (less overlap at the sides)
 const orbitFor = (N) => (N <= 6 ? { R: 500, tilt: 0.4 } : { R: 560, tilt: 0.46 });
@@ -95,16 +96,17 @@ export default {
     const nodes = rb.slots.nodes.items;
     const N = nodes.length;
     const m = api.makeCanvas('cache', 8, 8).ctx;
+    // the compiler emits ignite + node.<i> per node (C14): a missing one fails the boot, never a made-up time
+    for (const name of ['ignite', ...nodes.map((_, i) => `node.${i}`)]) api.cue(name);
 
     const hubPx = api.fitSlot('hub', { maxW: HUB_W, maxPx: HUB_MAX, weight: 700, track: HUB_TRACK });
     const nodePx = api.fitSlot('nodes', { maxW: CHIP_LABEL_W, maxPx: N <= 6 ? 31 : 28, weight: 600, track: 0.3 });
 
-    // badge colours: palette roles first, then accents; de-duplicated so neighbours differ where possible
-    const cycle = [];
-    for (const c of [P.primary, P.secondary, P.hot, P.amber, P.mint, api.mix(P.primary, P.secondary, 0.5)]) if (!cycle.includes(c)) cycle.push(c);
+    // badge colours: accents derived from the palette roles only (never a named hue the palette did not pick)
+    const cycle = api.accents(N);
     const chips = nodes.map((item, i) => {
       const lw = api.measure(m, item, { size: nodePx, weight: 600, track: 0.3 }).width;
-      return { item, w: CHIP_H + lw + 42, c: cycle[i % cycle.length], icon: ICON_BY_KIND[kindOf(item)] ?? 'code', a0: 2.35 + (i * TAU) / N };
+      return { item, w: CHIP_H + lw + 42, c: cycle[i], icon: ICON_BY_KIND[api.kindOf(item)] ?? 'code', a0: 2.35 + (i * TAU) / N };
     });
 
     // hub label: per-letter offsets (letters rise one by one) + one blurred glow sprite on a CACHE canvas
@@ -143,9 +145,9 @@ export default {
     const N = L.chips.length;
     const ex = (dt, decay) => (dt >= 0 ? Math.exp(-dt * decay) : 0);
 
-    // ── phase marks (local seconds) from cues, else the archetypes.json defaults ──
-    const ign = cues.ignite ?? snapG(dur * 0.12);
-    const pop = L.chips.map((_, i) => cues[`node.${i}`] ?? snapG(dur * (0.2 + (0.25 * i) / Math.max(1, N - 1))));
+    // ── phase marks (local seconds): the compiled cues (C14), never a private schedule ──
+    const ign = api.cue('ignite');
+    const pop = L.chips.map((_, i) => api.cue(`node.${i}`));
     const lastPop = Math.max(...pop);
     const T = {
       ign, pop, end: dur,
@@ -156,12 +158,13 @@ export default {
       textExit: dur - 2 * grid, textDur: 1.6 * grid,
     };
     const relay0 = lastPop + 2 * grid;
-    // orbit phase: at the R5 hold moment (0.576·dur) the back-centre of the orbit (θ = −π/2, behind the brain)
-    // sits midway between two badges, so no label is hidden by the core there (pure function of dur + cues)
-    const ph0 = -Math.PI / 2 + Math.PI / N - 0.62 * (dur * 0.576 - T.ign);
+    // orbit phase — an archetype invariant, not a reviewer frame: at the ARMY flare (T.army: every badge flashes in
+    // turn, the moment the labels are read) the back-centre of the orbit (θ = −π/2, behind the brain-core) sits
+    // midway between two badges, so no label is hidden by the core then. Pure function of the cues + dur.
+    const ph0 = -Math.PI / 2 + Math.PI / N - ORBIT_W * (T.army - T.ign);
 
     const exitU = (u) => clamp((u - T.exit) / (T.end - T.exit));
-    const orbitSpin = (u) => 0.62 * (u - T.ign) + 4.5 * Math.pow(exitU(u), 2);
+    const orbitSpin = (u) => ORBIT_W * (u - T.ign) + 4.5 * Math.pow(exitU(u), 2);
     const sysScale = (U) => 1 - Math.pow(U, 3.2);
     const orbitTilt = (U) => L.tilt + 1.12 * ease.inOutCubic(U);
     const winFade = (u) => 1 - ease.inQuad(clamp((exitU(u) - 0.68) / 0.32));
@@ -597,7 +600,7 @@ export default {
       if (done > 0) {
         const pu = pulseEnergy(lt) * 0.5 + 0.8 * ex(lt - T.army, 3);
         ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha *= done * clamp(0.5 + pu) * 0.8;
-        ctx.drawImage(L.glow.canvas, L.glow.x, L.glow.y, L.glow.w, L.glow.h);
+        ctx.drawImage(L.glow.canvas, L.glow.x, L.glow.y, L.glow.w, L.glow.h); // bloom, not text: no manifest box
         ctx.restore();
       }
       const ul = ease.outExpo(clamp((lt - T.brain - 0.28) / 0.5));

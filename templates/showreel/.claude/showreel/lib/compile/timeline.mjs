@@ -34,7 +34,8 @@ function inputError(message, fix) {
   return new ShowreelError('E_TIMELINE_INPUT', message, fix);
 }
 
-const asList = (v) => (v === undefined ? [] : Array.isArray(v) ? v : [v]);
+// a binding as the list of bound ids: unbound → [], one id → [id] (validate.mjs idsOf never sees unbound refs)
+const boundList = (v) => (v === undefined ? [] : Array.isArray(v) ? v : [v]);
 
 /**
  * Every beat must be on screen ALONE for a while: if its incoming and outgoing overlaps cover its whole
@@ -149,7 +150,7 @@ export function compileTimeline(storyboard, resolved, archetypes, { fps } = {}) 
     const merged = new Map();
     for (const c of specs[i].defaultCues || []) merged.set(c.name, { c, map: null });
     for (const map of specs[i].cueMaps || []) {
-      const N = asList(b.bindings?.[map.per]).length;
+      const N = boundList(b.bindings?.[map.per]).length;
       for (let k = 0; k < N; k++) {
         const name = `${map.name}.${k}`;
         const at = map.from + ((map.to - map.from) * k) / Math.max(1, N - 1);
@@ -187,6 +188,21 @@ export function compileTimeline(storyboard, resolved, archetypes, { fps } = {}) 
       placed.push({ g, name: c.name });
       const t = Math.min(lastFrameT, snapFrame(g, fps));
       hits.push({ t, kind: c.kind, amp: c.amp, beatId: b.id, cue: c.name, order: i });
+    }
+    // Archetypes reveal cue-map items in index order (C14): <map>.0 < <map>.1 < … after snapping and pushes.
+    // An override (fixed, never pushed) can land a mapped neighbour behind it — refuse instead of scrambling.
+    for (const map of specs[i].cueMaps || []) {
+      const gs = placed.filter((p) => p.name.startsWith(map.name + '.')).map((p) => [Number(p.name.slice(map.name.length + 1)), p.g]);
+      gs.sort((x, y) => x[0] - y[0]);
+      for (let k = 1; k < gs.length; k++) {
+        if (!(gs[k][1] > gs[k - 1][1] + EPS)) {
+          throw new ShowreelError(
+            'E_TIMELINE',
+            `Beat ${b.id} (${b.archetype}): cue-map hits ${map.name}.${gs[k - 1][0]} (${gs[k - 1][1].toFixed(3)} s) and ${map.name}.${gs[k][0]} (${gs[k][1].toFixed(3)} s) are out of index order, so the ${map.per} would be revealed scrambled.`,
+            `Keep storyboard overrides of "${map.name}.<i>" on ${b.id} in index order and at least ${GRID} s apart, or drop them.`,
+          );
+        }
+      }
     }
   });
   hits.sort((a, b) => a.t - b.t || a.order - b.order || (a.cue < b.cue ? -1 : a.cue > b.cue ? 1 : 0));

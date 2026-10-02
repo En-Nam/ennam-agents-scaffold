@@ -186,3 +186,10 @@ describe.skipIf(!E2E)('kinetic-text chapter in the browser (SHOWREEL_E2E=1)', ()
     }
   }, 180_000);
 });
+
+// Registered only when E2E is off: a full E2E run must report 0 skipped (Rule 12).
+if (!E2E) {
+  describe('kinetic-text chapter in the browser (skipped)', () => {
+    it.skip('SKIPPED: set SHOWREEL_E2E=1 (+ SHOWREEL_TOOL_DIR) to run the chapter card fit/clipping and determinism checks', () => {});
+  });
+}

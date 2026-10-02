@@ -10,10 +10,13 @@ import { resolve } from '../../templates/showreel/.claude/showreel/lib/truth/res
 import { compileTimeline } from '../../templates/showreel/.claude/showreel/lib/compile/timeline.mjs';
 import { offFrame } from '../../templates/showreel/.claude/showreel/lib/truth/safearea.mjs';
 import { checkManifest } from '../../templates/showreel/.claude/showreel/lib/truth/manifest.mjs';
+import { PALETTES, accents } from '../../templates/showreel/.claude/showreel/engine/palettes.mjs';
+import { fakeApi } from './helpers/fake-api';
 
 // v1.16 showreel M2 Task 3 — layered-stack (port of spike s3 slabs). Why each guarantee matters:
-//   palette   a non-violet film must not show violet slabs: every colour comes from params.palette (no hex
-//             literal, no numeric rgb() literal in the module — review focus 4).
+//   palette   a non-violet film must not show violet slabs: every colour comes from params.palette (no colour
+//             literal — engine-static's table-driven ban, review focus 4) AND the layer colours are the palette
+//             ROLES or mixes of them (api.accents), never a named hue the palette did not pick (layout test).
 //   cues      each slab THUDS on its compiled cue-map hit `layer.<i>` (C14): picture and score share one clock,
 //             so an override of `layer.0` must move the picture, not just the sound.
 //   clipping  2 / 4 / 5 layers of 24-char (maxChars) facts stay inside the 48 px safe area at local progress
@@ -21,8 +24,9 @@ import { checkManifest } from '../../templates/showreel/.claude/showreel/lib/tru
 //   truth     every resolved layer + the label reach the screen; manifest ⊆ resolved (D8 / Rule 13).
 //   fit       a layer too long for its tag reports fit null → `check` fails instead of clipping.
 //   AC3       frames are byte-identical across fresh pages and launches at S=1 and S=6.
-// The archetype is injected with a test-local page (fixtures/archetypes/layered-stack/page.html), so this
-// test does not depend on archetypes/index.mjs (the orchestrator registers the module after the fan-out).
+// The browser cases boot a test-local copy of the engine page (fixtures/archetypes/layered-stack/page.html) that
+// injects the module; it is also registered in archetypes/index.mjs now (Task 7), and the N-matrix renders it
+// through the shipped engine/page.html.
 
 const E2E = process.env.SHOWREEL_E2E === '1';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -76,18 +80,43 @@ describe('layered-stack static guards (D8 text API, D9 canvas roles, palette-onl
     expect(SPEC.cueMaps).toEqual([expect.objectContaining({ name: 'layer', per: 'layers' })]);
   });
 
+  // layout() run in Node with a fake engine api (helpers/fake-api.ts): what the archetype DECIDES, per palette
+  const layoutFor = async (n: number, palette: string) => {
+    const mod = (await import(pathToFileURL(MODULE).href)).default;
+    const items = LAYER_IDS.slice(0, n).map((id) => ({ id, text: FACTS.facts.find((f: any) => f.id === id).display, number: null, unit: null }));
+    const cues = Object.fromEntries(items.map((_, i) => [`layer.${i}`, 1 + i * 0.5]));
+    const rb = { archetype: 'layered-stack', variant: 'slabs', slots: { layers: { source: 'fact', items, fitSizePx: null }, label: { source: 'phrase', items: [], fitSizePx: null } } };
+    return mod.layout(rb, 'slabs', fakeApi({ palette, cues, beatId: 'b2', archetype: 'layered-stack' }));
+  };
+
   it('tag panels of adjacent layers cannot overlap: the tag pitch is at least the tag height', async () => {
     // the browser no-overlap check judges text bboxes only; the glass panels are taller than their text
-    const { GEOM } = await import(pathToFileURL(MODULE).href);
-    expect(GEOM.TAG_H).toBeGreaterThan(0);
-    expect(GEOM.TAG_PITCH).toBeGreaterThanOrEqual(GEOM.TAG_H);
+    const L = await layoutFor(N_MAX, 'violet');
+    expect(L.tagH).toBeGreaterThan(0);
+    expect(L.tagPitch).toBeGreaterThanOrEqual(L.tagH);
+    for (let k = 1; k < L.layers.length; k++) expect(Math.abs(L.layers[k].tagY - L.layers[k - 1].tagY), `tag ${k}`).toBeGreaterThanOrEqual(L.tagH);
   });
 
-  it('every colour comes from params.palette: no hex literal and no numeric rgb()/rgba() literal in the module', () => {
-    expect(src.match(/#[0-9a-fA-F]{3,8}\b/g) ?? []).toEqual([]);
-    expect(src.match(/rgba?\(\s*\d/g) ?? []).toEqual([]);
-    // named CSS colours would dodge both bans
-    expect(src.match(/['"](white|black|red|green|blue|yellow|cyan|magenta|orange|purple|gray|grey)['"]/gi) ?? []).toEqual([]);
+  it('a non-violet film shows no violet slab: every layer colour is a palette role or a mix of roles, all distinct', async () => {
+    // the hex-literal ban cannot see this: `P.violet` is a palette token, but on the amber palette it is a hue the
+    // palette did NOT pick. Layer colours must come from the roles (primary / secondary / hot) only.
+    for (const name of Object.keys(PALETTES)) {
+      const P = (PALETTES as any)[name];
+      const notRoles = ['violet', 'cyan', 'amber', 'magenta', 'mint', 'red'].map((h) => P[h]).filter((c) => ![P.primary, P.secondary, P.hot].includes(c));
+      const cols = (await layoutFor(N_MAX, name)).layers.map((l: any) => l.c);
+      expect(cols.length).toBe(N_MAX);
+      expect(new Set(cols).size, `${name}: ${N_MAX} distinct layer colours`).toBe(N_MAX);
+      for (const c of cols) expect(notRoles, `${name}: layer colour ${c} is a named hue outside the roles`).not.toContain(c);
+      expect(cols, name).toEqual(accents(P, N_MAX));
+      expect(cols.slice(0, 3), `${name}: the first three layers are the roles`).toEqual([P.primary, P.secondary, P.hot]);
+    }
+  });
+
+  it('a missing `layer.<i>` cue fails layout loudly naming it (never a re-derived schedule that drifts from the score)', async () => {
+    const mod = (await import(pathToFileURL(MODULE).href)).default;
+    const items = LAYER_IDS.slice(0, 3).map((id) => ({ id, text: 'x', number: null, unit: null }));
+    const rb = { archetype: 'layered-stack', variant: 'slabs', slots: { layers: { source: 'fact', items, fitSizePx: null }, label: { source: 'phrase', items: [], fitSizePx: null } } };
+    expect(() => mod.layout(rb, 'slabs', fakeApi({ cues: { 'layer.0': 1, 'layer.1': 2 }, beatId: 'b2', archetype: 'layered-stack' }))).toThrow(/b2 \(layered-stack\) has no cue "layer\.2"/);
   });
 
   it('draws text only through api.text (no fillText/strokeText) and makes no canvas of its own', () => {
@@ -100,7 +129,8 @@ describe('layered-stack static guards (D8 text API, D9 canvas roles, palette-onl
     const hits = [...src.matchAll(/\b(t|time|lt|localT)\s*[<>=!]=?\s*(\d+(?:\.\d+)?)\b/g)].filter((m) => m[2] !== '0' && m[2] !== '1');
     expect(hits.map((m) => m[0])).toEqual([]);
     expect(src).not.toMatch(/\bat\s*:\s*\d/);
-    expect(src).toContain('cues[`layer.${k}`]');
+    expect(src).toContain('api.cue(`layer.${k}`)');
+    expect(src).not.toMatch(/cues(\[[^\]]+\]|\.\w+)\s*\?\?/); // no `cues[x] ?? re-derived schedule` (drifts from the score)
   });
 });
 

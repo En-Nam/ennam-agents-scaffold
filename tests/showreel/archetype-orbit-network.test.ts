@@ -11,6 +11,7 @@ import { compileTimeline } from '../../templates/showreel/.claude/showreel/lib/c
 import { offFrame } from '../../templates/showreel/.claude/showreel/lib/truth/safearea.mjs';
 import { checkManifest } from '../../templates/showreel/.claude/showreel/lib/truth/manifest.mjs';
 import orbitNetwork from '../../templates/showreel/.claude/showreel/archetypes/orbit-network.mjs';
+import { fakeApi } from './helpers/fake-api';
 
 // v1.16 M2 Task (orbit-network) — port of spike A s4 "Army" (brain-core ignites, badges pop onto a tilted 3D
 // orbit, beams + packets, memory ring). Why each guard matters:
@@ -22,8 +23,8 @@ import orbitNetwork from '../../templates/showreel/.claude/showreel/archetypes/o
 //   (c) Rule 13: every resolved item (hub + every node) is ON SCREEN at the hold frame, and the manifest stays
 //       ⊆ resolved (checkManifest — the same oracle `check` uses).
 //   (d) palette carry + text API: no colour literals (hex or numeric rgb) and no fillText/strokeText in the file.
-// The archetype is injected through a test-local page (fixtures/archetypes/orbit-network/page.html) so this
-// task does not touch archetypes/index.mjs (the orchestrator registers it after the fan-out).
+// The browser cases boot a test-local copy of the engine page (fixtures/archetypes/orbit-network/page.html); the
+// module is also registered in archetypes/index.mjs (Task 7) and the N-matrix renders it via engine/page.html.
 
 const E2E = process.env.SHOWREEL_E2E === '1';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -72,13 +73,26 @@ describe('orbit-network static guards (palette carry, text API)', () => {
     expect(typeof orbitNetwork.draw).toBe('function');
     expect(Object.keys(SPEC.slots).sort()).toEqual(['hub', 'nodes']);
   });
-  it('no colour literals: no #hex, no numeric rgb()/rgba() — every colour comes from params.palette', () => {
-    expect(src.match(/#[0-9a-fA-F]{3,8}\b/g) ?? []).toEqual([]);
-    expect(src.match(/rgba?\(\s*\d/g) ?? []).toEqual([]);
-    // the guard can fail: the spike scene it was ported from is full of both
-    const spike = readFileSync(path.join(REPO, 'spikes', 'showreel-v0', 'scenes', 's4.js'), 'utf8');
-    expect((spike.match(/#[0-9a-fA-F]{3,8}\b/g) ?? []).length).toBeGreaterThan(0);
-    expect((spike.match(/rgba?\(\s*\d/g) ?? []).length).toBeGreaterThan(0);
+  // no colour literals: one table-driven ban over every archetype module (engine-static.test.ts)
+  it('badge colours are palette roles or mixes of roles (api.accents), and the orbit phase has ONE spin constant', () => {
+    expect(src).toMatch(/const cycle = api\.accents\(N\)/);
+    expect(src).not.toMatch(/P\.(violet|cyan|amber|magenta|red)\b/);
+    // the badge phase is anchored to the archetype's own army flare, not to a reviewer's sample moment
+    expect(src).not.toMatch(/0\.576/);
+    expect(src).not.toMatch(/0\.62 \* \(/); // the spin rate is never a second literal copy
+    expect(src).toMatch(/ph0 = .*ORBIT_W \* \(T\.army - T\.ign\)/);
+    expect(src).toMatch(/orbitSpin = \(u\) => ORBIT_W \*/);
+  });
+  it('a missing cue (`ignite` or a `node.<i>`) fails layout loudly naming it — no re-derived schedule', () => {
+    const items = NODE_IDS.slice(0, 3).map((id) => ({ id, text: 'x', number: null, unit: null }));
+    const rb = { archetype: 'orbit-network', variant: 'orbit', slots: { hub: { source: 'fact', items: [{ id: 'f.app.name.1', text: 'Acme', number: null, unit: null }], fitSizePx: null }, nodes: { source: 'fact', items, fitSizePx: null } } };
+    const all = { ignite: 0.5, 'node.0': 1, 'node.1': 1.25, 'node.2': 1.5 };
+    for (const missing of ['ignite', 'node.2']) {
+      const cues: Record<string, number> = { ...all };
+      delete cues[missing];
+      expect(() => orbitNetwork.layout(rb, 'orbit', fakeApi({ cues, beatId: 'b2', archetype: 'orbit-network' })), missing).toThrow(new RegExp(`has no cue "${missing.replace('.', '\\.')}"`));
+    }
+    expect(src).not.toMatch(/cues(\[[^\]]+\]|\.\w+)\s*\?\?/);
   });
   it('no direct text drawing: fillText/strokeText never appear (all text goes through api.text)', () => {
     expect(src).not.toMatch(/\.(fill|stroke)Text\(/);
@@ -207,11 +221,14 @@ describe.skipIf(!E2E)('orbit-network in the browser (SHOWREEL_E2E=1)', () => {
     console.log(JSON.stringify({ orbitNetworkCases: report }));
   }, 300_000);
 
-  it('C14 cue names: overriding `node.2` later moves badge 2 (the picture follows the compiled hit, not the private fallback)', async () => {
-    // the archetype's `??` fallback equals the compiler's cue-map formula, so only an override can prove the
-    // module reads `node.<i>` by name: a misnamed cue would keep badge 2 at its default pop time.
+  it('C14 cue names: moving the compiled `node.2` hit moves badge 2 (the picture follows the hit by name)', async () => {
+    // A storyboard override can no longer reorder a cue map (validate + compile refuse it: badges pop in index
+    // order), so the proof moves the COMPILED hit itself: if draw() read anything but cues["node.2"], badge 2
+    // would keep its default pop time. (A missing `node.<i>` fails the boot — the static fail-loud test.)
     const base = CASES.typical();
-    const late = film(COUNTS.typical, { weight: 1.5, out: 'cut', cues: [{ name: 'node.2', at: 0.55, kind: 'pop', amp: 0.15 }] });
+    const late = CASES.typical();
+    const h = late.timeline.hits.find((x: any) => x.beatId === 'b2' && x.cue === 'node.2');
+    h.t = Math.round((h.t + 0.6) * FPS) / FPS;
     const id = NODE_IDS[2]!;
     const h2 = (f: Film) => f.hit('node.2');
     expect(h2(late)).toBeGreaterThan(h2(base) + 0.5);

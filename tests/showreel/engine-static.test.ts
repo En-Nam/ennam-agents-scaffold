@@ -6,12 +6,14 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import fg from 'fast-glob';
 import { validate } from '../../templates/showreel/.claude/showreel/lib/util/schema.mjs';
-import { fitText, text, counter, unit, manifest, clusters, beginFrame } from '../../templates/showreel/.claude/showreel/engine/text.mjs';
+import { fitText, text, counter, unit, manifest, clusters, beginFrame, blit, setBoxRecording } from '../../templates/showreel/.claude/showreel/engine/text.mjs';
 import { offFrame } from '../../templates/showreel/.claude/showreel/lib/truth/safearea.mjs';
-import { parseFontsourceCss, parseUnicodeRange, glyphGapsFor, familyOf } from '../../templates/showreel/.claude/showreel/engine/fonts.mjs';
+import { parseFontsourceCss, parseUnicodeRange, glyphGapsFor, familyOf, kindOf } from '../../templates/showreel/.claude/showreel/engine/fonts.mjs';
 import { rng, hash, ease } from '../../templates/showreel/.claude/showreel/engine/math.mjs';
-import { PALETTES, palette } from '../../templates/showreel/.claude/showreel/engine/palettes.mjs';
-import { checkTimeline } from '../../templates/showreel/.claude/showreel/engine/core.mjs';
+import { PALETTES, palette, accents } from '../../templates/showreel/.claude/showreel/engine/palettes.mjs';
+import { checkTimeline, cueLookup, CAMERA, SAFE_RECT } from '../../templates/showreel/.claude/showreel/engine/core.mjs';
+import { makeCanvas } from '../../templates/showreel/.claude/showreel/engine/canvas.mjs';
+import { fakeApi } from './helpers/fake-api';
 import { ARCHETYPES, TRANSITIONS } from '../../templates/showreel/.claude/showreel/archetypes/index.mjs';
 import { startServer } from '../../templates/showreel/.claude/showreel/render/server.mjs';
 
@@ -284,6 +286,199 @@ describe('manifest bbox (C16) — device-space bounds of every drawn text, for t
     const flagged = offFrame(manifest()).map((m: { source: string }) => m.source);
     expect(flagged).toContain('f.feature.81');
     expect(flagged).not.toContain('f.feature.82');
+  });
+});
+
+describe('text sprites + coverage (C16 / D8): sprite text counts only once it is placed in a frame', () => {
+  // Build-once 'cache' sprites hold api.text draws made at layout boot, BEFORE any frame. A sprite that is never
+  // put on screen must not count as drawn (coverage), and one that is must get a frame-space box (safe area).
+  let restoreDoc: (() => void) | null = null;
+  beforeAll(() => {
+    const g = globalThis as any;
+    const had = 'document' in g, prev = g.document;
+    // canvas.mjs makeCanvas needs document.createElement: hand it fake canvases whose 2D context is fakeCtx()
+    g.document = { createElement: () => { const c: any = { width: 0, height: 0 }; c.getContext = () => { const { ctx } = fakeCtx(); (ctx as any).canvas = c; return ctx; }; return c; }, body: { appendChild() {} } };
+    restoreDoc = () => { if (had) g.document = prev; else delete g.document; };
+  });
+  afterAll(() => restoreDoc?.());
+  const entry = (source: string) => manifest().find((m: { source: string }) => m.source === source) as { bbox: { x: number; y: number; w: number; h: number } | null; onScreen: boolean };
+
+  it('text drawn into a cache sprite is recorded WITHOUT a frame box and is NOT on screen until the sprite is blitted', () => {
+    beginFrame();
+    const sprite = makeCanvas('cache', 400, 100);
+    text(sprite.ctx, { id: 'f.feature.90', text: 'abcde', number: null, unit: null }, 20, 60, { size: 20 }); // sprite rect x 20..80, y 46..64
+    expect(entry('f.feature.90')).toMatchObject({ bbox: null, onScreen: false });
+    // a plain drawImage of the sprite (what a glow / bloom sprite uses) never places its text
+    const { ctx } = fakeCtx();
+    (ctx as any).drawImage = () => {};
+    ctx.drawImage(sprite.canvas as any, 0, 0);
+    expect(entry('f.feature.90')).toMatchObject({ bbox: null, onScreen: false });
+  });
+
+  it('blit(ctx, sprite, …) maps the sprite text box through the destination rect AND the ctx transform (all drawImage forms)', () => {
+    const sprite = makeCanvas('cache', 400, 100);
+    text(sprite.ctx, { id: 'f.feature.91', text: 'abcde', number: null, unit: null }, 20, 60, { size: 20 });
+    const { ctx } = fakeCtx();
+    const drawn: unknown[][] = [];
+    (ctx as any).drawImage = (...a: unknown[]) => drawn.push(a);
+    beginFrame();
+    ctx.translate(100, 200);
+    blit(ctx, sprite.canvas, 10, 0); // (dx, dy): sprite x 20..80 → 130..190, y 46..64 → 246..264
+    expect(drawn).toHaveLength(1);
+    expect(entry('f.feature.91')).toMatchObject({ bbox: { x: 130, y: 246, w: 60, h: 18 }, onScreen: true });
+    beginFrame();
+    blit(ctx, sprite.canvas, 0, 0, 800, 200); // (dx, dy, dw, dh): ×2 → x 140..260, y 292..328
+    expect(entry('f.feature.91').bbox).toEqual({ x: 140, y: 292, w: 120, h: 36 });
+    beginFrame();
+    blit(ctx, sprite.canvas, 50, 0, 100, 100, 0, 0, 100, 100); // source rect x 50..150: only x 50..80 of the text
+    expect(entry('f.feature.91').bbox).toEqual({ x: 100, y: 246, w: 30, h: 18 });
+    beginFrame();
+    blit(ctx, sprite.canvas, 200, 0, 100, 100, 0, 0, 100, 100); // text entirely outside the source rect
+    expect(entry('f.feature.91').bbox).toBeNull();
+    expect(() => blit(ctx, sprite.canvas, 1, 2, 3)).toThrow(/2, 4 or 8/);
+  });
+
+  it('fully transparent draws (globalAlpha 0) record no box — on a frame or into a sprite', () => {
+    beginFrame();
+    const { ctx } = fakeCtx();
+    (ctx as any).globalAlpha = 0;
+    text(ctx, { id: 'f.feature.92', text: 'ghost', number: null, unit: null }, 500, 500, { size: 20 });
+    expect(entry('f.feature.92')).toMatchObject({ bbox: null, onScreen: false });
+    (ctx as any).globalAlpha = 1;
+    text(ctx, { id: 'f.feature.92', text: 'ghost', number: null, unit: null }, 500, 500, { size: 20, alpha: 0 });
+    expect(entry('f.feature.92')).toMatchObject({ bbox: null, onScreen: false });
+    text(ctx, { id: 'f.feature.92', text: 'ghost', number: null, unit: null }, 500, 500, { size: 20, alpha: 0.01 });
+    expect(entry('f.feature.92').onScreen).toBe(true);
+  });
+
+  it('while a transition runs (setBoxRecording(false)) no box is recorded: overlap frames are exempt from C16', () => {
+    beginFrame();
+    const { ctx } = fakeCtx();
+    setBoxRecording(false);
+    try {
+      text(ctx, { id: 'f.feature.93', text: 'wipe', number: null, unit: null }, 1900, 500, { size: 40 }); // would be off-frame
+    } finally {
+      setBoxRecording(true);
+    }
+    expect(entry('f.feature.93')).toMatchObject({ bbox: null, onScreen: false });
+    expect(offFrame(manifest()).map((m: { source: string }) => m.source)).not.toContain('f.feature.93');
+    text(ctx, { id: 'f.feature.93', text: 'wipe', number: null, unit: null }, 1900, 500, { size: 40 });
+    expect(offFrame(manifest()).map((m: { source: string }) => m.source)).toContain('f.feature.93');
+  });
+});
+
+describe('one engine fact, one copy (Rule 7): camera bounds, fact kinds, cue lookup', () => {
+  it('CAMERA is the worst case of renderFrame (push 1 + 0.035 + 0.028·1.4, shake (14 + 8)·1.2, roll 0.006·1.2) and SAFE_RECT keeps a point inside the 48 px margin under it', () => {
+    expect(CAMERA.pushMax).toBeCloseTo(1.0742, 6);
+    expect(CAMERA.shakeMax).toBeCloseTo(26.4, 6);
+    expect(CAMERA.rotMax).toBeCloseTo(0.0072, 6);
+    // the four corners of SAFE_RECT under the worst push + shake + roll (either sign) stay within [48, W−48]×[48, H−48]
+    const { pushMax: p, shakeMax: s, rotMax: r } = CAMERA;
+    for (const [x, y] of [[SAFE_RECT.x0, SAFE_RECT.y0], [SAFE_RECT.x1, SAFE_RECT.y0], [SAFE_RECT.x0, SAFE_RECT.y1], [SAFE_RECT.x1, SAFE_RECT.y1]]) {
+      for (const sg of [-1, 1]) for (const rs of [-1, 1]) {
+        const dx = (x - 960) * p, dy = (y - 540) * p, a = rs * r;
+        const X = 960 + sg * s + dx * Math.cos(a) - dy * Math.sin(a), Y = 540 + sg * s + dx * Math.sin(a) + dy * Math.cos(a);
+        expect(X).toBeGreaterThanOrEqual(48 - 1e-6); expect(X).toBeLessThanOrEqual(1872 + 1e-6);
+        expect(Y).toBeGreaterThanOrEqual(48 - 1e-6); expect(Y).toBeLessThanOrEqual(1032 + 1e-6);
+      }
+    }
+    // and renderFrame reads the same constants (no second literal copy of the camera in core.mjs)
+    const core = readFileSync(path.join(TOOLKIT, 'engine', 'core.mjs'), 'utf8');
+    expect(core).not.toMatch(/0\.028 \* Math\.min|\* 14 \+ Math\.sin/);
+  });
+
+  it('no archetype keeps its own copy of the camera bound, the fact-kind parser or a cue fallback', async () => {
+    const files = (await fg(['archetypes/**/*.mjs'], { cwd: TOOLKIT, absolute: true })).filter((f) => !f.endsWith('index.mjs'));
+    expect(files.length).toBeGreaterThanOrEqual(10);
+    expect(offenders(files, /1\.075|1 \+ 0\.035|0\.028 \* (?:Math\.min|1\.4)|\(14 \+ 8\)|CAM_PUSH\s*=\s*[\d(]|CAM_SHAKE\s*=\s*[\d(]|TEXT_L\s*=\s*\d/)).toEqual([]);
+    expect(offenders(files, /\^f\\\.\(\.\+\)/)).toEqual([]); // the id → kind parser lives in fonts.mjs (api.kindOf)
+    expect(offenders(files, /cues(\[[^\]]+\]|\.\w+)\s*\?\?/)).toEqual([]); // `cues.x ?? guess` hides a broken timeline
+    expect(offenders(files, /\bcues\.\w+|\bcues\[/)).toEqual([]); // cue times only via api.cue (throws when missing)
+  });
+
+  it('kindOf: fact kind from the item id, null for phrases; familyOf is built on it', () => {
+    expect(kindOf({ id: 'f.stack.item.3' })).toBe('stack.item');
+    expect(kindOf({ id: 'f.route.12' })).toBe('route');
+    expect(kindOf({ id: 'p.cta.1' })).toBeNull();
+  });
+
+  it('cueLookup returns the cue time and THROWS naming beat, archetype and cue when it is missing (never a made-up time)', () => {
+    const cue = cueLookup({ 'step.0': 1.25, converge: 3 }, 'b4', 'flow-graph');
+    expect(cue('step.0')).toBe(1.25);
+    expect(() => cue('step.1')).toThrow(/E_ENGINE: beat b4 \(flow-graph\) has no cue "step\.1".*converge, step\.0/);
+  });
+
+  // every archetype checks the cues it needs in layout(): a missing one fails the BOOT (all cue names it draws on)
+  const it1 = (id: string, text = 'Abc') => ({ id, text, number: null, unit: null });
+  const slot = (items: unknown[], source = 'fact') => ({ source, items, fitSizePx: null });
+  const CASES: [string, string, Record<string, unknown>, string[]][] = [
+    ['flow-graph', 'converge', { steps: slot([it1('f.feature.1'), it1('f.feature.2'), it1('f.feature.3')]), lead: slot([], 'phrase') }, ['step.0', 'step.1', 'step.2', 'converge']],
+    ['layered-stack', 'slabs', { layers: slot([it1('f.stack.item.1'), it1('f.stack.item.2'), it1('f.stack.item.3')]), label: slot([], 'phrase') }, ['layer.0', 'layer.1', 'layer.2']],
+    ['card-carousel', 'row', { cards: slot([it1('f.feature.1'), it1('f.feature.2'), it1('f.feature.3')]), lead: slot([], 'phrase') }, ['card.0', 'card.1', 'card.2', 'settle']],
+    ['orbit-network', 'orbit', { hub: slot([it1('f.app.name.1')]), nodes: slot([it1('f.feature.1'), it1('f.feature.2'), it1('f.feature.3')]) }, ['ignite', 'node.0', 'node.1', 'node.2']],
+    ['kinetic-text', 'chapter', { lines: slot([]), lead: slot([it1('p.chapter.1')], 'phrase') }, ['line']],
+    ['metrics-counter-lock', 'row', { counters: slot([{ id: 'f.count.1', text: '42', number: 42, unit: 'routes' }]), label: slot([], 'phrase') }, ['lock']],
+    ['lockup-cta', 'center', { name: slot([it1('f.app.name.1')]), tagline: slot([]), command: slot([]), cta: slot([], 'phrase') }, ['slam', 'sweep']],
+    ['cold-open-command', 'terminal', { command: slot([it1('f.command.1', 'npm run dev')]), caption: slot([], 'phrase') }, ['enter']],
+  ];
+  it('every registered archetype is in the missing-cue table (a new archetype cannot skip this check)', () => {
+    expect(CASES.map((c) => c[0]).sort()).toEqual(Object.keys(ARCHETYPES).sort());
+  });
+  for (const [id, variant, slots, needed] of CASES) {
+    it(`${id}: layout fails loudly naming each missing cue (${needed.join(', ')})`, () => {
+      const rb = { archetype: id, variant, slots };
+      for (const missing of needed) {
+        const cues = Object.fromEntries(needed.filter((n) => n !== missing).map((n, k) => [n, 0.5 + 0.25 * k]));
+        expect(() => (ARCHETYPES as any)[id].layout(rb, variant, fakeApi({ cues, beatId: 'b2', archetype: id })), `${id} without ${missing}`)
+          .toThrow(new RegExp(`b2 \\(${id}\\) has no cue "${missing.replace('.', '\\.')}"`));
+      }
+    });
+  }
+});
+
+describe('palette-only colours (review focus 4): ONE ban over every archetype + transition module', () => {
+  // hex (#fff, #8b6bff), a quoted rgb()/rgba()/hsl() literal (incl. a template `rgba(${…})`), a named CSS colour
+  const BANS = [/#[0-9a-fA-F]{3,8}\b/g, /['"`](?:rgba?|hsla?)\(/g, /['"`](?:white|black|red|green|blue|yellow|cyan|magenta|orange|purple|gray|grey|transparent)['"`]/gi];
+  const literals = (src: string) => BANS.flatMap((re) => src.match(re) ?? []);
+  // pre-v1.16-M2 debt, ratcheted (may shrink, never grow): cold-open-command keeps tinted greys of the M1 port.
+  // Follow-up: move them to palette tokens, then drop this entry.
+  const DEBT: Record<string, number> = { 'archetypes/cold-open-command.mjs': 38 };
+
+  it('the ban is live: it catches every literal form (and not the palette helpers)', () => {
+    for (const s of ["fill: '#8b6bff'", "c = '#fff'", "g.fillStyle = 'rgba(255,255,255,0.07)'", 'x = `rgba(${r},0,0,1)`', "'hsl(200, 50%, 50%)'", "s = 'white'", "k = 'Transparent'"]) expect(literals(s), s).toHaveLength(1);
+    for (const s of ['rgba(P.text, 0.5)', 'api.rgba(pal.white, a)', "mix(P.primary, P.white, 0.3)", "ctx.globalCompositeOperation = 'lighter'"]) expect(literals(s), s).toEqual([]);
+  });
+
+  it('no colour literal in any archetype or transition module (every colour comes from params.palette)', async () => {
+    const files = await fg(['archetypes/**/*.mjs'], { cwd: TOOLKIT, absolute: true });
+    expect(files.map(rel)).toEqual(expect.arrayContaining(['archetypes/transitions/column-wipe.mjs', 'archetypes/transitions/zoom-through.mjs', 'archetypes/lockup-cta.mjs']));
+    for (const f of files) {
+      const found = literals(readFileSync(f, 'utf8'));
+      const allowed = DEBT[rel(f)] ?? 0;
+      expect(found.length, `${rel(f)}: ${found.slice(0, 8).join(' ')}`).toBeLessThanOrEqual(allowed);
+    }
+  });
+
+  it('M2 archetypes and transitions use the palette ROLES, never a named hue the palette did not pick (P.violet/cyan/amber/magenta/red)', () => {
+    for (const f of ['flow-graph', 'layered-stack', 'card-carousel', 'orbit-network', 'transitions/column-wipe', 'transitions/zoom-through', 'lockup-cta', 'kinetic-text']) {
+      const src = readFileSync(path.join(TOOLKIT, 'archetypes', `${f}.mjs`), 'utf8');
+      // P.mint is the semantic "done" green (check marks, status dots) — allowed; accent colours use api.accents
+      expect(src.match(/\b(?:P|pal|palette)\.(?:violet|cyan|amber|magenta|red)\b/g) ?? [], f).toEqual([]);
+    }
+  });
+
+  it('accents(palette, n): the roles first, then their midpoints — distinct, hex, never a named hue outside the roles', () => {
+    for (const [name, P] of Object.entries<any>(PALETTES)) {
+      const a = accents(P, 6);
+      expect(a.slice(0, 3), name).toEqual([P.primary, P.secondary, P.hot]);
+      expect(new Set(a).size, name).toBe(6);
+      for (const c of a) expect(c, name).toMatch(/^#[0-9a-f]{6}$/);
+      const outside = ['violet', 'cyan', 'amber', 'magenta', 'mint', 'red'].map((h) => P[h]).filter((c) => ![P.primary, P.secondary, P.hot].includes(c));
+      for (const c of a) expect(outside, `${name}: ${c}`).not.toContain(c);
+      expect(accents(P, 8)[6], name).toBe(P.primary); // cycles beyond 6
+    }
+    expect(PALETTES.violet.white).toBe('#ffffff');
+    expect(PALETTES.violet.black).toBe('#000000');
   });
 });
 

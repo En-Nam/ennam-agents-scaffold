@@ -22,8 +22,10 @@ import { checkManifest } from '../../templates/showreel/.claude/showreel/lib/tru
 //   - refused by `check` (fit null → E_TEXT_FIT naming beat + slot).
 // It must NEVER be clipped silently. Here every case must FIT (fit not null): the slot limits in
 // archetypes.json are the promise to the agent, so a legal storyboard that cannot fit is a toolkit bug.
-// Plus D8 coverage: every resolved item of every beat reaches the manifest by those frames (an archetype that
-// silently drops the 6th card would pass the safe-area check trivially), and the manifest ⊆ resolved.
+// Plus D8 coverage: every resolved item of every beat reaches the SCREEN (a frame box, manifest onScreen) by those
+// frames (an archetype that silently drops the 6th card, or builds a title sprite it never blits, would pass the
+// safe-area check trivially), and the manifest ⊆ resolved. In-flight frames (every 5 %) fail like the contract
+// moments: one safe-area policy for every archetype.
 // Gated: SHOWREEL_E2E=1 (+ SHOWREEL_TOOL_DIR).
 
 const E2E = process.env.SHOWREEL_E2E === '1';
@@ -39,7 +41,7 @@ type Count = (typeof COUNTS)[number];
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Slot = { source: 'fact' | 'phrase'; kinds?: string[]; tags?: string[]; min: number; max: number; maxChars?: number };
-type Entry = { text: string; source: string; bbox: { x: number; y: number; w: number; h: number } | null };
+type Entry = { text: string; source: string; bbox: { x: number; y: number; w: number; h: number } | null; onScreen: boolean };
 
 const len = (s: string) => [...s].length;
 const nOf = (s: Slot, c: Count) => (c === 'min' ? s.min : c === 'max' ? s.max : Math.ceil((s.min + s.max) / 2));
@@ -241,7 +243,6 @@ describe.skipIf(!E2E)('N-matrix in the browser (SHOWREEL_E2E=1)', () => {
       try {
         const fit = await page.evaluate(() => (window as any).SHOWREEL.fit());
         const failures: string[] = [];
-        const transient: object[] = [];
         const drawn = async (t: number): Promise<Entry[]> => {
           await page.evaluate((t: number) => (window as any).SHOWREEL.renderAt(t, 1), t);
           return (await page.evaluate(() => (window as any).SHOWREEL.manifest()) as Entry[]).filter((e) => e.bbox);
@@ -255,8 +256,10 @@ describe.skipIf(!E2E)('N-matrix in the browser (SHOWREEL_E2E=1)', () => {
           const m = moments(b);
           // The contract's "fully revealed" moments (progress 0.5, last fully-on frame) MUST be inside the safe
           // area. A sweep of the beat (every 5 %) then feeds the manifest coverage below — a sequential archetype
-          // (punch: one line owns the frame at a time) shows each item at its own moment — and LOGS any in-flight
-          // overshoot (slam / reveal animations) as evidence; those frames are outside the contract.
+          // (punch: one line owns the frame at a time) shows each item at its own moment.
+          // ONE policy for every archetype (the lockup-cta / kinetic / orbit tests use the same one): a viewer
+          // sees every solo frame, so in-flight text past the 48 px margin (slam / reveal overshoot) is a clipped
+          // film and FAILS here too — it is never only logged. (All matrix films use cuts: every frame is solo.)
           for (const [name, t] of [['progress 0.5', m.mid], ['lastOn', m.lastOn]] as const) {
             const off = offFrame(await drawn(t), SAFE);
             for (const o of off) failures.push(`${tag} ${name} t=${t}: off-frame "${o.text}" (${o.source}) bbox=${JSON.stringify(o.bbox)}`);
@@ -264,16 +267,17 @@ describe.skipIf(!E2E)('N-matrix in the browser (SHOWREEL_E2E=1)', () => {
           for (let k = 1; k < 20; k++) {
             const t = frameAt(b.t0 + k * 0.05 * (b.t1 - b.t0));
             if (t >= m.lastOn) break;
-            for (const o of offFrame(await drawn(t), SAFE)) transient.push({ beat: tag, progress: k * 0.05, text: o.text, source: o.source, bbox: o.bbox });
+            for (const o of offFrame(await drawn(t), SAFE)) failures.push(`${tag} in flight (progress ${(k * 0.05).toFixed(2)}) t=${t}: off-frame "${o.text}" (${o.source}) bbox=${JSON.stringify(o.bbox)}`);
           }
         }
-        // D8 coverage + subset, over everything drawn on those frames
+        // D8 coverage + subset, over everything drawn on those frames. Coverage counts only entries that had a
+        // frame box in a rendered frame (onScreen): text drawn into a build-once sprite is recorded at layout boot,
+        // before any frame, so mere presence in the manifest proves nothing (a never-blitted title would pass).
         const man: Entry[] = await page.evaluate(() => (window as any).SHOWREEL.manifest());
-        const sources = new Set(man.map((e) => e.source));
+        const sources = new Set(man.filter((e) => e.onScreen === true).map((e) => e.source));
         for (const b of f.timeline!.beats) for (const [slot, s] of Object.entries<any>(f.resolved!.beats[b.id].slots)) {
           for (const item of s.items) if (!sources.has(item.id)) failures.push(`${b.id} ${b.archetype}/${b.variant} @${f.counts[b.id]} ${slot}: ${item.id} never drawn`);
         }
-        if (transient.length) console.log(JSON.stringify({ nmatrixTransientOvershoot: { film: f.name, frames: transient } }));
         expect(checkManifest(man, f.resolved), `${f.name}: manifest ⊆ resolved`).toEqual([]);
         expect(errors, `${f.name}: page errors`).toEqual([]);
         expect(failures, f.name).toEqual([]);

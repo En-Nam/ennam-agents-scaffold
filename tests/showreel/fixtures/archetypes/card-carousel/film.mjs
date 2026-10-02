@@ -1,7 +1,7 @@
 // Test-local films for the card-carousel archetype (M2 Task 4). Storyboards go through the PRODUCTION
 // validate → resolve → compileTimeline path, so cue-map hit names (`card.<i>`) and times are the compiler's,
-// never hand-written. The archetype is injected via page.html (a test-local registry: {...ARCHETYPES,
-// 'card-carousel'}), so this does not depend on archetypes/index.mjs registering it.
+// never hand-written. The browser cases boot page.html (a test copy of engine/page.html with {...ARCHETYPES,
+// 'card-carousel'}); the module is also registered in archetypes/index.mjs (Task 7, rendered by the N-matrix).
 import { readFileSync, mkdtempSync, writeFileSync, copyFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -135,7 +135,7 @@ export async function openPage(browser, url, query = '') {
   return page;
 }
 
-/** timestamps of a card beat (global s): enter (first card in flight), hit (card.1 + 2 frames),
+/** timestamps of a card beat (global s): enter (first card in flight), first (card.0 + 2 frames), hit (card.1 + 2 frames),
  *  half (local progress 0.5), hold (last card's text fully in, before settle), settle (+3 frames), last (last fully-on frame) */
 export function beatTimes(timeline, beatId) {
   const b = timeline.beats.find((x) => x.id === beatId);
@@ -150,6 +150,7 @@ export function beatTimes(timeline, beatId) {
   return {
     n,
     enter: hit('card.0') - 0.2,
+    first: hit('card.0') + 2 * F,
     hit: hit('card.1') + 2 * F,
     half: b.t0 + 0.5 * (b.t1 - b.t0),
     hold: Math.min(lastCard + 0.33, settle - F),

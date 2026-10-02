@@ -397,7 +397,27 @@ describe('M2 archetypes (C13) — slot rules and cue-map override names', () => 
   });
 
   it('a storyboard cue may override a mapped cue by full name "<map>.<i>" for i < N', () => {
-    expect(e(flow((b) => { b.cues = [{ name: 'step.2', at: 0.7, kind: 'boom', amp: 1 }]; }))).toEqual([]);
+    // 3 steps: defaults 0.15, 0.375, 0.6 — the last step may move anywhere after step.1 up to the map's `to`
+    expect(e(flow((b) => { b.cues = [{ name: 'step.2', at: 0.55, kind: 'boom', amp: 1 }]; }))).toEqual([]);
+  });
+
+  it('a mapped-cue override outside the map window (from..to) or out of index order is E_SCHEMA', () => {
+    // flow-graph reveals step i before step i+1 (one path light per step); out-of-order or past `to` (into the
+    // `converge` implosion) would render a scrambled reveal with no error
+    const past = e(flow((b) => { b.cues = [{ name: 'step.2', at: 0.7, kind: 'boom', amp: 1 }]; }));
+    expect(past).toEqual([expect.objectContaining({ path: '/beats/1/cues/0/at', code: 'E_SCHEMA' })]);
+    expect(past[0]!.message).toMatch(/outside.*0\.15\.\.0\.6/);
+    const early = e(flow((b) => { b.cues = [{ name: 'step.0', at: 0.1, kind: 'boom', amp: 1 }]; }));
+    expect(early).toEqual([expect.objectContaining({ path: '/beats/1/cues/0/at', code: 'E_SCHEMA' })]);
+    // step.2 before step.0 (both in the window): order broken
+    const swapped = e(flow((b) => { b.cues = [{ name: 'step.2', at: 0.2, kind: 'boom', amp: 1 }]; }));
+    expect(swapped).toEqual([expect.objectContaining({ path: '/beats/1/cues/0/at', code: 'E_SCHEMA' })]);
+    expect(swapped[0]!.message).toMatch(/index order.*step\.1 at 0\.375/);
+    // two overrides that swap each other are judged against each other, not against the defaults
+    const pair = e(flow((b) => { b.cues = [{ name: 'step.0', at: 0.4, kind: 'snap', amp: 1 }, { name: 'step.1', at: 0.3, kind: 'snap', amp: 1 }]; }));
+    expect(pair.map((x) => x.path)).toEqual(['/beats/1/cues/0/at', '/beats/1/cues/1/at']);
+    // in order + in the window passes even when several move
+    expect(e(flow((b) => { b.cues = [{ name: 'step.0', at: 0.2, kind: 'snap', amp: 1 }, { name: 'step.1', at: 0.3, kind: 'snap', amp: 1 }]; }))).toEqual([]);
   });
 
   it('a mapped-cue name past N, or naming no cue map, is E_SCHEMA (an override that can never fire is a lie)', () => {

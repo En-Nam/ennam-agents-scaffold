@@ -13,6 +13,7 @@ import { validateStoryboard } from '../../templates/showreel/.claude/showreel/li
 import { resolve } from '../../templates/showreel/.claude/showreel/lib/truth/resolve.mjs';
 import { compileTimeline } from '../../templates/showreel/.claude/showreel/lib/compile/timeline.mjs';
 import { storyboardFromArrangement, type ArrangementBeat, type DigestFact } from './helpers/storyboard';
+import { captureLabelled } from '../../templates/showreel/.claude/showreel/render/sheet.mjs';
 
 // v1.16 showreel engine — browser half (gated: SHOWREEL_E2E=1, SHOWREEL_TOOL_DIR=<dir with puppeteer-core +
 // fontsource>, browser via SHOWREEL_BROWSER / CHROME_PATH / a known install path).
@@ -75,7 +76,7 @@ const M2 = buildM2Film();
 
 type Item = { id: string; text: string; number: number | null; unit: string | null };
 type Resolved = { beats: Record<string, { archetype: string; slots: Record<string, { items: Item[] }> }> };
-type Entry = { text: string; source: string | null };
+type Entry = { text: string; source: string | null; onScreen?: boolean };
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Browser = any;
 type Page = any;
@@ -265,16 +266,77 @@ describe.skipIf(!E2E)('showreel engine in the browser (SHOWREEL_E2E=1)', () => {
     }
   }, 120_000);
 
+  it('AC3 M2: a page that rendered the M2 film frame after frame hashes like fresh pages (no state carried between frames)', async () => {
+    // The final render draws every frame IN ORDER in ONE page; the per-archetype tests open a fresh page per shot,
+    // so state a draw() carried across frames (a module-level cache, a reused sprite — text.mjs lists a measured
+    // M1 case) would hash identically there. Here one page renders the M2 film's shots (all 4 M2 archetypes, both
+    // column-wipes, the chapter cards) after a run of in-between frames, then each shot is compared to a fresh page.
+    const { url } = await serve(undefined, M2);
+    const shots = [...T2].sort((a, b) => a - b);
+    const browser = await launch();
+    try {
+      const fresh: Record<number, Record<string, string>> = { 1: {}, 6: {} };
+      for (const S of [1, 6]) for (const t of shots) fresh[S]![t] = await hashAt(await openPage(browser, url), t, S);
+      const page = await openPage(browser, url);
+      const dirty: Record<number, Record<string, string>> = { 1: {}, 6: {} };
+      for (const S of [1, 6]) {
+        let prev = 0;
+        for (const t of shots) {
+          // the frames leading up to the shot, sequentially (every 4th frame — the whole film, still bounded)
+          await page.evaluate((a: number, b: number, f: number) => { for (let x = a; x < b; x += 4 * f) (window as any).SHOWREEL.renderAt(x, 1); }, prev, t, FRAME);
+          dirty[S]![t] = await hashAt(page, t, S);
+          prev = t;
+        }
+      }
+      for (const S of [1, 6]) for (const t of shots) expect(dirty[S]![t], `S=${S} t=${t}`).toBe(fresh[S]![t]);
+      expect(new Set(Object.values(fresh[1]!)).size).toBe(shots.length); // real, changing frames
+    } finally {
+      await browser.close();
+    }
+  }, 600_000);
+
+  it('sheet labels never leak into film frames or the manifest (captureLabelled, then a fresh renderAt)', async () => {
+    // render/sheet.mjs burns the QA label onto the stage AFTER renderAt with raw fillText. That is safe only
+    // because the next renderAt repaints the whole stage and the label never goes through engine/text.mjs.
+    const { url } = await serve();
+    const browser = await launch();
+    try {
+      const t = mid('b3');
+      const fresh = await hashAt(await openPage(browser, url), t, 1);
+      const page = await openPage(browser, url);
+      const label = 'b9  probe/label  hold  t=1.23s';
+      const jpg = await captureLabelled(page, mid('b2'), label);
+      expect(jpg.length).toBeGreaterThan(1000);
+      // the label really is on the stage right after the capture (so the check below is not vacuous)
+      const dirtyNow = await page.evaluate(() => {
+        const c = document.getElementById('stage') as HTMLCanvasElement;
+        const d = c.getContext('2d')!.getImageData(0, 0, 400, 40).data;
+        let bright = 0;
+        for (let i = 0; i < d.length; i += 4) if (d[i]! > 240 && d[i + 1]! > 240 && d[i + 2]! > 240) bright++;
+        return bright;
+      });
+      expect(dirtyNow, 'label pixels present after captureLabelled').toBeGreaterThan(50);
+      expect(await hashAt(page, t, 1), 'the next frame is byte-identical to a fresh render').toBe(fresh);
+      const man: { text: string }[] = await page.evaluate(() => (window as any).SHOWREEL.manifest());
+      expect(man.some((e) => e.text === label || e.text.includes('probe/label'))).toBe(false);
+    } finally {
+      await browser.close();
+    }
+  }, 120_000);
+
   it('manifest ⊆ resolved after rendering every beat midpoint and end; the oracle catches a forged draw', async () => {
     const { url, resolved } = await serve();
     const browser = await launch();
     try {
       const page = await openPage(browser, url);
-      for (const b of TIMELINE.beats) for (const t of [(b.t0 + b.t1) / 2, b.t1 - FRAME]) await page.evaluate((t: number) => (window as any).SHOWREEL.renderAt(t, 1), t);
+      // each beat's midpoint and its LAST SOLO frame (C16 boxes — and so onScreen coverage — are recorded on solo
+      // frames only; a transition overlap composites scratch layers and records none)
+      for (const b of TIMELINE.beats) for (const t of [(b.t0 + b.t1) / 2, b.t1 - b.overlapOut - FRAME]) await page.evaluate((t: number) => (window as any).SHOWREEL.renderAt(t, 1), t);
       const manifest: Entry[] = await page.evaluate(() => (window as any).SHOWREEL.manifest());
       expect(checkManifest(manifest, resolved)).toEqual([]);
-      // every resolved item (and every unit) reached the screen — an engine that draws nothing passes ⊆ trivially
-      const sources = new Set(manifest.map((m) => m.source));
+      // every resolved item (and every unit) reached the screen — an engine that draws nothing passes ⊆ trivially.
+      // onScreen, not presence: the lockup title's sprite text is recorded at layout boot, before any frame
+      const sources = new Set(manifest.filter((m) => m.onScreen === true).map((m) => m.source));
       for (const [beatId, b] of Object.entries(resolved.beats)) for (const [slot, s] of Object.entries(b.slots)) for (const it of s.items) {
         expect(sources.has(it.id), `${beatId}.${slot} ${it.id} never drawn`).toBe(true);
         if (it.unit) expect(sources.has('unit:' + it.id), `${beatId}.${slot} unit of ${it.id} never drawn`).toBe(true);

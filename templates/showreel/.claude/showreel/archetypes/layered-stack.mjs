@@ -19,11 +19,13 @@ const TAG_TEXT_X = 30, TAG_TEXT_W = 540;      // a 24-char all-caps layer (C13 m
 const LAYER_MAX = 34, LABEL_MAX = 60;
 const MID_Y = 600;                            // vertical centre of the stack + platform group
 const KINDS = ['circuit', 'memory', 'agents', 'ports'];
-// tag column geometry, exported for the layout guard test (tag panels of adjacent layers must not overlap)
-export const GEOM = Object.freeze({ TAG_H, TAG_PITCH });
 
 const zBottom = (k) => GAP0 + k * PITCH;
 const FLOOR_R = 1050;                         // radius of the floor grid's radial fade at full reveal
+// the revealed floor grid is a build-once sprite per layer colour at 1/FLOOR_DS resolution (2 MB each, not 8):
+// a CPU 'cache' canvas is uploaded on every blit (every frame × every motion-blur sample), and the grid is a
+// faint, soft background element (same choice as lockup-cta's half-resolution cached layers)
+const FLOOR_DS = 2;
 
 // iso floor grid (46 lines) stroked with a radial fade in colour c, radius R, centred on the platform
 function strokeFloorGrid(x, api, SX, SY, c, R) {
@@ -44,8 +46,9 @@ export default {
     const items = rb.slots.layers.items;
     const label = rb.slots.label?.items[0] ?? null;
     const N = items.length;
-    const P = api.palette;
     const m = api.makeCanvas('cache', 8, 8).ctx;
+    // the compiler emits layer.<i> per layer (C14): a missing one fails the boot, never a made-up time
+    for (let k = 0; k < N; k++) api.cue(`layer.${k}`);
 
     const px = api.fitSlot('layers', { maxW: TAG_TEXT_W, maxPx: LAYER_MAX, weight: 700, track: 1 });
     // the label heads the tag column (right of the stack, clear of the falling slabs and their light columns)
@@ -60,42 +63,43 @@ export default {
     const restCy = (k) => SY - zBottom(k) - SLAB_T / 2;
     const midCy = items.reduce((a, _, k) => a + restCy(k), 0) / N;
 
-    // palette accents per layer, bottom → top (unique, so 5 layers get 5 hues on every palette)
-    const cols = [...new Set([P.primary, P.secondary, P.hot, P.amber, P.mint, P.violet, P.cyan])];
+    // accents per layer, bottom → top, derived from the palette ROLES (5 layers get 5 distinct colours on every
+    // palette, and never a named hue the palette did not pick — a non-violet film shows no violet slab)
+    const cols = api.accents(N);
     const layers = items.map((item, k) => {
       const cl = api.clusters(item.text);
       const xs = cl.map((c) => api.measure(m, item, { size: px, weight: 700, track: 1, slice: [0, c.s] }).width)
         .concat([api.measure(m, item, { size: px, weight: 700, track: 1 }).width]);
       return {
-        item, k, h: halves[k], c: cols[k % cols.length], kind: KINDS[k % KINDS.length], cl, xs,
+        item, k, h: halves[k], c: cols[k], kind: KINDS[k % KINDS.length], cl, xs,
         tagY: Math.round(midCy - (k - (N - 1) / 2) * TAG_PITCH),
       };
     });
     // build-once floor grid sprite per distinct layer colour (the grid is static once revealed; only its tint
-    // follows the latest landed layer). layers[0].c is P.primary, so the pre-landing colour is covered too.
+    // follows the latest landed layer). layers[0].c is the primary role, so the pre-landing colour is covered.
     const floor = {};
     for (const l of layers) {
       if (floor[l.c]) continue;
-      const fc = api.makeCanvas('cache', api.W, api.H);
-      strokeFloorGrid(fc.ctx, api, SX, SY, l.c, FLOOR_R * api.ease.outExpo(1));
+      const fc = api.makeCanvas('cache', api.W / FLOOR_DS, api.H / FLOOR_DS);
+      fc.ctx.scale(1 / FLOOR_DS, 1 / FLOOR_DS);
+      strokeFloorGrid(fc.ctx, api, SX, SY, l.c, FLOOR_R);
       floor[l.c] = fc.canvas;
     }
     return {
       N, layers, label, px, labelPx, SX, SY, TAG_X: SX + TAG_GAP, floor,
+      tagH: TAG_H, tagPitch: TAG_PITCH, // tag column geometry (the layout test asserts adjacent panels cannot overlap)
       labelY: Math.round(layers[N - 1].tagY - TAG_H / 2 - 44),
     };
   },
 
   draw(ctx, lt, p, rb, cues) {
-    const { api, layout: L, dur } = p;
+    const { api, layout: L } = p;
     const { W, H, clamp, lerp, ease, hash, rgba, mix, rr, palette: P, grid } = api;
     const { SX, SY, N } = L;
-    const snap = (x) => Math.max(grid, Math.round(x / grid) * grid);
     const HI = P.text;   // the palette's near-white: highlights, sparks, specular lines
-    // picture contact leads the audio hit slightly so the thud reads ON the beat (spike T_LAND)
-    // `layer.<i>` is always emitted by the C14 cueMap expansion; the fallback (M1 idiom, cf. lockup-cta `slam`)
-    // mirrors archetypes.json cueMaps[layer] from 0.15 → to 0.65 — keep the two in sync.
-    const LAND = L.layers.map((_, k) => (cues[`layer.${k}`] ?? snap(dur * (0.15 + (0.5 * k) / Math.max(1, N - 1)))) - 0.02);
+    // picture contact leads the audio hit slightly so the thud reads ON the beat (spike T_LAND); the hit times are
+    // the compiled `layer.<i>` cues only (C14) — no private schedule that could drift from the score
+    const LAND = L.layers.map((_, k) => api.cue(`layer.${k}`) - 0.02);
     const T_PLAT = Math.max(grid, LAND[0] - FALL_D);  // comet lands, platform ignites
     const DIVE = Math.min(0.2, T_PLAT);
 
@@ -120,7 +124,7 @@ export default {
       const gl = ctx.createRadialGradient(0, 0, 0, 0, 0, 520);
       gl.addColorStop(0, rgba(c, 0.16 + 0.08 * hitPulse(6))); gl.addColorStop(1, rgba(c, 0));
       ctx.fillStyle = gl; ctx.fillRect(-540, -540, 1080, 1080); ctx.restore();
-      if (rv >= 1) ctx.drawImage(L.floor[c], 0, 0);          // revealed: the cached sprite (same geometry, R = FLOOR_R)
+      if (rv >= 1) ctx.drawImage(L.floor[c], 0, 0, W, H);    // revealed: the cached sprite (same geometry, R = FLOOR_R)
       else strokeFloorGrid(ctx, api, SX, SY, c, FLOOR_R * rv); // growing in: live, the fade radius animates
     }
 

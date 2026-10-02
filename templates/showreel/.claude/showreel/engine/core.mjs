@@ -14,15 +14,33 @@
 //   draw(...)    pure function of localT (seconds since beat.t0, 0..dur incl. overlaps). Never call
 //                ctx.fillText/strokeText or create canvases directly (static test) — use api.text/counter/unit.
 //   cues         {<cueName>: localT} — this beat's timeline.hits, named by storyboard/default cues.
+//                Read them with api.cue(name), which THROWS on a missing name: the compiler always emits every
+//                default cue and every cue-map hit (C14), so a missing one is a broken timeline or a renamed
+//                cue — never invent a fallback time (it drifts from the audible hit). Validate the names the
+//                archetype needs in layout() (api.cue works there), so a mismatch fails at boot.
+//                Cue-map hits come in index order (validate + compiler guarantee <map>.0 < <map>.1 < …).
 //   params       {dur, variant, seed, W, H, layout, palette, api, beatId, typing}
 //                typing = null | {t0, interval, chars, enterAt} in LOCAL seconds (timeline.typing for this beat).
 //
 // api (frozen; per beat):
 //   W, H                         1920, 1080
 //   clamp lerp ease prog map edge anticipate rng hash noise hashStr      math.mjs (seeded / stateless only)
-//   palette                      palettes.mjs tokens: ink…red + roles primary/secondary/hot;  rgba(hex,a), hexToRgb(hex)
+//   palette                      palettes.mjs tokens: ink…red, white/black + roles primary/secondary/hot;
+//                                rgba(hex,a), hexToRgb(hex). Colours come ONLY from here (no literals: static test).
+//   accents(n)                   n '#rrggbb' accents derived from the roles only (per layer / card / badge colour);
+//                                never a named hue (P.violet, P.amber, …) the palette did not pick as a role
 //   font(size, weight, fam)      CSS font string, fam 'display'|'mono'; families = FAMILIES
+//   kindOf(item)                 fact kind from the item id ('f.route.2' → 'route'), null for phrases
+//   cue(name)                    this beat's cue time (local s); throws E_ENGINE on a missing name (see cues)
+//   cam                          {pushMax, shakeMax, rotMax}: the largest camera push (scale about the frame
+//                                centre), shake (px) and roll (rad) renderFrame applies over the beat
+//   safeRect                     {x0, y0, x1, y1}: user-space rect whose every point stays inside the 48 px safe
+//                                margin under the worst camera push + shake + roll (derived from cam)
 //   text(ctx, item, x, y, o)     draw a resolved item (o: size weight fill stroke lineWidth mode align base track alpha slice)
+//   blit(ctx, sprite, …)         ctx.drawImage of a 'cache' sprite that holds api.text draws (same argument forms);
+//                                places the sprite's text boxes in the frame (manifest bbox + on-screen coverage).
+//                                A text sprite drawn with plain drawImage never counts as on screen — the
+//                                right call only for glow / bloom / mask sprites, which are not legible text.
 //   counter(ctx, item, p, x, y, o)  rolling integer 0→item.number, locks on item.text at p ≥ 1
 //   unit(ctx, item, x, y, o)     draw item.unit ("routes")
 //   measure(ctx, item, o)        {width, ascent, descent} without drawing
@@ -48,14 +66,20 @@
 //   hitEnergy(globalT, decay)    film-wide impact energy;  cueEnergy(localT, decay) — this beat's hits only
 //   beatId, dur, seed, typing, cues   per-beat values (same as params)
 //
+// Placeholders: never draw a shape that stands in for text — skeleton bars, empty label pills / boxes. They read
+// as a missing label (R5). Structure that carries no label (port dots, card bodies with an icon) is fine.
+//
 // Transitions (archetypes/transitions/<id>.mjs): { id, apply(ctx, k, drawOut, drawIn, api) }, k 0..1 over the
 // overlap; drawOut(c)/drawIn(c) draw the outgoing/incoming beat into any 2D context c; api = the shared api.
+// C16 exemption: while a transition runs, text boxes are NOT recorded (setBoxRecording(false)) — the beats
+// draw onto scratch layers the transition blits shifted / scaled / clipped, so a draw-time box would judge
+// the wrong rectangle. Overlap frames carry bbox null; the no-clipping contract covers solo frames.
 
 import { makeCanvas, gpuRenderer } from './canvas.mjs';
 import { clamp, lerp, ease, prog, map, edge, anticipate, rng, hash, noise, hashStr } from './math.mjs';
-import { palette as getPalette, hexToRgb, rgba } from './palettes.mjs';
-import { text, counter, unit, measure, fitText, font, manifest, clusters, beginFrame } from './text.mjs';
-import { FAMILIES, familyOf, loadFonts, glyphGaps } from './fonts.mjs';
+import { palette as getPalette, hexToRgb, rgba, accents } from './palettes.mjs';
+import { text, counter, unit, measure, fitText, font, manifest, clusters, beginFrame, blit, setBoxRecording } from './text.mjs';
+import { FAMILIES, familyOf, kindOf, loadFonts, glyphGaps } from './fonts.mjs';
 import { rr, brand, glow, glass, mix, glowDot, sparks, checkMark, chevron } from './draw.mjs';
 import { ARCHETYPES, TRANSITIONS } from '../archetypes/index.mjs';
 
@@ -64,6 +88,42 @@ const SHUTTER = 0.6;          // exposure as a fraction of one frame (≈216° s
 const FADE_IN_BEATS = 0.6;    // fade from black over 0.6 musical beats at film start (timeline.music.bpm)
 const HIT_WINDOW = 1.2;       // seconds a hit keeps contributing energy (decaying)
 const EPS = 1e-6;
+const SAFE_MARGIN = 48;       // C16 safe margin (lib/truth/safearea.mjs offFrame default)
+
+// Global camera (spike core.js renderFrame): slow push-in + impact punch, shake and roll from hit energy.
+// ONE source for renderFrame and for the bounds archetypes keep text inside (api.cam / api.safeRect).
+const CAM = Object.freeze({
+  pushDrift: 0.035, pushHit: 0.028, pushHitCap: 1.4,   // push = 1 + pushDrift·(t/D) + pushHit·min(e, pushHitCap)
+  shakeNoise: 14, shakeSine: 8, shakeCap: 1.2,          // shake = (noise·shakeNoise + sin·shakeSine)·min(e, shakeCap)
+  roll: 0.006,                                          // roll = noise·roll·min(e, shakeCap)
+});
+/** worst-case camera: the largest push, shake (px, per axis) and roll (rad) renderFrame can apply */
+export const CAMERA = Object.freeze({
+  pushMax: 1 + CAM.pushDrift + CAM.pushHit * CAM.pushHitCap,
+  shakeMax: (CAM.shakeNoise + CAM.shakeSine) * CAM.shakeCap,
+  rotMax: CAM.roll * CAM.shakeCap,
+});
+/**
+ * User-space rect that stays inside the safe margin after the worst camera: a point at distance d from the
+ * frame centre lands at d·pushMax ± shakeMax, and the roll moves it by up to rotMax × the other half-extent.
+ */
+export const SAFE_RECT = (() => {
+  const { pushMax, shakeMax, rotMax } = CAMERA;
+  const hx = (W / 2 - SAFE_MARGIN - shakeMax - rotMax * (H / 2) * pushMax) / pushMax;
+  const hy = (H / 2 - SAFE_MARGIN - shakeMax - rotMax * (W / 2) * pushMax) / pushMax;
+  return Object.freeze({ x0: W / 2 - hx, y0: H / 2 - hy, x1: W / 2 + hx, y1: H / 2 + hy });
+})();
+
+/** cueLookup(cues, beatId, archetype) → (name) → local time; a missing name throws (never an invented time). */
+export function cueLookup(cues, beatId, archetype) {
+  return (name) => {
+    const t = cues[name];
+    if (typeof t !== 'number') {
+      throw new Error(`E_ENGINE: beat ${beatId} (${archetype}) has no cue "${name}" in timeline.hits (cues: ${Object.keys(cues).sort().join(', ') || 'none'}) — recompile the timeline (check), or fix the cue name in the archetype`);
+    }
+    return t;
+  };
+}
 
 // ───────────────────────────── validation (pure) ─────────────────────────────
 /** checkTimeline(timeline, resolved, archetypes, transitions) → [] | ['…human-readable error…'] */
@@ -145,9 +205,9 @@ export function createEngine({ timeline, resolved, archetypes = ARCHETYPES, tran
 
   const base = Object.freeze({
     W, H, clamp, lerp, ease, prog, map, edge, anticipate, rng, hash, noise, hashStr,
-    palette: pal, rgba, hexToRgb, font, families: FAMILIES,
-    text, counter, unit, measure, fitText, clusters, rr, brand, glow, glass, mix, glowDot, sparks, checkMark, chevron,
-    grid: 15 / TL.music.bpm, makeCanvas: archMakeCanvas, scratch: makeScratch(0), hitEnergy,
+    palette: pal, rgba, hexToRgb, accents: (n) => accents(pal, n), font, families: FAMILIES, kindOf,
+    text, counter, unit, measure, fitText, clusters, blit, rr, brand, glow, glass, mix, glowDot, sparks, checkMark, chevron,
+    grid: 15 / TL.music.bpm, makeCanvas: archMakeCanvas, scratch: makeScratch(0), hitEnergy, cam: CAMERA, safeRect: SAFE_RECT,
   });
   const archScratch = makeScratch(2);
 
@@ -204,7 +264,7 @@ export function createEngine({ timeline, resolved, archetypes = ARCHETYPES, tran
       return e;
     }
 
-    const api = Object.freeze({ ...base, scratch: archScratch, beatId: b.id, dur, seed, typing: deepFreeze(typing), cues: deepFreeze({ ...cues }), fitSlot, fitUnits, cueEnergy });
+    const api = Object.freeze({ ...base, scratch: archScratch, beatId: b.id, dur, seed, typing: deepFreeze(typing), cues: deepFreeze({ ...cues }), cue: cueLookup(cues, b.id, b.archetype), fitSlot, fitUnits, cueEnergy });
     const layout = deepFreeze(arch.layout(rb, b.variant, api));
     for (const [slot, s] of Object.entries(rb.slots)) {
       if (s.items.length && !(slot in fits)) {
@@ -292,7 +352,12 @@ export function createEngine({ timeline, resolved, archetypes = ARCHETYPES, tran
       const [i, j] = act;
       const out = beats[i].b, inn = beats[j].b;
       const k = clamp((t - inn.t0) / (out.t1 - inn.t0));
-      transitions[out.transitionOut].apply(ctx, k, (c) => drawBeat(c, i, t), (c) => drawBeat(c, j, t), base);
+      setBoxRecording(false); // C16 exemption: the beats draw on scratch layers the transition moves (see top)
+      try {
+        transitions[out.transitionOut].apply(ctx, k, (c) => drawBeat(c, i, t), (c) => drawBeat(c, j, t), base);
+      } finally {
+        setBoxRecording(true);
+      }
       return;
     }
     if (act.length > 2) throw new Error(`E_ENGINE: ${act.length} beats active at t=${t}`);
@@ -306,10 +371,10 @@ export function createEngine({ timeline, resolved, archetypes = ARCHETYPES, tran
     resetCtx(sctx);
     sctx.clearRect(0, 0, W, H);
     sctx.save();
-    const push = 1 + 0.035 * (t / TL.durationS) + 0.028 * Math.min(e, 1.4);
-    const sx = (noise(t * 55) * 14 + Math.sin(t * 90) * 8) * Math.min(e, 1.2);
-    const sy = (noise(t * 55 + 100) * 14 + Math.cos(t * 83) * 8) * Math.min(e, 1.2);
-    const rot = noise(t * 40 + 7) * 0.006 * Math.min(e, 1.2);
+    const push = 1 + CAM.pushDrift * (t / TL.durationS) + CAM.pushHit * Math.min(e, CAM.pushHitCap);
+    const sx = (noise(t * 55) * CAM.shakeNoise + Math.sin(t * 90) * CAM.shakeSine) * Math.min(e, CAM.shakeCap);
+    const sy = (noise(t * 55 + 100) * CAM.shakeNoise + Math.cos(t * 83) * CAM.shakeSine) * Math.min(e, CAM.shakeCap);
+    const rot = noise(t * 40 + 7) * CAM.roll * Math.min(e, CAM.shakeCap);
     sctx.translate(W / 2 + sx, H / 2 + sy); sctx.rotate(rot); sctx.scale(push, push); sctx.translate(-W / 2, -H / 2);
     background(sctx, t);
     drawScenes(sctx, t);

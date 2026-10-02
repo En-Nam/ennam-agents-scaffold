@@ -8,6 +8,11 @@ import { renderScore, writeWav } from '../../templates/showreel/.claude/showreel
 import { HANDLERS } from '../../templates/showreel/.claude/showreel/lib/score/handlers.mjs';
 import { mkBus, mixSeed } from '../../templates/showreel/.claude/showreel/lib/score/dsp.mjs';
 import { analyzeScore } from '../../templates/showreel/.claude/showreel/lib/score/analyze.mjs';
+import { duckCurve } from '../../templates/showreel/.claude/showreel/lib/score/mix.mjs';
+import { renderBed, renderThrob, renderArps, arpThin, anchors } from '../../templates/showreel/.claude/showreel/lib/score/bed.mjs';
+import { resolve } from '../../templates/showreel/.claude/showreel/lib/truth/resolve.mjs';
+import { compileTimeline } from '../../templates/showreel/.claude/showreel/lib/compile/timeline.mjs';
+import { storyboardFromArrangement, type DigestFact } from './helpers/storyboard';
 
 // v1.16 showreel — AC4 (D12/D13): the score is synthesised from build/timeline.json, the
 // same clock the picture uses. If a sound lands off its hit, the film reads as out of sync;
@@ -51,6 +56,14 @@ const diffProfile = (a: Score, b: Score, durationS: number) => {
 };
 const firstDivergence = (p: { t: number; db: number }[], thresholdDb: number) => p.find((w) => w.db > thresholdDb)?.t;
 const leftEnergy = (x: Score, a: number, b: number) => { let v = 0; for (let i = Math.round(a * SR); i < Math.round(b * SR); i++) v += x.left[i] ** 2; return v; };
+
+// Integrated loudness: RMS over the whole film, both channels, in dBFS. The master limiter sits at
+// 0.7 × the pre-master peak (spike: 0.55) so a light pop after an ignite's wash keeps its onset
+// (AC4); that costs ~1.3 dB of loudness. Measured -15.2…-18.2 dBFS over the 15/30 fixtures and
+// every arrangement × seed × slot count; the band stops any further AC4 fix from quietly buying
+// headroom with loudness (floor) or squashing the dynamics the onsets rely on (ceiling).
+const LOUDNESS_BAND_DBFS = [-19, -13] as const;
+const rmsDbfs = (x: Score) => { let e = 0; for (let i = 0; i < x.left.length; i++) e += x.left[i] ** 2 + x.right[i] ** 2; return 10 * Math.log10(e / (2 * x.left.length)); };
 
 // Energy of the mono mix in [t, t+40 ms], per band (full / <250 Hz / >3 kHz), the same bands
 // analyzeScore's onset detector uses. Filters run from t−0.5 s so they are settled at t.
@@ -131,6 +144,12 @@ describe.each([
     expect(a.nan).toBe(0);
     expect(a.clipped).toBe(0);
     expect(a.peakDbfs).toBeLessThanOrEqual(-1);
+  });
+
+  it(`integrated loudness stays within ${LOUDNESS_BAND_DBFS[0]}…${LOUDNESS_BAND_DBFS[1]} dBFS RMS`, () => {
+    const db = rmsDbfs(renders[key].score);
+    expect(db).toBeGreaterThanOrEqual(LOUDNESS_BAND_DBFS[0]);
+    expect(db).toBeLessThanOrEqual(LOUDNESS_BAND_DBFS[1]);
   });
 
   it('every timeline hit has an audible onset within ±1 frame (picture/sound sync)', () => {
@@ -327,6 +346,195 @@ describe('determinism + failure modes', () => {
 
   it('renders 30 s in under 20 s (measured, logged above)', () => {
     expect(renders['30'].ms).toBeLessThan(20000);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// M2: every recommended arrangement (archetypes/arrangements.json) must pass AC4, not just the two
+// hand-made 15/30 fixtures. In 45/60 s films the peak section is long and hit-dense (card
+// carousels, orbit nodes): low-amp snaps/pops (amp 0.15–0.3) landed under the bed's climax-
+// anchored throb 8ths and a light pop after an ignite tripped the master limiter, so verify failed
+// (min onset jump was −0.3 dB at 60 s). The fix lives in the mix (light-hit bed ducking, throb rests,
+// thinner arps in long peaks, limiter threshold) — analyzeScore's 3 dB / ±1 frame criterion is NOT
+// loosened. Seeds vary every noise layer.
+function synthFact(kind: string, n: number, display: string, extra: Record<string, unknown> = {}) {
+  return {
+    id: `f.${kind}.${n}`, kind, value: display, display, unit: null,
+    source: { file: 'synthetic', locator: `${kind}/${n}`, extractor: 'test', rule: 'synthetic' },
+    hash: 'sha256:0000000000000000', ...extra,
+  };
+}
+const SYNTH_FACTS = {
+  version: 1,
+  minimumGate: { passed: true, missing: [] },
+  brand: { name: 'Acme Shop', palette: 'violet', wordmark: 'f.app.name.1' },
+  facts: [
+    synthFact('app.name', 1, 'Acme Shop'),
+    synthFact('app.tagline', 1, 'Checkout in one click'),
+    ...['Saved carts', 'Guest checkout', 'Order history', 'Live inventory', 'Gift cards', 'Fast search'].map((d, i) => synthFact('feature', i + 1, d)),
+    ...['Next.js', 'React', 'TypeScript', 'Tailwind CSS', 'Postgres', 'Stripe'].map((d, i) => synthFact('stack.item', i + 1, d)),
+    ...['/checkout', '/cart', '/orders/[id]', '/api/health'].map((d, i) => synthFact('route', i + 1, d)),
+    ...['npm run dev', 'npm test', 'npm run build'].map((d, i) => synthFact('command', i + 1, d)),
+    ...([[42, 'routes'], [7, 'commands'], [128, 'tests'], [12, 'components']] as const).map(([v, u], i) => synthFact('count', i + 1, String(v), { value: v, unit: u })),
+  ],
+};
+const SYNTH_DIGEST: DigestFact[] = SYNTH_FACTS.facts.map((f) => ({ id: f.id, kind: f.kind, display: f.display, unit: f.unit }));
+const readToolkitJson = (...p: string[]) => JSON.parse(readFileSync(path.join(TOOLKIT, ...p), 'utf8'));
+
+describe('every recommended arrangement scores in sync at seeds 1/7/42 and at max slot counts (AC4, M2)', () => {
+  const ARCH = readToolkitJson('archetypes', 'archetypes.json');
+  const PHRASES = readToolkitJson('phrases.json');
+  const ARR = readToolkitJson('archetypes', 'arrangements.json').arrangements;
+  const minJump: Record<string, number> = {};
+
+  // typical slot counts at every seed, plus max slot counts (the densest storyboard an arrangement
+  // allows) at one seed: the margin is thinnest there (min onset jump ~3.2–3.3 dB at 30/45 s).
+  const CASES = [
+    ...[15, 30, 45, 60].flatMap((d) => [1, 7, 42].map((seed) => [d, seed, 'typical'] as const)),
+    ...[15, 30, 45, 60].map((d) => [d, 1, 'max'] as const),
+  ];
+  it.each(CASES)('%i s arrangement, seed %i, %s slot counts', (d, seed, count) => {
+    const sb = storyboardFromArrangement(SYNTH_DIGEST, d, ARR[String(d)], ARCH, PHRASES, { seed, count });
+    const tl = compileTimeline(sb, resolve(sb, { archetypes: ARCH, facts: SYNTH_FACTS, phrases: PHRASES }), ARCH, { fps: 60 }) as Timeline;
+    expect(tl.seed).toBe(seed);
+    const score = renderScore(tl) as Score;
+    expect(score.left.length).toBe(d * SR);
+    expect(score.right.length).toBe(d * SR);
+    const a = analyzeScore(score, tl);
+    expect(a.samples).toBe(d * SR);
+    expect(a.nan).toBe(0);
+    expect(a.clipped).toBe(0);
+    expect(a.peakDbfs).toBeLessThanOrEqual(-1);
+    expect(a.hits).toHaveLength(tl.hits.length);
+    // every hit: a >= 3 dB onset, located within ±1 frame of the picture's hit time
+    const weak = a.hits.filter((h: { jumpDb: number; onsetT: number; t: number }) => !(h.jumpDb >= 3 && Math.abs(h.onsetT - h.t) <= FRAME + 1e-9));
+    expect(weak).toEqual([]);
+    expect(a.ok).toBe(true);
+    const db = rmsDbfs(score);
+    expect(db).toBeGreaterThanOrEqual(LOUDNESS_BAND_DBFS[0]);
+    expect(db).toBeLessThanOrEqual(LOUDNESS_BAND_DBFS[1]);
+    const key = `${d} s ${count}`;
+    minJump[key] = Math.min(minJump[key] ?? Infinity, ...a.hits.map((h: { jumpDb: number }) => h.jumpDb));
+    // eslint-disable-next-line no-console
+    if (seed === 42 || count === 'max') console.log(`[score] ${key} min onset jump: ${minJump[key]} dB, loudness ${db.toFixed(2)} dBFS RMS`);
+  }, 120000);
+});
+
+describe('the bed makes room for light hits (mix, AC4)', () => {
+  it('light hits duck the bed: 5 ms attack fully down on the hit, depth scaled by amp and capped, ~0.1 s release', () => {
+    const n = 2 * SR, t = 1;
+    const at = (d: Float32Array, s: number) => d[Math.round(s * SR)];
+    const snap = (amp: number) => duckCurve(n, [{ t, kind: 'snap', amp }]) as Float32Array;
+    const d25 = snap(0.25);
+    // untouched until 5 ms before the hit (no audible pre-hit dip / vacuum on light hits)
+    expect(at(d25, t - 0.0055)).toBe(1);
+    // fully down on the hit sample: the hit's onset window is the ducked one. Bounded, not exact:
+    // deep enough to make room (< 0.9), never past the light-hit cap (>= 0.55). The arrangement
+    // matrix above pins whether the depth is actually enough (AC4).
+    expect(at(d25, t)).toBeLessThan(0.9);
+    expect(at(d25, t)).toBeGreaterThanOrEqual(0.55 - 1e-6);
+    // attack is <= 5 ms and already complete on the hit: the sample just before is shallower
+    expect(at(d25, t - 0.0025)).toBeGreaterThan(at(d25, t));
+    expect(at(d25, t - 0.0025)).toBeLessThan(1);
+    // short release: mostly back by 0.3 s so a run of hits every 0.5 s does not hold the bed down
+    expect(at(d25, t + 0.3)).toBeGreaterThan(0.98);
+    expect(at(d25, t + 0.1)).toBeLessThan(0.9);
+    // louder light hit → deeper duck; but never deeper than the spike's light-hit maximum (0.45)
+    expect(at(snap(0.3), t)).toBeLessThan(at(snap(0.15), t));
+    expect(at(snap(1), t)).toBeCloseTo(1 - 0.45, 5);
+  });
+
+  it('boom/slam keep their pre-hit vacuum and deep duck (no new pumping at big hits)', () => {
+    const n = 2 * SR, t = 1;
+    const d = duckCurve(n, [{ t, kind: 'boom', amp: 1 }]) as Float32Array;
+    expect(d[Math.round((t - 0.05) * SR)]).toBeLessThan(0.9); // vacuum before the hit
+    expect(d[Math.round(t * SR)]).toBeCloseTo(1 - 0.72, 5);
+  });
+
+  it('a throb 8th landing just before a light hit is ghosted (it would mask the hit onset)', () => {
+    // TL30: peak 15.5–23.5, climax = slam 24.25, so throb 8ths fall on 21.5 and 21.75 — 0.25 s
+    // before and on the 21.75 lock. Rendering the bed with and without that lock in the timeline
+    // isolates the rest (the lock is not a boom/slam, so no anchor or filter dip moves).
+    const bedOf = (tl: Timeline) => {
+      const n = Math.round(tl.durationS * SR);
+      const ctx = { bed: mkBus(n), fx: mkBus(n), seed: (k: number) => mixSeed(tl.seed >>> 0, k), beat16: 60 / 120 / 4 };
+      renderBed(ctx, tl);
+      return ctx.bed as { L: Float32Array; R: Float32Array };
+    };
+    const lockT = 21.75;
+    expect(TL30.hits.some((h) => h.kind === 'lock' && h.t === lockT)).toBe(true);
+    const withLock = bedOf(TL30);
+    const noLock = clone(TL30);
+    noLock.hits = noLock.hits.filter((h) => !(h.kind === 'lock' && h.t === lockT));
+    const without = bedOf(noLock);
+    // The bed is a linear sum of layers, so without − with is exactly the ghosted part of the throb.
+    const diff = (i: number) => without.L[i] - withLock.L[i];
+    let first = -1, last = -1;
+    for (let i = 0; i < withLock.L.length; i++) if (diff(i) !== 0) { if (first < 0) first = i; last = i; }
+    // local: only the 8ths on 21.5 (0.25 s ahead) and 21.75 (on the hit) change, each a 0.3 s pulse
+    expect(first / SR).toBeCloseTo(lockT - 0.25, 3);
+    expect(last / SR).toBeLessThan(lockT + 0.3);
+    // substantial: the removed pulse energy is a real share of the bed where it lands
+    const e = (f: (i: number) => number, a: number, z: number) => { let v = 0; for (let i = Math.round(a * SR); i < Math.round(z * SR); i++) v += f(i) ** 2; return v; };
+    const share = (a: number, z: number) => 10 * Math.log10(e(diff, a, z) / e((i) => withLock.L[i], a, z));
+    expect(share(lockT - 0.25, lockT - 0.15)).toBeGreaterThan(-8);
+    expect(share(lockT, lockT + 0.1)).toBeGreaterThan(-8);
+    // An ignite rests the throb exactly like a light hit: it has no pre-hit vacuum in the mix, so
+    // a pulse just ahead of it would mask its onset too. Same slot as the lock → identical bed.
+    const asIgnite = clone(TL30);
+    asIgnite.hits = asIgnite.hits.map((h) => (h.kind === 'lock' && h.t === lockT ? { ...h, kind: 'ignite' } : h));
+    const withIgnite = bedOf(asIgnite);
+    expect(Buffer.from(withIgnite.L.buffer).equals(Buffer.from(withLock.L.buffer))).toBe(true);
+    expect(Buffer.from(withIgnite.L.buffer).equals(Buffer.from(without.L.buffer))).toBe(false);
+  });
+
+  // The throb alone (renderThrob is a pure layer of the bed): which hits rest it.
+  const throbOf = (tl: Timeline, hits: Hit[]) => {
+    const n = Math.round(tl.durationS * SR);
+    const ctx = { bed: mkBus(n), fx: mkBus(n), seed: (k: number) => mixSeed(tl.seed >>> 0, k), beat16: 60 / 120 / 4 };
+    renderThrob(ctx, anchors(tl), hits);
+    return Buffer.concat([Buffer.from(ctx.bed.L.buffer), Buffer.from(ctx.bed.R.buffer), Buffer.from(ctx.bed.sL.buffer), Buffer.from(ctx.bed.sR.buffer)]);
+  };
+
+  it('boom / slam never rest the throb: the build runs full into them (they carry their own pre-hit vacuum)', () => {
+    // same 21.75 slot as the lock above (a throb 8th lands on it and one 0.25 s ahead): a lock or ignite there
+    // ghosts those pulses; a boom or slam there leaves the throb byte-identical to no hit at all
+    const slot = (kind: string): Hit => ({ t: 21.75, kind, amp: 1, beatId: 'b5', cue: 'x' });
+    const none = throbOf(TL30, []);
+    expect(throbOf(TL30, [slot('lock')]).equals(none), 'a lock rests the throb (the check can fail)').toBe(false);
+    expect(throbOf(TL30, [slot('ignite')]).equals(none), 'an ignite rests the throb').toBe(false);
+    expect(throbOf(TL30, [slot('boom')]).equals(none), 'a boom must NOT rest the throb').toBe(true);
+    expect(throbOf(TL30, [slot('slam')]).equals(none), 'a slam must NOT rest the throb').toBe(true);
+  });
+
+  const arpsOf = (tl: Timeline, thin?: { gk: number; sk: number }) => {
+    const n = Math.round(tl.durationS * SR);
+    const ctx = { bed: mkBus(n), fx: mkBus(n), seed: (k: number) => mixSeed(tl.seed >>> 0, k), beat16: 60 / 120 / 4 };
+    if (thin) renderArps(ctx, anchors(tl), thin); else renderArps(ctx, anchors(tl));
+    return ctx.bed as { L: Float32Array; R: Float32Array; sL: Float32Array; sR: Float32Array };
+  };
+  const energy = (a: Float32Array) => a.reduce((s, v) => s + v * v, 0);
+
+  it('arps thin on long peaks only: a 15 s peak is untouched; a long peak plays at 0.8 dry and 0.5 send', () => {
+    // why: on dense 45–60 s peaks the wet 16ths pile into a reverb wash that masked light pops (AC4); the
+    // spike-length 15 s film must keep the spike's arps exactly
+    expect(arpThin(3)).toEqual({ gk: 1, sk: 1 });
+    expect(arpThin(4)).toEqual({ gk: 1, sk: 1 });
+    for (const s of [8, 30]) { expect(arpThin(s).gk, `gk @${s}`).toBeCloseTo(0.8, 12); expect(arpThin(s).sk, `sk @${s}`).toBeCloseTo(0.5, 12); }
+    const mid = arpThin(6);
+    expect(mid.gk).toBeGreaterThan(0.8); expect(mid.gk).toBeLessThan(1);
+    expect(mid.sk).toBeGreaterThan(0.5); expect(mid.sk).toBeLessThan(1);
+    const A15 = anchors(TL15), A30 = anchors(TL30);
+    expect(A15.climax - A15.peakT0, '15 s fixture peak span').toBeLessThanOrEqual(4);
+    expect(A30.climax - A30.peakT0, '30 s fixture peak span').toBeGreaterThanOrEqual(8);
+    // 15 s: the default render IS the unthinned render, byte for byte
+    const a15 = arpsOf(TL15), ref15 = arpsOf(TL15, { gk: 1, sk: 1 });
+    expect(energy(ref15.L)).toBeGreaterThan(0);
+    for (const k of ['L', 'R', 'sL', 'sR'] as const) expect(Buffer.from(a15[k].buffer).equals(Buffer.from(ref15[k].buffer)), k).toBe(true);
+    // 30 s: dry scaled by 0.8 (energy 0.64), send by 0.5 (energy 0.25) against the unthinned reference
+    const a30 = arpsOf(TL30), ref30 = arpsOf(TL30, { gk: 1, sk: 1 });
+    expect(energy(a30.L) / energy(ref30.L)).toBeCloseTo(0.64, 4);
+    expect(energy(a30.sL) / energy(ref30.sL)).toBeCloseTo(0.25, 4);
   });
 });
 

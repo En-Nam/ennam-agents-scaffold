@@ -14,6 +14,23 @@ const TITLE_MAX = 260, TITLE_TRACK = -5, TITLE_W = 1560;
 const TAG_MAX = 56, CTA_MAX = 40, CMD_MAX = 34;
 const PILL_TEXT_W = 1100;   // a 64-char command (C5 maxChars) fits at the 22 px mono floor; longer fails `check`
 const PAD = 130;   // sprite padding (outer glow blur radius)
+// Lockup breathe (lockupXform): slow push to 1 + BR_PUSH over the beat + a ±BR_DRIFT sine.
+const BR_PUSH = 0.05, BR_DRIFT = 0.004;
+// Tagline snap-open: letter-spacing eases from TAG_TRACK to 0. The start track is capped per tagline so the
+// tracked line stays ≤ TAG_SNAP_W — a 64-char tagline at the 1400 px fit would otherwise run ~45 px past the
+// frame edges mid-snap. Short taglines keep the full spike track. The cap is the all-maxima-at-once worst case,
+// derived (not hand-tuned) from the constants that grow the line about CX: half the 1824 px safe width
+// (48 px margins), less the engine camera shake and the tagline layer drift (2.5 px in drawLockup), ÷ the
+// lockup breathe × the engine camera push. The camera bound is the engine's own (api.cam = core.mjs CAMERA),
+// so a camera change carries here; the every-frame safe-area test (archetype-lockup-cta) fails on a 64-char
+// tagline when the cap stops being safe.
+const TAG_DRIFT = 2.5, TAG_TRACK = 18;
+const tagSnapW = (cam) => Math.floor((2 * (1824 / 2 - cam.shakeMax - TAG_DRIFT)) / ((1 + BR_PUSH + BR_DRIFT) * cam.pushMax));
+// Light sweep keep-out: the band is drawn BEHIND the lockup and masked out of a dilated, blurred silhouette of
+// every text line (tagline glyphs + KEEP_DIL px; title box and CTA/pill shapes + KEEP_BOX px, wider because the
+// engine bloom spreads the band ~30 px into their translucent glass), so the light never lifts the background a
+// glyph sits on.
+const KEEP_DIL = 12, KEEP_BOX = 36, KEEP_BLUR = 10, KEEP_FEATHER = 24;
 
 export default {
   id: 'lockup-cta',
@@ -25,6 +42,7 @@ export default {
     const command = rb.slots.command?.items[0] ?? null;
     const cta = rb.slots.cta?.items[0] ?? null;
     const m = api.makeCanvas('cache', 8, 8).ctx;
+    for (const name of ['slam', 'sweep']) api.cue(name); // compiled default cues: a missing one fails the boot
 
     const tPx = api.fitSlot('name', { maxW: TITLE_W, maxPx: TITLE_MAX, weight: 700, track: TITLE_TRACK });
     const tagPx = tagline ? api.fitSlot('tagline', { maxW: 1400, maxPx: TAG_MAX, weight: 600 }) : 0;
@@ -59,12 +77,12 @@ export default {
       // face: white metal + brand-gradient inner glow (blurred inverse clipped into the glyph)
       const face = api.makeCanvas('cache', sw, sh), g = face.ctx;
       const fg = g.createLinearGradient(0, baseLocal - asc, 0, baseLocal);
-      fg.addColorStop(0, '#ffffff'); fg.addColorStop(0.55, api.mix('#ffffff', P.primary, 0.06)); fg.addColorStop(1, api.mix('#ffffff', P.secondary, 0.16));
+      fg.addColorStop(0, P.white); fg.addColorStop(0.55, api.mix(P.white, P.primary, 0.06)); fg.addColorStop(1, api.mix(P.white, P.secondary, 0.16));
       api.text(g, name, PAD, baseLocal, { ...o, fill: fg });
       const inv = api.makeCanvas('cache', sw, sh), iv = inv.ctx;
       iv.fillStyle = edge(iv); iv.fillRect(0, 0, sw, sh);
       iv.globalCompositeOperation = 'destination-out';
-      api.text(iv, name, PAD, baseLocal, { ...o, fill: '#000' });
+      api.text(iv, name, PAD, baseLocal, { ...o, fill: P.black });
       iv.globalCompositeOperation = 'source-over';
       g.globalCompositeOperation = 'source-atop';
       g.filter = 'blur(13px)'; g.drawImage(inv.canvas, 0, 0); g.drawImage(inv.canvas, 0, 0);
@@ -85,6 +103,31 @@ export default {
     const cmdXs = command ? cmdCl.map((c) => api.measure(m, command, { size: cmdPx, weight: 500, slice: [0, c.s] }).width).concat([cmdW]) : [];
     const promptW = cmdPx * 1.1;
     const pillW = command ? promptW + cmdW + 2 * 46 + 22 : 0;
+    const tagTrack0 = tagline ? api.clamp((tagSnapW(api.cam) - tagW) / Math.max(1, api.clusters(tagline.text).length - 1), 0, TAG_TRACK) : 0;
+    // sweep keep-out silhouette at the rested lockup positions (draw() applies the same lockupXform to it)
+    // small = tagline + CTA + pill (where any added light lowers contrast); the band also skips the title glyphs
+    const dil = { mode: 'both', fill: P.text, stroke: P.text, lineWidth: 2 * KEEP_DIL };
+    // built at half resolution (a soft mask; draw() scales it ×2) to keep the two cached layers at 2 MB each
+    const keepMask = (withTitle) => {
+      const ko = api.makeCanvas('cache', api.W / 2, api.H / 2), kg = ko.ctx;
+      kg.scale(0.5, 0.5);
+      if (tagline) api.text(kg, tagline, CX - tagW / 2, tagBase, { size: tagPx, weight: 600, ...dil });
+      kg.fillStyle = P.text;
+      // title: its whole box (letter gaps at display size are wide enough for the band to lift the background),
+      // pill-shaped and feathered outside the KEEP_BOX pad so the band fades out around it instead of a hard slab
+      if (withTitle) {
+        const pad = KEEP_BOX + KEEP_FEATHER, h = asc + desc + 2 * pad;
+        kg.filter = `blur(${KEEP_FEATHER / 2}px)`;
+        api.rr(kg, left - pad, titleBase - asc - pad, full + 2 * pad, h, h / 2); kg.fill();
+        kg.filter = 'none';
+      }
+      if (cta) { const w = ctaW + ctaPx * 2.4 + 2 * KEEP_BOX, h = ctaH + 2 * KEEP_BOX; api.rr(kg, CX - w / 2, ctaY - h / 2, w, h, h / 2); kg.fill(); }
+      if (command) { const w = pillW + 2 * KEEP_BOX, h = pillH + 2 * KEEP_BOX; api.rr(kg, CX - w / 2, pillY - h / 2, w, h, h / 2); kg.fill(); }
+      const k = api.makeCanvas('cache', api.W / 2, api.H / 2);
+      k.ctx.filter = `blur(${KEEP_BLUR / 2}px)`; k.ctx.drawImage(ko.canvas, 0, 0); k.ctx.drawImage(ko.canvas, 0, 0); k.ctx.filter = 'none';
+      return k;
+    };
+    const keepOut = keepMask(true), keepSmall = keepMask(false);
     // lattice mark geometry
     const MV = [0, 1, 2, 3, 4, 5].map((k) => { const a = (-90 + 60 * k) * Math.PI / 180; return [Math.cos(a) * MR, Math.sin(a) * MR]; });
     const MC = [0, 0];
@@ -99,16 +142,16 @@ export default {
     return {
       name, tagline, command, cta, tPx, tagPx, ctaPx, cmdPx, asc, full, left, baseLocal, letters,
       titleBase, ruleY, tagBase, ctaY, ctaH, pillY, pillH, tagW, ctaW, cmdW, cmdCl, cmdXs, promptW, pillW,
-      titleMid: titleBase - asc / 2, MV, segs, nodes, faces,
+      titleMid: titleBase - asc / 2, MV, segs, nodes, faces, tagTrack0, keepOut, keepSmall,
     };
   },
 
   draw(ctx, lt, p, rb, cues) {
     const { api, layout: L, dur } = p;
     const { W, H, clamp, lerp, ease, hash, noise, rgba, mix, rr, palette: P, grid } = api;
-    const snap = (x) => Math.max(grid, Math.round(x / grid) * grid);
-    const SLAM = cues.slam ?? snap(dur * 0.12);
-    const SWEEP = cues.sweep ?? snap(dur * 0.6);
+    const WH = P.white; // pure white: white-hot cores, flashes, the CTA label
+    const SLAM = api.cue('slam');
+    const SWEEP = api.cue('sweep');
     const SNAP = SLAM + 4 * grid;           // tagline snap
     const M0 = SLAM + 0.1;                  // mark draw-on
     const CALM = SLAM + 0.8;
@@ -120,7 +163,6 @@ export default {
     const stagger = Math.min(0.035, 0.3 / Math.max(1, nL - 1));
     const landT = (n) => SLAM - (nL - 1 - n) * stagger;
     const FALL = 0.08;
-    const cols = ['#ffffff', P.primary, P.secondary];
 
     function letterState(n) {
       const Lt = landT(n), s = Lt - FALL;
@@ -145,7 +187,9 @@ export default {
         c.translate(Lt.cx + st.dx, TB + st.dy); c.scale(st.sx, st.sy); c.translate(-Lt.cx, -TB);
         const spX = Lt.sx, spY = TB - L.baseLocal;
         if (pass === 'glow') {
-          const a = (0.30 + 0.06 * Math.sin(lt * 2.2 + n) + 0.45 * Math.exp(-Math.max(0, st.dt) * 6) + 0.9 * cueHit(SWEEP, 5) + 0.45 * pulseAt(ENT, 6) + 0.6 * pulseAt(MARK2, 7)) * st.fall * st.fall;
+          // no sweep boost: brightening the halo fills the letter gaps and costs the title its contrast (the
+          // sweep re-lights the faces instead — drawSweepRelight)
+          const a = (0.30 + 0.06 * Math.sin(lt * 2.2 + n) + 0.45 * Math.exp(-Math.max(0, st.dt) * 6) + 0.45 * pulseAt(ENT, 6) + 0.6 * pulseAt(MARK2, 7)) * st.fall * st.fall;
           c.globalCompositeOperation = 'lighter';
           c.globalAlpha = clamp(a, 0, 1.4);
           c.drawImage(Lt.glow.canvas, spX, spY);
@@ -154,10 +198,12 @@ export default {
             c.globalAlpha = 0.18; c.drawImage(Lt.glow.canvas, spX, spY - 140);
           }
         } else {
+          // the face IS the title text: placed via api.blit so the name gets its frame box (C16 safe area +
+          // on-screen coverage); the glow pass above is bloom and stays a plain drawImage
           c.beginPath(); c.rect(Lt.sx, slotTop, Lt.sw, slotBot - slotTop); c.clip();
-          c.drawImage(Lt.face.canvas, spX, spY);
+          api.blit(c, Lt.face.canvas, spX, spY);
           const fl = 0.5 * Math.exp(-Math.max(0, st.dt) * 22) * (st.dt >= 0 ? 1 : 0);
-          if (fl > 0.02) { c.globalCompositeOperation = 'lighter'; c.globalAlpha = fl; c.drawImage(Lt.face.canvas, spX, spY); }
+          if (fl > 0.02) { c.globalCompositeOperation = 'lighter'; c.globalAlpha = fl; api.blit(c, Lt.face.canvas, spX, spY); }
         }
         c.restore();
       }
@@ -167,7 +213,7 @@ export default {
       if (!L.tagline) return;
       const q = clamp((lt - SNAP) / 0.65);
       if (q <= 0) return;
-      const track = lerp(18, 0, ease.outExpo(q));
+      const track = lerp(L.tagTrack0, 0, ease.outExpo(q));
       const wipe = ease.outExpo(clamp((lt - SNAP) / 0.5));
       const w = api.measure(c, L.tagline, { size: L.tagPx, weight: 600, track }).width - track;
       const x0 = CX - 1000, xf = x0 + 2000 * wipe;
@@ -177,13 +223,13 @@ export default {
       const bounce = 1 - ease.outBack(clamp((lt - SNAP) / 0.35));
       api.text(c, L.tagline, CX - w / 2, L.tagBase + bounce * 14, {
         size: L.tagPx, weight: 600, track, alpha: clamp(q * 4),
-        fill: api.brand(c, CX - L.tagW / 2, 0, CX + L.tagW / 2, 0, mix(P.primary, '#ffffff', 0.45), mix(P.secondary, '#ffffff', 0.25)),
+        fill: api.brand(c, CX - L.tagW / 2, 0, CX + L.tagW / 2, 0, mix(P.primary, WH, 0.45), mix(P.secondary, WH, 0.25)),
       });
       c.restore();
       if (wipe < 0.995) {
         c.save(); c.globalCompositeOperation = 'lighter'; c.globalAlpha = clamp((1 - wipe) * 1.2);
         const g = c.createLinearGradient(0, L.tagBase - L.tagPx * 1.1, 0, L.tagBase + L.tagPx * 0.5);
-        g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(0.5, '#fff'); g.addColorStop(1, 'rgba(255,255,255,0)');
+        g.addColorStop(0, rgba(WH, 0)); g.addColorStop(0.5, WH); g.addColorStop(1, rgba(WH, 0));
         c.fillStyle = g; c.fillRect(xf - 2, L.tagBase - L.tagPx * 1.1, 4, L.tagPx * 1.6);
         c.restore();
       }
@@ -233,14 +279,14 @@ export default {
         run(cls); c.strokeStyle = grad; c.lineWidth = w;
         c.shadowColor = rgba(P.primary, 0.9); c.shadowBlur = 20 + 18 * hit; c.stroke();
         c.shadowBlur = 0; c.stroke();
-        run(cls); c.strokeStyle = 'rgba(255,255,255,0.75)'; c.lineWidth = w * 0.3; c.stroke();
+        run(cls); c.strokeStyle = rgba(WH, 0.75); c.lineWidth = w * 0.3; c.stroke();
       }
       c.save(); c.globalCompositeOperation = 'lighter';
       for (const [a, b, o, d] of L.segs) {
         const raw = (ml - o) / d; if (raw <= 0 || raw >= 1) continue;
         const e = pt(a, b, ease.outCubic(raw));
         const g = c.createRadialGradient(e[0], e[1], 0, e[0], e[1], 16);
-        g.addColorStop(0, 'rgba(255,255,255,0.95)'); g.addColorStop(1, rgba(P.primary, 0));
+        g.addColorStop(0, rgba(WH, 0.95)); g.addColorStop(1, rgba(P.primary, 0));
         c.fillStyle = g; c.fillRect(e[0] - 16, e[1] - 16, 32, 32);
       }
       c.restore();
@@ -250,7 +296,7 @@ export default {
         c.beginPath(); c.arc(q[0], q[1], r, 0, 7);
         c.fillStyle = P.ink2; c.shadowColor = P.primary; c.shadowBlur = 16;
         c.fill(); c.shadowBlur = 0; c.lineWidth = 2.6; c.strokeStyle = grad; c.stroke();
-        c.beginPath(); c.arc(q[0], q[1], r * 0.42, 0, 7); c.fillStyle = '#fff'; c.fill();
+        c.beginPath(); c.arc(q[0], q[1], r * 0.42, 0, 7); c.fillStyle = WH; c.fill();
       }
       if (lt > CALM) {
         const cA = clamp((lt - CALM) / 0.3), per = [0, 1, 2, 3, 4, 5, 0];
@@ -259,7 +305,7 @@ export default {
           const u = (((lt - CALM) / 1.7) - s * 0.006) % 1, uu = (u + 1) % 1;
           const e = Math.floor(uu * 6), fr = uu * 6 - e;
           const q = pt(L.MV[per[e]], L.MV[per[e + 1]], fr);
-          c.globalAlpha = cA * (1 - s / 14) * 0.9; c.fillStyle = s === 0 ? '#fff' : P.secondary;
+          c.globalAlpha = cA * (1 - s / 14) * 0.9; c.fillStyle = s === 0 ? WH : P.secondary;
           c.beginPath(); c.arc(q[0], q[1], 5.5 * (1 - s / 18), 0, 7); c.fill();
         }
         c.restore();
@@ -268,7 +314,7 @@ export default {
       if (ra > 0) {
         const R2 = MR * (1.2 + 0.4 * ra);
         c.save(); c.globalAlpha = ra * 0.5; c.setLineDash([2, 11]); c.lineDashOffset = -lt * 9;
-        c.strokeStyle = 'rgba(200,210,255,0.7)'; c.lineWidth = 2; c.beginPath(); c.arc(0, 0, R2, 0, 6.2832); c.stroke();
+        c.strokeStyle = mix(WH, P.primary, 0.2, 0.7); // cool white hairline (was a fixed lavender literal) c.lineWidth = 2; c.beginPath(); c.arc(0, 0, R2, 0, 6.2832); c.stroke();
         c.setLineDash([]); c.globalAlpha = ra * 0.9; c.lineWidth = 2.4; c.strokeStyle = grad;
         for (let k = 0; k < 3; k++) { const a0 = lt * 0.7 + k * 2.0944; c.beginPath(); c.arc(0, 0, R2, a0, a0 + 0.42); c.stroke(); }
         c.restore();
@@ -288,8 +334,8 @@ export default {
       const w = L.ctaW + L.ctaPx * 2.4, h = L.ctaH, x = CX - w / 2, y = L.ctaY - h / 2;
       const hit = cueHit(SWEEP, 5);
       c.save(); c.translate(CX, L.ctaY); c.scale(q, q); c.translate(-CX, -L.ctaY);
-      api.glass(c, x, y, w, h, h / 2, { fill: rgba(P.primary, 0.16 + 0.1 * hit), border: rgba(P.primary, 0.8), glowColor: rgba(P.primary, 0.5 + 0.3 * hit), glowBlur: 30 });
-      api.text(c, L.cta, CX, L.ctaY + L.ctaPx * 0.36, { size: L.ctaPx, weight: 700, track: 1, align: 'center', fill: '#ffffff', alpha: clamp((lt - t0) / 0.2) });
+      api.glass(c, x, y, w, h, h / 2, { fill: rgba(P.primary, 0.16), border: rgba(P.primary, 0.8), glowColor: rgba(P.primary, 0.5 + 0.3 * hit), glowBlur: 30 });
+      api.text(c, L.cta, CX, L.ctaY + L.ctaPx * 0.36, { size: L.ctaPx, weight: 700, track: 1, align: 'center', fill: WH, alpha: clamp((lt - t0) / 0.2) });
       c.restore();
     }
 
@@ -303,7 +349,7 @@ export default {
       const pd = lt - ENT, press = pd < 0 ? 1 - 0.035 * ease.inQuad(clamp((pd + 0.14) / 0.14)) : 1 + 0.045 * Math.exp(-pd * 11) * Math.cos(pd * 26);
       c.translate(CX, L.pillY); c.scale(press, press); c.translate(-CX, -L.pillY);
       c.save(); c.globalAlpha = clamp(q * 3);
-      api.glass(c, x, y, Math.max(w, 2), h, h / 2, { fill: 'rgba(16,19,30,0.82)', border: 'rgba(255,255,255,0.10)', glowColor: rgba(P.primary, 0.35), glowBlur: 36 });
+      api.glass(c, x, y, Math.max(w, 2), h, h / 2, { fill: rgba(P.panel, 0.82), border: rgba(WH, 0.10), glowColor: rgba(P.primary, 0.35), glowBlur: 36 });
       rr(c, x + 0.5, y + 0.5, Math.max(w - 1, 1), h - 1, h / 2);
       c.lineWidth = 2; c.strokeStyle = api.brand(c, x, 0, x + w, 0, P.primary, P.secondary);
       c.globalAlpha *= 0.55 + 0.45 * hit * 1.5; c.stroke();
@@ -323,16 +369,18 @@ export default {
     }
 
     function lockupXform(c) {
-      const br = 1 + 0.004 * Math.sin(lt * 1.1) + 0.05 * ease.outQuad(clamp((lt - SNAP) / Math.max(0.5, dur - SNAP)));
+      const br = 1 + BR_DRIFT * Math.sin(lt * 1.1) + BR_PUSH * ease.outQuad(clamp((lt - SNAP) / Math.max(0.5, dur - SNAP)));
       c.translate(CX, 540); c.scale(br, br); c.translate(-CX, -540);
     }
-    function drawLockup(c) {
+    // relight = the sweep's re-lit copy: title faces only (their glow re-lit on top of the sweep's glow boost
+    // blows the letters out into one white smear)
+    function drawLockup(c, relight = false) {
       const lay = (d, fn) => { c.save(); c.translate(Math.sin(lt * 0.7) * d, Math.cos(lt * 0.55) * d * 0.7); fn(); c.restore(); };
       c.save();
       lockupXform(c);
       lay(4, () => drawMark(c));
-      lay(1.5, () => { drawTitle(c, 'glow'); drawTitle(c, 'face'); });
-      lay(2.5, () => { drawRule(c); drawTagline(c); });
+      lay(1.5, () => { if (!relight) drawTitle(c, 'glow'); drawTitle(c, 'face'); });
+      lay(TAG_DRIFT, () => { drawRule(c); drawTagline(c); });
       lay(4, () => drawCta(c));
       lay(5.5, () => drawPill(c));
       c.restore();
@@ -352,7 +400,7 @@ export default {
         const k = ease.inQuad(clamp((lt - h3 * 0.1) / Math.max(0.05, SLAM * 0.4 - h3 * 0.1)));
         const lx = (h1 * 2 - 1) * len * 0.95, off = (h2 > 0.5 ? 1 : -1) * (40 + 220 * h2);
         ctx.globalAlpha = (0.2 + 0.7 * k) * clamp(k * 3);
-        ctx.fillStyle = i % 3 ? P.secondary : '#fff';
+        ctx.fillStyle = i % 3 ? P.secondary : WH;
         ctx.beginPath(); ctx.arc(CX + lx * (1 - 0.15 * k), y + off * (1 - k), 1.4 + 1.6 * h3, 0, 7); ctx.fill();
       }
       if (dt < 0) for (let r = 0; r < 2; r++) {
@@ -363,9 +411,9 @@ export default {
       }
       const th = dt > 0 ? 2 + 4 * Math.exp(-dt * 25) : 2.6 + 2.2 * charge;
       ctx.globalAlpha = clamp(a);
-      ctx.shadowColor = mix(P.primary, '#ffffff', 0.3); ctx.shadowBlur = 24 + 30 * charge;
+      ctx.shadowColor = mix(P.primary, WH, 0.3); ctx.shadowBlur = 24 + 30 * charge;
       const lg = ctx.createLinearGradient(CX - len, 0, CX + len, 0);
-      lg.addColorStop(0, 'rgba(255,255,255,0)'); lg.addColorStop(0.5, '#ffffff'); lg.addColorStop(1, 'rgba(255,255,255,0)');
+      lg.addColorStop(0, rgba(WH, 0)); lg.addColorStop(0.5, WH); lg.addColorStop(1, rgba(WH, 0));
       ctx.fillStyle = lg; ctx.fillRect(CX - len, y - th / 2, len * 2, th);
       ctx.shadowBlur = 0;
       if (dt < 0) api.glowDot(ctx, CX, y, 70 + 90 * charge * charge, 0.55 + 0.4 * charge, api.hexToRgb(P.primary).join(','));
@@ -380,7 +428,7 @@ export default {
       if (fl > 0.003) {
         const R = 520 + 700 * ease.outExpo(clamp(dt / 0.5));
         const g = ctx.createRadialGradient(CX, TM, 0, CX, TM, R);
-        g.addColorStop(0, `rgba(255,255,255,${0.30 * fl})`); g.addColorStop(0.18, rgba(P.primary, 0.34 * fl));
+        g.addColorStop(0, rgba(WH, 0.30 * fl)); g.addColorStop(0.18, rgba(P.primary, 0.34 * fl));
         g.addColorStop(0.5, rgba(P.secondary, 0.14 * fl)); g.addColorStop(1, rgba(P.secondary, 0));
         ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
       }
@@ -392,14 +440,14 @@ export default {
           ctx.moveTo(CX, TM); ctx.lineTo(CX + Math.cos(ang - wd) * len, TM + Math.sin(ang - wd) * len); ctx.lineTo(CX + Math.cos(ang + wd) * len, TM + Math.sin(ang + wd) * len); ctx.closePath();
         }
         const rg = ctx.createRadialGradient(CX, TM, 0, CX, TM, 1200);
-        rg.addColorStop(0, 'rgba(255,255,255,0.8)'); rg.addColorStop(1, rgba(P.primary, 0));
+        rg.addColorStop(0, rgba(WH, 0.8)); rg.addColorStop(1, rgba(P.primary, 0));
         ctx.globalAlpha = ra * 0.34; ctx.fillStyle = rg; ctx.fill();
       }
       const sa = Math.exp(-dt * 3.2);
       if (sa > 0.01) {
         ctx.globalAlpha = sa * 0.9;
         const ag = ctx.createLinearGradient(0, 0, W, 0);
-        ag.addColorStop(0, rgba(P.primary, 0)); ag.addColorStop(0.35, rgba(P.primary, 0.8)); ag.addColorStop(0.5, '#fff'); ag.addColorStop(0.65, rgba(P.secondary, 0.8)); ag.addColorStop(1, rgba(P.secondary, 0));
+        ag.addColorStop(0, rgba(P.primary, 0)); ag.addColorStop(0.35, rgba(P.primary, 0.8)); ag.addColorStop(0.5, WH); ag.addColorStop(0.65, rgba(P.secondary, 0.8)); ag.addColorStop(1, rgba(P.secondary, 0));
         ctx.fillStyle = ag; ctx.fillRect(0, TM - 2.5, W, 5);
         ctx.globalAlpha = Math.exp(-dt * 6) * 0.35; ctx.fillRect(0, TM - 14, W, 28);
       }
@@ -412,9 +460,9 @@ export default {
         ctx.beginPath(); ctx.arc(CX, TM, r, 0, 6.2832); ctx.stroke(); ctx.restore();
       };
       ring(0, 0.95, 1500, 26, P.primary, P.secondary, 1);
-      ring(0.07, 0.8, 1250, 8, '#ffffff', P.hot, 0.8);
+      ring(0.07, 0.8, 1250, 8, WH, P.hot, 0.8);
       ring(0.16, 0.7, 800, 4, P.secondary, P.primary, 0.6);
-      const sc = [P.secondary, '#ffffff', P.primary, P.amber, '#ffffff'];
+      const sc = [P.secondary, WH, P.primary, P.hot, WH];
       api.sparks(ctx, dt, CX, TM, 190, 1, { a0: 0, a1: 6.2832, sMin: 300, sMax: 2300, pow: 1.6, drag: 3.2, grav: 380, lifeMin: 0.4, lifeMax: 1.3 }, sc, hash);
       api.sparks(ctx, dt - 0.05, CX, TM, 40, 2, { a0: 0, a1: 6.2832, sMin: 120, sMax: 650, pow: 1, drag: 1.6, grav: -60, lifeMin: 0.9, lifeMax: 2.0, alpha: 0.8 }, sc, hash);
       L.letters.forEach((Lt, n) => api.sparks(ctx, lt - landT(n), Lt.cx, L.titleBase + 4, 14, 10 + n, { a0: -2.9, a1: -0.25, sMin: 220, sMax: 900, pow: 1.3, drag: 5, grav: 1500, lifeMin: 0.25, lifeMax: 0.6, alpha: 0.9 }, sc, hash));
@@ -427,7 +475,7 @@ export default {
       if (gr > 0) { // grade the shared background toward the brand primary (multiply keeps one palette)
         ctx.save(); ctx.globalCompositeOperation = 'multiply'; ctx.globalAlpha = gr;
         const gg = ctx.createRadialGradient(CX, 520, 200, CX, 520, 1250);
-        gg.addColorStop(0, 'rgb(255,255,255)'); gg.addColorStop(0.6, mix('#ffffff', P.primary, 0.3)); gg.addColorStop(1, mix('#ffffff', P.primary, 0.55));
+        gg.addColorStop(0, WH); gg.addColorStop(0.6, mix(WH, P.primary, 0.3)); gg.addColorStop(1, mix(WH, P.primary, 0.55));
         ctx.fillStyle = gg; ctx.fillRect(0, 0, W, H); ctx.restore();
       }
       ctx.save(); ctx.globalCompositeOperation = 'lighter';
@@ -449,7 +497,7 @@ export default {
           const y = (((hash(i * 5.3) * H * 1.2 - lt * 18 * z) % (H * 1.2)) + H * 1.2) % (H * 1.2) - H * 0.1;
           const tw = 0.5 + 0.5 * Math.sin(lt * 1.7 + i * 2.1);
           ctx.globalAlpha = amb * (0.12 + 0.4 * tw) * z;
-          ctx.fillStyle = i % 2 ? P.secondary : mix(P.primary, '#ffffff', 0.4);
+          ctx.fillStyle = i % 2 ? P.secondary : mix(P.primary, WH, 0.4);
           ctx.beginPath(); ctx.arc(x, y, 1.2 + 2.0 * z, 0, 7); ctx.fill();
         }
         ctx.restore();
@@ -459,7 +507,7 @@ export default {
     function drawFrame() {
       const q = ease.outExpo(clamp((lt - CALM) / 0.6)); if (q <= 0) return;
       const ins = 92, arm = 44 * q;
-      ctx.save(); ctx.strokeStyle = 'rgba(210,218,255,0.45)'; ctx.lineWidth = 2; ctx.lineCap = 'square';
+      ctx.save(); ctx.strokeStyle = mix(WH, P.primary, 0.15, 0.45); // cool white corner marks ctx.lineWidth = 2; ctx.lineCap = 'square';
       for (const [sx, sy] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) {
         const x = sx > 0 ? ins : W - ins, y = sy > 0 ? ins : H - ins;
         ctx.beginPath(); ctx.moveTo(x + sx * arm, y); ctx.lineTo(x, y); ctx.lineTo(x, y + sy * arm); ctx.stroke();
@@ -467,33 +515,56 @@ export default {
       ctx.restore();
     }
 
-    // final light sweep: the band centre crosses the lockup centre exactly on cue `sweep`
-    function drawSweep() {
-      const SW_DUR = 0.7, q = clamp((lt - (SWEEP - SW_DUR / 2)) / SW_DUR); if (q <= 0 || q >= 1) return;
-      const ang = 28 * Math.PI / 180, dx = Math.cos(ang), dy = Math.sin(ang);
-      const Ln = W * dx + H * dy, sC = CX * dx + 540 * dy, s = sC + (q - 0.5) * 2200;
-      const sg = (c, alpha, band, c0, c1) => {
-        const g = c.createLinearGradient(0, 0, dx * Ln, dy * Ln), u = (v) => clamp(v / Ln);
-        g.addColorStop(0, rgba(c0, 0)); g.addColorStop(u(s - band), rgba(c0, 0));
-        g.addColorStop(u(s), `rgba(255,255,255,${alpha})`); g.addColorStop(u(s + band), rgba(c1, 0)); g.addColorStop(1, rgba(c1, 0));
-        return g;
-      };
+    // final light sweep: the band centre crosses the lockup centre exactly on cue `sweep`. Two passes so the
+    // light never costs legibility: the band itself goes BEHIND the lockup with every text silhouette cut out
+    // of it (L.keepOut), and the lockup's own pixels are re-lit on top — mark, rule and title faces only: the
+    // tagline, CTA and pill are cut out of the re-light too (L.keepSmall), since re-lit glow/glass around small
+    // text lifts its background as much as its strokes. Both layers are built in the beat ctx's device space (scratch transform = ctx transform) and
+    // blitted at identity, so text drawn on the scratch records the same manifest bbox as the real draw (C16).
+    const SW_DUR = 0.7, swq = clamp((lt - (SWEEP - SW_DUR / 2)) / SW_DUR);
+    const sweepOn = swq > 0 && swq < 1, env = Math.pow(Math.sin(swq * Math.PI), 0.6);
+    const sang = 28 * Math.PI / 180, sdx = Math.cos(sang), sdy = Math.sin(sang);
+    const sLn = W * sdx + H * sdy, sPos = CX * sdx + 540 * sdy + (swq - 0.5) * 2200;
+    const sg = (c, alpha, band, c0, c1) => {
+      const g = c.createLinearGradient(0, 0, sdx * sLn, sdy * sLn), u = (v) => clamp(v / sLn);
+      g.addColorStop(0, rgba(c0, 0)); g.addColorStop(u(sPos - band), rgba(c0, 0));
+      g.addColorStop(u(sPos), rgba(P.text, alpha)); g.addColorStop(u(sPos + band), rgba(c1, 0)); g.addColorStop(1, rgba(c1, 0));
+      return g;
+    };
+    function sweepLayer(build) {
       const S = api.scratch(0), lc = S.ctx;
-      drawLockup(lc);
-      lc.globalCompositeOperation = 'destination-in'; lc.fillStyle = sg(lc, 1, 260, '#ffffff', '#ffffff'); lc.fillRect(0, 0, W, H);
-      lc.globalCompositeOperation = 'source-over';
-      const env = Math.pow(Math.sin(q * Math.PI), 0.6);
-      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      lc.setTransform(ctx.getTransform());
+      build(lc);
+      ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'lighter';
+      return { S, done: () => ctx.restore() };
+    }
+    function drawSweepBand() {
+      if (!sweepOn) return;
+      const { S, done } = sweepLayer((lc) => {
+        lc.globalCompositeOperation = 'lighter';
+        lc.globalAlpha = 0.20 * env; lc.fillStyle = sg(lc, 1, 300, P.primary, P.secondary); lc.fillRect(-W, -H, 3 * W, 3 * H);
+        lc.globalAlpha = 0.38 * env; lc.fillStyle = sg(lc, 1, 34, P.text, P.text); lc.fillRect(-W, -H, 3 * W, 3 * H);
+        lc.globalAlpha = 1; lc.globalCompositeOperation = 'destination-out';
+        lc.save(); lockupXform(lc); lc.drawImage(L.keepOut.canvas, 0, 0, W, H); lc.restore();
+      });
+      ctx.drawImage(S.canvas, 0, 0); done();
+    }
+    function drawSweepRelight() {
+      if (!sweepOn) return;
+      const { S, done } = sweepLayer((lc) => {
+        drawLockup(lc, true);
+        lc.globalCompositeOperation = 'destination-in'; lc.fillStyle = sg(lc, 1, 260, P.text, P.text); lc.fillRect(-W, -H, 3 * W, 3 * H);
+        lc.globalCompositeOperation = 'destination-out';
+        lc.save(); lockupXform(lc); lc.drawImage(L.keepSmall.canvas, 0, 0, W, H); lc.restore();
+      });
       ctx.globalAlpha = 0.7 * env; for (let k = 0; k < 2; k++) ctx.drawImage(S.canvas, 0, 0);
-      ctx.globalAlpha = 0.20 * env; ctx.fillStyle = sg(ctx, 1, 300, P.primary, P.secondary); ctx.fillRect(0, 0, W, H);
-      ctx.globalAlpha = 0.38 * env; ctx.fillStyle = sg(ctx, 1, 34, '#ffffff', '#ffffff'); ctx.fillRect(0, 0, W, H);
-      ctx.restore();
+      done();
     }
 
     // closing: ENTER ping on the pill → light climbs to the mark → mark ignites
     function drawEnter() {
       const dt = lt - ENT; if (dt < 0 || dt > 0.9) return;
-      const sc = [P.secondary, '#ffffff', P.primary];
+      const sc = [P.secondary, WH, P.primary];
       if (L.command) {
         const fullW = L.pillW, y = L.pillY;
         ctx.save(); lockupXform(ctx); ctx.globalCompositeOperation = 'lighter';
@@ -513,7 +584,7 @@ export default {
           const y0 = y - L.pillH / 2 - 4, y1 = MARK_Y + MR * 0.6, hy = lerp(y0, y1, kp);
           for (let i = 0; i < 16; i++) {
             const ty = hy + i * 14 * (0.4 + kp), a = 1 - i / 16;
-            ctx.globalAlpha = 0.9 * a; ctx.fillStyle = i ? P.secondary : '#fff';
+            ctx.globalAlpha = 0.9 * a; ctx.fillStyle = i ? P.secondary : WH;
             ctx.beginPath(); ctx.arc(CX + Math.sin(i * 0.9 + lt * 30) * 1.5, ty, 7 * a + 1.5, 0, 7); ctx.fill();
           }
           api.glowDot(ctx, CX, hy, 56, 0.8, api.hexToRgb(P.secondary).join(','));
@@ -531,8 +602,9 @@ export default {
     ctx.save();
     drawBackdrop();
     drawAnticipation();
+    drawSweepBand();
     drawLockup(ctx);
-    drawSweep();
+    drawSweepRelight();
     drawBurst();
     drawEnter();
     drawFrame();
